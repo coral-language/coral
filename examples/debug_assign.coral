@@ -1,0 +1,7 @@
+// Debug assignment
+i = 0
+println("Initial: {i}")
+i = i + 1
+println("After +1: {i}")
+i = i + 1
+println("After +2: {i}")

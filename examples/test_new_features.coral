@@ -1,0 +1,23 @@
+// Test new features: array indexing and variable mutation
+
+// Array indexing
+numbers = [10, 20, 30, 40, 50]
+println("First element: {numbers[0]}")
+println("Third element: {numbers[2]}")
+println("Last element: {numbers[4]}")
+
+// Variable mutation
+counter = 0
+println("\nCounting:")
+while counter < 5 do
+  println("Counter: {counter}")
+  counter = counter + 1
+end
+
+println("\nFinal counter: {counter}")
+
+// String indexing
+name = "Coral"
+println("\nString indexing:")
+println("First letter: {name[0]}")
+println("Last letter: {name[4]}")

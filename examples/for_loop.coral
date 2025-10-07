@@ -1,0 +1,17 @@
+// For loops
+println("Counting to 5:")
+for i in [1, 2, 3, 4, 5] do
+  println(i)
+end
+
+println("\nNames:")
+names = ["Alice", "Bob", "Charlie"]
+for name in names do
+  println("Hello, {name}!")
+end
+
+println("\nSquares:")
+for n in [1, 2, 3, 4, 5] do
+  square = n * n
+  println("{n} squared is {square}")
+end

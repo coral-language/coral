@@ -1,0 +1,16 @@
+// Pattern matching
+fn classify(x: Int) -> String do
+  return match x do
+    0 -> "zero"
+    1 -> "one"
+    n when n < 0 -> "negative"
+    n when n > 100 -> "large"
+    _ -> "normal"
+  end
+end
+
+println(classify(0))
+println(classify(1))
+println(classify(-5))
+println(classify(150))
+println(classify(42))

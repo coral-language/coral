@@ -1,0 +1,17 @@
+module main
+
+import Http from "std/http"
+import type User, CreateUserInput from "myapp/user"
+import create, validate from "myapp/user"
+
+fn main() do
+  input = CreateUserInput {
+    name: "Alice",
+    email: "alice@example.com"
+  }
+  
+  user = create(input)
+  validated = validate(user)
+  
+  return 0
+end

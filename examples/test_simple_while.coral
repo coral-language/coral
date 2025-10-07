@@ -1,0 +1,7 @@
+// Test while with plain assignment (no mut)
+i = 0
+while i < 3 do
+  println("i = {i}")
+  i = i + 1  // Plain assignment, no mut keyword
+end
+println("Done! i = {i}")

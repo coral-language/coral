@@ -1,0 +1,26 @@
+// Working with lists
+numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+println("Original list:")
+println(numbers)
+
+// Using pipeline and methods
+evens = numbers.filter(|x| x % 2 == 0)
+println("\nEven numbers:")
+println(evens)
+
+doubled = evens.map(|x| x * 2)
+println("\nDoubled:")
+println(doubled)
+
+total = doubled.sum()
+println("\nSum of doubled evens: {total}")
+
+// First and last
+first = numbers.first()
+last = numbers.last()
+println("\nFirst: {first}, Last: {last}")
+
+// Length
+length = numbers.len()
+println("Length: {length}")

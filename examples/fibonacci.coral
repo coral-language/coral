@@ -1,0 +1,18 @@
+// Fibonacci sequence
+fn fib(n: Int) -> Int do
+  if n <= 1 do
+    return n
+  else
+    return fib(n - 1) + fib(n - 2)
+  end
+end
+
+// Calculate first 10 fibonacci numbers
+println("Fibonacci sequence:")
+
+i = 0
+while i < 10 do
+  result = fib(i)
+  println("fib({i}) = {result}")
+  mut i = i + 1
+end

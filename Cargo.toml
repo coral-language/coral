@@ -1,0 +1,45 @@
+[package]
+name = "coral"
+version = "0.1.0"
+edition = "2024"
+authors = ["Rafael Fragoso <rafaelfragosom@gmail.com>"]
+description = "Coral - A fast, elegant, and type-safe programming language"
+documentation = "https://docs.rs/coral-lang"
+homepage = "https://coral-lang.org"
+repository = "https://github.com/coral/coral"
+readme = "README.md"
+license = "MIT"
+keywords = ["programming-language", "interpreter", "compiler", "functional"]
+categories = ["compilers", "parser-implementations"]
+exclude = [
+  ".github/",
+  "examples/",
+  "tests/",
+  "docs/",
+]
+
+[[bin]]
+name = "coral"
+path = "src/main.rs"
+
+[lib]
+name = "coral_lang"
+path = "src/lib.rs"
+
+[dependencies]
+# Add dependencies as needed
+
+[dev-dependencies]
+# For testing
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+
+[profile.test]
+opt-level = 0
