@@ -1,8 +1,0 @@
-// Simple loop test
-i = 0
-println("Starting...")
-while i < 3 do
-  println("i = {i}")
-  i = i + 1
-end
-println("Done! i = {i}")

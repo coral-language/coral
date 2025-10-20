@@ -1,8 +1,0 @@
-fn main() do
-  name = "World"
-  message = "Hello, {name}!"
-  print(message)
-  return 0
-end
-
-main()

@@ -1,0 +1,226 @@
+---
+description: Coral's technology stack, dependency versions, and best practices for compiler development
+alwaysApply: false
+---
+
+# Coral Technology Stack
+
+This rule documents Coral's technology stack, dependency versions, and best practices for maintaining a modern Rust compiler project.
+
+## Core Architecture
+
+Coral is a modern programming language compiler built in Rust, following a modular architecture with separate crates for different phases of compilation.
+
+## Workspace Configuration
+
+- **Rust Edition**: 2024 (latest)
+- **Rust Version**: 1.90 (pinned)
+- **Resolver**: Cargo 2
+- **License**: Apache-2.0
+- **Repository**: <https://github.com/coral-language/coral>
+- **Workspace Members**: `crates/ast`, `crates/semantic`
+
+## Core Dependencies
+
+### Error Handling & Diagnostics
+
+- **thiserror**: `2.0` - Derive macro for error types
+  - *Best Practice*: Use for all error types to ensure consistent error handling
+  - *Status*: Latest stable, excellent choice for compiler error types
+  - *Usage*: All error enums derive `#[derive(Error, Debug, Diagnostic, Clone)]`
+
+- **miette**: `7.6` with `fancy` features - Rich error reporting
+  - *Best Practice*: Leverage fancy features for beautiful error messages
+  - *Status*: Current version, perfect for compiler diagnostics
+  - *Usage*: Error types implement `Diagnostic` trait for rich formatting
+
+### Memory Management
+
+- **bumpalo**: `3.19` with `collections` and `boxed` features - Arena allocator
+  - *Best Practice*: Use for AST nodes and temporary allocations during parsing
+  - *Status*: Latest version, excellent for compiler performance
+
+- **lasso**: `0.7` with `multi-threaded` and `serialize` features - Symbol interning
+  - *Best Practice*: Essential for string deduplication in compilers
+  - *Status*: Current version, perfect for symbol table management
+
+### Parallel Processing
+
+- **rayon**: `1.11.0` - Data parallelism
+  - *Best Practice*: Use for parallel AST traversal and analysis
+  - *Status*: Latest stable, excellent for compiler performance
+  - *Usage*: `par_iter()` for parallel processing, thread-safe with arena allocation
+  - *Configuration*: Thread pool limited via `RAYON_NUM_THREADS=4` in `.cargo/config.toml`
+
+### Serialization
+
+- **serde**: `1.0` with `derive` features - Serialization framework
+  - *Best Practice*: Use for AST serialization and configuration
+  - *Status*: Mature and stable, industry standard
+
+### Lexical Analysis
+
+- **logos**: `0.15` - Lexer generator
+  - *Best Practice*: Define token patterns clearly, use for fast lexing
+  - *Status*: Current version, excellent for compiler lexers
+
+### Utilities
+
+- **rustc-hash**: `2.1` - Fast hashing
+  - *Best Practice*: Use for hash maps in hot paths
+  - *Status*: Latest version, optimized for compiler workloads
+
+- **bincode**: `1.3` - Binary serialization
+  - *Best Practice*: Use for caching compiled artifacts
+  - *Status*: Stable version, good for performance-critical serialization
+
+- **smallvec**: `1.15` - Stack-allocated vectors
+  - *Best Practice*: Use for small collections to avoid heap allocation
+  - *Status*: Latest version, excellent for performance
+
+## Development Dependencies
+
+### Testing & Quality
+
+- **proptest**: `1.8` - Property-based testing
+  - *Best Practice*: Use for testing parser with random inputs
+  - *Status*: Current version, excellent for compiler testing
+
+- **arbitrary**: `1.4.2` - Generate arbitrary data for testing
+  - *Best Practice*: Use with proptest for comprehensive testing
+  - *Status*: Current version, good for fuzzing
+
+- **criterion**: `0.7` with `html_reports` - Benchmarking
+  - *Best Practice*: Use for performance regression testing
+  - *Status*: Latest version, excellent for compiler benchmarks
+
+- **insta**: `1.39` with `yaml` features - Snapshot testing
+  - *Best Practice*: Use for testing AST output and error messages
+  - *Status*: Current version, perfect for compiler testing
+
+- **pretty_assertions**: `1.4` - Better assertion output
+  - *Best Practice*: Use for clearer test failure messages
+  - *Status*: Current version, improves debugging experience
+
+## AST-Specific Dependencies
+
+### Text Processing
+
+- **text-size**: `1.1` - Text position calculations
+  - *Best Practice*: Use for accurate source position tracking
+  - *Status*: Current version, essential for compiler spans
+
+- **unicode-xid**: `0.2` - Unicode identifier detection
+  - *Best Practice*: Use for proper identifier parsing
+  - *Status*: Current version, follows Unicode standards
+
+- **unicode-normalization**: `0.1` - Unicode normalization
+  - *Best Practice*: Use for consistent string handling
+  - *Status*: Current version, important for internationalization
+
+### Additional Dependencies
+
+- **thin-vec**: `0.2` - Thin vector implementation
+  - *Best Practice*: Use for small collections with known size
+  - *Status*: Current version, good for memory efficiency
+  - *Usage*: Used in AST nodes for small collections
+
+- **parking_lot**: `0.12` - Fast synchronization primitives
+  - *Best Practice*: Use for shared data structures in parallel processing
+  - *Status*: Current version, better than std::sync for performance
+  - *Usage*: Used in semantic analysis for thread-safe data structures
+
+### Performance
+
+- **rustc-hash**: `2.1` - Fast hashing
+  - *Best Practice*: Use for hash maps in hot paths
+  - *Status*: Latest version, optimized for compiler workloads
+
+- **bincode**: `1.3` - Binary serialization
+  - *Best Practice*: Use for caching compiled artifacts
+  - *Status*: Stable version, good for performance-critical serialization
+
+- **smallvec**: `1.15` - Stack-allocated vectors
+  - *Best Practice*: Use for small collections to avoid heap allocation
+  - *Status*: Latest version, excellent for performance
+
+## Build Profiles
+
+### Development Profile
+
+- **Optimization**: `0` (fast compilation)
+- **Debug Info**: Full
+- **Overflow Checks**: Enabled
+- **LTO**: Disabled
+- **Incremental**: Enabled
+- **Codegen Units**: 256 (parallel compilation)
+
+### Release Profile
+
+- **Optimization**: `3` (maximum performance)
+- **Debug Info**: Disabled
+- **LTO**: Thin (balance between size and compile time)
+- **Codegen Units**: 1 (maximum optimization)
+- **Panic**: Abort (smaller binaries)
+- **Strip**: Enabled
+- **Overflow Checks**: Disabled
+
+### Test Profile
+
+- **Optimization**: `0` (fast compilation)
+- **Debug Info**: Full
+- **Overflow Checks**: Enabled
+- **Incremental**: Enabled
+
+### Benchmark Profile
+
+- **Optimization**: `0` (consistent benchmarking)
+- **LTO**: Disabled
+- **Debug Info**: Full
+- **Strip**: Disabled
+
+## Best Practices
+
+### Dependency Management
+
+1. **Version Pinning**: Use workspace dependencies for consistency
+2. **Regular Updates**: Update dependencies monthly for security patches
+3. **Audit Dependencies**: Run `cargo audit` regularly
+4. **Minimize Dependencies**: Only add dependencies that provide significant value
+5. **Feature Flags**: Use optional dependencies with feature flags when appropriate
+
+### Performance Considerations
+
+1. **Arena Allocation**: Use `bumpalo` for AST nodes and temporary data
+2. **Symbol Interning**: Use `lasso` for string deduplication
+3. **Parallel Processing**: Use `rayon` for CPU-intensive operations
+4. **Memory Efficiency**: Use `smallvec` and `thin-vec` for small collections
+5. **Fast Hashing**: Use `rustc-hash` for hash maps in hot paths
+
+### Testing Strategy
+
+1. **Property-Based Testing**: Use `proptest` for parser testing
+2. **Snapshot Testing**: Use `insta` for AST and error message testing
+3. **Benchmarking**: Use `criterion` for performance regression testing
+4. **Fuzzing**: Use `arbitrary` for comprehensive input testing
+
+### Error Handling
+
+1. **Consistent Errors**: Use `thiserror` for all error types
+2. **Rich Diagnostics**: Use `miette` for beautiful error messages
+3. **Error Recovery**: Implement parser error recovery strategies
+4. **User Experience**: Focus on clear, actionable error messages
+
+## Security Considerations
+
+1. **Dependency Auditing**: Regular `cargo audit` runs
+2. **Minimal Attack Surface**: Keep dependency count low
+3. **Version Pinning**: Pin critical dependencies to specific versions
+4. **Regular Updates**: Update dependencies for security patches
+
+## Maintenance Guidelines
+
+1. **Monthly Reviews**: Review and update dependencies monthly
+2. **Breaking Changes**: Test thoroughly when updating major versions
+3. **Performance Monitoring**: Use benchmarks to detect regressions
+4. **Documentation**: Keep this rule updated when adding new dependencies

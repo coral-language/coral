@@ -1,0 +1,195 @@
+---
+description: Essential commands for developing and working with the Coral language project
+alwaysApply: false
+---
+
+# Development Commands
+
+This rule documents the essential commands for developing, testing, and maintaining the Coral language project. All commands are available through the project's Makefile.
+
+## Quick Start
+
+```bash
+make help          # Show all available commands
+make build         # Build the project
+make test          # Run all tests
+make ci            # Run full CI pipeline
+```
+
+## Build Commands
+
+### Basic Building
+
+- **`make build`** - Build all crates in debug mode
+  - *Use Case*: Development builds, fast compilation
+  - *Command*: `cargo build --workspace`
+
+- **`make build-release`** - Build all crates in release mode
+  - *Use Case*: Production builds, performance testing
+  - *Command*: `cargo build --workspace --release`
+
+### Individual Crate Building
+
+- **`make test-<crate>`** - Build and test specific crate
+  - *Available Crates*: `ast`, `semantic`
+  - *Examples*: `make test-ast`, `make test-semantic`
+
+## Testing Commands
+
+### Test Execution
+
+- **`make test`** - Run all tests across the workspace
+  - *Use Case*: Comprehensive testing before commits
+  - *Command*: `cargo test --workspace`
+
+- **`make test-<crate>`** - Run tests for specific crate
+  - *Use Case*: Focused testing during development
+  - *Examples*: `make test-ast`, `make test-semantic`
+
+### Benchmarking
+
+- **`make bench`** - Run all benchmarks
+  - *Use Case*: Performance regression testing
+  - *Command*: `cargo bench --workspace`
+
+- **`make bench-<crate>`** - Run benchmarks for specific crate
+  - *Use Case*: Focused performance testing
+  - *Examples*: `make bench-ast`, `make bench-semantic`
+
+## Code Quality
+
+### Linting and Security
+
+- **`make lint`** - Run comprehensive linting
+  - *Includes*: `cargo check`, `cargo fmt`, `cargo clippy`
+  - *Use Case*: Code quality checks before commits
+  - *Command*: `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+- **`make audit`** - Security audit of dependencies
+  - *Use Case*: Security vulnerability scanning
+  - *Command*: `cargo audit`
+
+- **`make ci`** - Full CI pipeline
+  - *Includes*: `lint`, `audit`, `bench`
+  - *Use Case*: Pre-commit validation
+
+### Code Coverage
+
+- **`make coverage`** - Generate code coverage report
+  - *Tool*: `cargo tarpaulin`
+  - *Output*: Coverage report in `coverage/` directory
+  - *Use Case*: Test coverage analysis
+
+## Documentation
+
+- **`make doc`** - Generate documentation
+  - *Command*: `cargo doc --workspace --no-deps`
+  - *Use Case*: Generate API documentation
+  - *Output*: HTML docs in `target/doc/`
+
+## Application Execution
+
+Currently there are no runnable binaries exposed by the Makefile. The CLI and LSP crates exist but are not yet integrated into the build system.
+
+## Fuzz Testing
+
+Fuzz targets are not currently provided by the Makefile.
+
+## Maintenance Commands
+
+### Dependency Management
+
+- **`make update`** - Update dependencies
+  - *Command*: `cargo update`
+  - *Use Case*: Update to latest compatible versions
+
+- **`make audit`** - Audit dependencies for security issues
+  - *Command*: `cargo audit`
+  - *Use Case*: Security vulnerability scanning
+
+### Cleanup
+
+- **`make clean`** - Clean build artifacts
+  - *Command*: `cargo clean && rm -rf target/`
+  - *Use Case*: Fresh build, disk space cleanup
+
+## Development Workflow
+
+### Daily Development
+
+```bash
+make build          # Build the project
+make test-<crate>   # Test specific crate you're working on
+make lint           # Check code quality
+```
+
+### Pre-Commit Checklist
+
+```bash
+make ci             # Full CI pipeline
+```
+
+### Release Preparation
+
+```bash
+make build-release  # Build optimized release
+make test           # Run all tests
+make bench          # Run performance benchmarks
+make audit          # Security audit
+make coverage       # Generate coverage report
+```
+
+### Debugging
+
+```bash
+make test-ast       # Focus on AST crate tests
+make test-semantic  # Focus on semantic analysis tests
+```
+
+## Environment Variables
+
+No special environment variables are required for the current Makefile commands.
+
+## Best Practices
+
+### Development
+
+1. **Start with `make build`** to ensure the project compiles
+2. **Use `make test-<crate>`** for focused testing during development
+3. **Run `make lint`** before committing code
+
+### Testing
+
+1. **Run `make test`** before any major changes
+2. **Use `make bench`** to check for performance regressions
+3. **Use `make coverage`** to ensure adequate test coverage
+
+### Quality Assurance
+
+1. **Always run `make ci`** before pushing changes
+2. **Use `make audit`** regularly for security scanning
+3. **Check `make coverage`** for test coverage gaps
+
+### Troubleshooting
+
+1. **Use `make clean`** if builds are inconsistent
+2. If issues persist, try a clean build and re-run `make test`
+
+## Integration with IDEs
+
+### VS Code / Cursor
+
+- Use the integrated terminal to run make commands
+- Set up tasks.json for common commands
+- Use the Rust extension for syntax highlighting
+
+### Command Palette Integration
+
+- `Ctrl+Shift+P` → "Terminal: Run Task" → Select make command
+- Create custom tasks for frequently used commands
+
+## Performance Tips
+
+1. **Use `make build`** for development (faster compilation)
+2. **Use `make build-release`** only when testing performance
+3. **Clean regularly** with `make clean` to avoid disk space issues

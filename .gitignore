@@ -5,8 +5,8 @@
 Cargo.lock
 
 # IDE
-.vscode/
 .idea/
+.vim/
 *.swp
 *.swo
 *~
@@ -24,9 +24,23 @@ Thumbs.db
 # Test outputs
 *.log
 
-# Documentation
-/docs/_build/
+# Coverage reports
+coverage/
+*.profraw
+*.profdata
+tarpaulin-report.html
 
-# AI
-CLAUDE.md
-.claude
+# Fuzz testing artifacts
+fuzz/target/
+fuzz/artifacts/
+fuzz/reports/
+fuzz/corpus/
+
+# Benchmark artifacts
+benches/target/
+benches/criterion/
+
+# Editor files
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json

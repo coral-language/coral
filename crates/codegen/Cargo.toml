@@ -1,0 +1,18 @@
+[package]
+name = "coral_codegen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Code generation backends for the Coral programming language"
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+coral_parser = { path = "../parser" }
+bumpalo.workspace = true
+
+[dev-dependencies]

@@ -1,0 +1,415 @@
+//! Comprehensive error kind definitions for all Coral compiler errors.
+//!
+//! This module contains the unified ErrorKind enum that covers all possible
+//! errors from lexical analysis through semantic analysis.
+
+use text_size::TextRange;
+
+/// Comprehensive error kind enum covering all compiler errors.
+#[derive(Debug, Clone)]
+pub enum ErrorKind {
+    // ===== Lexical Errors (E1xxx) =====
+    /// Invalid character in source code
+    InvalidCharacter,
+
+    /// String literal is not properly terminated
+    UnterminatedString,
+
+    /// Number literal has invalid format
+    InvalidNumber,
+
+    /// Identifier name is not valid
+    InvalidIdentifier,
+
+    /// Inconsistent use of tabs and spaces in indentation
+    MixedTabsAndSpaces,
+
+    /// Invalid escape sequence in string
+    InvalidEscapeSequence,
+
+    // ===== Syntax Errors (E2xxx) =====
+    /// Unexpected token encountered during parsing
+    UnexpectedToken {
+        expected: Option<String>,
+        found: String,
+    },
+
+    /// Expected a specific token but found something else
+    ExpectedToken { expected: String, found: String },
+
+    /// File ended unexpectedly while parsing
+    UnexpectedEof,
+
+    /// Invalid syntax structure
+    InvalidSyntax { message: String },
+
+    /// Indentation is inconsistent or incorrect
+    IndentationError,
+
+    /// Opening delimiter has no matching closing delimiter
+    UnclosedDelimiter {
+        expected: char,
+        opening_span: TextRange,
+    },
+
+    /// Closing delimiter has no matching opening delimiter
+    UnmatchedClosing { delimiter: char },
+
+    /// Expected ':' after context
+    MissingColon { context: String },
+
+    /// Expected expression
+    ExpectedExpression,
+
+    /// Invalid assignment target
+    InvalidAssignmentTarget,
+
+    /// 'break' can only be used inside loops
+    BreakOutsideLoop,
+
+    /// 'continue' can only be used inside loops
+    ContinueOutsideLoop,
+
+    /// 'return' can only be used inside functions
+    ReturnOutsideFunction,
+
+    /// 'yield' can only be used inside functions
+    YieldOutsideFunction,
+
+    /// 'await' can only be used inside async functions
+    AwaitOutsideAsync,
+
+    /// 'async for' can only be used inside async functions
+    AsyncForOutsideAsync,
+
+    /// 'async with' can only be used inside async functions
+    AsyncWithOutsideAsync,
+
+    /// Duplicate parameter name
+    DuplicateParameter { name: String },
+
+    /// Duplicate keyword argument
+    DuplicateArgument { name: String },
+
+    /// Positional argument cannot follow keyword argument
+    PositionalAfterKeyword,
+
+    /// Parameters are in invalid order
+    InvalidParameterOrder,
+
+    /// Cannot mix except and except* in the same try statement
+    MixedExceptSyntax,
+
+    /// except* requires a specific exception type, not a bare except
+    BareExceptStar,
+
+    /// 'from __future__ import' must occur at the beginning of the file
+    FutureImportNotFirst,
+
+    /// Relative import cannot go beyond top-level package
+    RelativeImportBeyondTopLevel,
+
+    /// Invalid relative import syntax
+    InvalidRelativeImport,
+
+    /// Unexpected indent
+    UnexpectedIndent,
+
+    /// Expected an indented block
+    ExpectedIndent,
+
+    /// Unindent does not match any outer indentation level
+    UnindentMismatch,
+
+    // ===== Name Resolution Errors (E3xxx) =====
+    /// Name is used before being defined
+    UndefinedName { name: String },
+
+    /// Name is already defined in this scope
+    DuplicateDefinition {
+        name: String,
+        previous_span: TextRange,
+    },
+
+    /// nonlocal declaration without enclosing scope
+    NonlocalWithoutEnclosing { name: String },
+
+    /// Name is used before definition
+    UsedBeforeDefinition { name: String },
+
+    // ===== Control Flow Errors (E3100-E3199) =====
+    /// Code is unreachable
+    UnreachableCode { reason: String },
+
+    /// Infinite loop detected
+    InfiniteLoop { reason: String },
+
+    /// Missing return statement
+    MissingReturn {
+        function: String,
+        expected_type: String,
+    },
+
+    /// Inconsistent return types
+    InconsistentReturnTypes { function: String },
+
+    /// Dead code after return statement
+    DeadCodeAfterReturn,
+
+    /// Unreachable exception handler
+    UnreachableExceptionHandler { exception_type: String },
+
+    // ===== Type System Errors (E4xxx) =====
+    /// Type mismatch between expected and actual types
+    TypeMismatch { expected: String, found: String },
+
+    /// Incompatible types in binary operation
+    IncompatibleBinOp {
+        op: String,
+        left: String,
+        right: String,
+    },
+
+    /// Incompatible type in unary operation
+    IncompatibleUnaryOp { op: String, operand: String },
+
+    /// Wrong number of arguments
+    ArgumentCountMismatch { expected: usize, found: usize },
+
+    /// Invalid argument type
+    InvalidArgumentType {
+        param_index: usize,
+        expected: String,
+        found: String,
+    },
+
+    /// Return type doesn't match function signature
+    ReturnTypeMismatch { expected: String, found: String },
+
+    /// Invalid subscript operation
+    InvalidSubscript { container: String, index: String },
+
+    /// Invalid attribute access
+    InvalidAttribute { obj_type: String, attribute: String },
+
+    /// Cannot call non-callable
+    NotCallable { type_name: String },
+
+    /// Cannot subscript non-subscriptable
+    NotSubscriptable { type_name: String },
+
+    /// Cannot iterate non-iterable
+    NotIterable { type_name: String },
+
+    /// Cannot infer type
+    CannotInferType { context: String },
+
+    /// Ambiguous type
+    AmbiguousType { context: String },
+
+    /// Type annotation required
+    TypeAnnotationRequired { context: String },
+
+    /// Invalid type annotation
+    InvalidTypeAnnotation { annotation: String },
+
+    // ===== Protocol Errors (E4100-E4199) =====
+    /// Class doesn't implement required protocol method
+    MissingProtocolMethod {
+        class_name: String,
+        protocol_name: String,
+        method_name: String,
+    },
+
+    /// Method signature doesn't match protocol
+    MethodSignatureMismatch {
+        class_name: String,
+        protocol_name: String,
+        method_name: String,
+        expected: String,
+        found: String,
+    },
+
+    /// Protocol cannot have implementations
+    ProtocolWithImplementation {
+        protocol_name: String,
+        method_name: String,
+    },
+
+    /// Invalid protocol definition
+    InvalidProtocol {
+        protocol_name: String,
+        reason: String,
+    },
+
+    /// Protocol not satisfied
+    ProtocolNotSatisfied {
+        protocol_name: String,
+        class_name: String,
+    },
+
+    /// Runtime checkable protocol violation
+    RuntimeCheckableProtocolViolation { protocol_name: String },
+
+    // ===== Import Errors (E5xxx) =====
+    /// Module could not be found or loaded
+    ModuleNotFound { module_name: String },
+
+    /// Circular dependency detected between modules
+    CircularImport { cycle: Vec<String> },
+
+    /// Import statement has invalid syntax
+    InvalidImportSyntax { syntax: String },
+
+    /// Import from non-module
+    ImportFromNonModule { name: String },
+
+    /// Cannot import name
+    CannotImportName { name: String, module: String },
+
+    /// Relative import in non-package
+    RelativeImportInNonPackage,
+
+    // ===== Module System Errors (E5100-E5199) =====
+    /// Exporting undefined name
+    ExportUndefined { name: String },
+
+    /// Duplicate export
+    DuplicateExport { name: String, first_span: TextRange },
+
+    /// Invalid module introspection function
+    InvalidIntrospection {
+        function: String,
+        suggestion: Option<String>,
+    },
+
+    /// Export from non-existent module
+    ExportFromNonExistentModule { module: String },
+
+    /// Invalid export syntax
+    InvalidExportSyntax { syntax: String },
+
+    // ===== Concurrency Errors (E6xxx) =====
+    /// Data race: shared mutable data accessed without synchronization
+    DataRace {
+        var_name: String,
+        access_type: String,
+        second_access: TextRange,
+    },
+
+    /// Potential deadlock: circular lock dependency detected
+    PotentialDeadlock {
+        lock_chain: Vec<String>,
+        second_acquisition: TextRange,
+    },
+
+    /// Attempting to send non-Send type across threads
+    NonSendType { var_name: String, type_name: String },
+
+    /// Attempting to share non-Sync type between threads
+    NonSyncType { var_name: String, type_name: String },
+
+    /// Lock acquired but never released
+    LockNotReleased { lock_name: String },
+
+    /// Accessing shared data without holding required lock
+    UnsynchronizedAccess {
+        var_name: String,
+        required_lock: String,
+    },
+
+    /// Double lock acquisition
+    DoubleLock {
+        lock_name: String,
+        first_acquire: TextRange,
+    },
+
+    /// Lock order violation
+    LockOrderViolation { lock1: String, lock2: String },
+
+    // ===== Memory Safety Errors (E7xxx) =====
+    /// Variable used after being freed/deallocated
+    UseAfterFree {
+        var_name: String,
+        free_span: TextRange,
+    },
+
+    /// Attempting to free already freed memory
+    DoubleFree {
+        var_name: String,
+        first_free_span: TextRange,
+    },
+
+    /// Resource not properly cleaned up
+    ResourceLeak {
+        resource_type: String,
+        var_name: String,
+    },
+
+    /// Reference to variable that went out of scope
+    DanglingReference {
+        var_name: String,
+        scope_end_span: TextRange,
+    },
+
+    /// Circular reference that cannot be automatically freed
+    CircularReference { var_names: Vec<String> },
+
+    /// Invalid lifetime
+    InvalidLifetime { var_name: String },
+
+    /// Moved value used
+    MovedValueUsed { var_name: String },
+
+    // ===== Pattern Matching Errors (E8xxx) =====
+    /// Match statement is not exhaustive
+    NonExhaustiveMatch { missing_patterns: Vec<String> },
+
+    /// Pattern is unreachable
+    UnreachablePattern { reason: String },
+
+    /// Pattern type doesn't match subject type
+    PatternTypeMismatch { expected: String, found: String },
+
+    /// Invalid pattern syntax
+    InvalidPatternSyntax { pattern: String },
+
+    /// Duplicate pattern binding
+    DuplicatePatternBinding { name: String },
+
+    // ===== Decorator Errors (E9xxx) =====
+    /// Decorator not found
+    DecoratorNotFound { name: String },
+
+    /// Undefined decorator
+    UndefinedDecorator { name: String },
+
+    /// Duplicate decorator
+    DuplicateDecorator {
+        name: String,
+        first_span: TextRange,
+        second_span: TextRange,
+    },
+
+    /// Invalid decorator expression
+    InvalidDecoratorExpression { decorator: String },
+
+    /// Invalid decorator order
+    InvalidDecoratorOrder { reason: String },
+
+    /// Invalid decorator target
+    InvalidDecoratorTarget { decorator: String, target: String },
+
+    /// Decorator signature mismatch
+    DecoratorSignatureMismatch {
+        decorator: String,
+        expected: String,
+        found: String,
+    },
+
+    /// Decorator application failed
+    DecoratorApplicationFailed { decorator: String, reason: String },
+
+    /// Invalid decorator composition
+    InvalidDecoratorComposition { decorators: Vec<String> },
+}
