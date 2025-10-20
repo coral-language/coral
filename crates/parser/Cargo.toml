@@ -28,7 +28,7 @@ thiserror = "2.0"
 unicode-xid = "0.2"
 unicode-normalization = "0.1"
 owo-colors = { version = "4.0", features = ["supports-colors"] }
-terminal_size = "0.3"
+terminal_size = "0.4"
 
 [dev-dependencies]
 criterion.workspace = true
