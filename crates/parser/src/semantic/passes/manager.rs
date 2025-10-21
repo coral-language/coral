@@ -198,11 +198,21 @@ impl PassManager {
 
         // High priority passes
         self.register_pass(PassMetadata {
+            id: "hir_lowering",
+            name: "HIR Lowering",
+            description: "Transforms AST to High-Level Intermediate Representation with type information",
+            priority: PassPriority::High,
+            dependencies: vec!["name_resolution"],
+            parallelizable: false,
+            enabled_by_default: true,
+        });
+
+        self.register_pass(PassMetadata {
             id: "type_inference",
             name: "Type Inference",
             description: "Infers types for expressions and variables",
             priority: PassPriority::High,
-            dependencies: vec!["name_resolution"],
+            dependencies: vec!["hir_lowering"],
             parallelizable: false,
             enabled_by_default: true,
         });
@@ -213,7 +223,7 @@ impl PassManager {
             name: "Type Checking",
             description: "Validates type correctness and compatibility",
             priority: PassPriority::Medium,
-            dependencies: vec!["type_inference"],
+            dependencies: vec!["hir_lowering", "type_inference"],
             parallelizable: false,
             enabled_by_default: true,
         });
@@ -446,6 +456,7 @@ impl PassManager {
             "name_resolution" => self.run_name_resolution(module, source),
             "import_resolution" => self.run_import_resolution(module, source),
             "module_system" => self.run_module_system(module, source),
+            "hir_lowering" => self.run_hir_lowering(module, source),
             "type_inference" => self.run_type_inference(module, source),
             "type_checking" => self.run_type_checking(module, source),
             "control_flow" => self.run_control_flow(module, source),
@@ -548,6 +559,35 @@ impl PassManager {
         } else {
             let diagnostics: Vec<_> = errors.iter().map(|e| e.to_diagnostic(source)).collect();
             Err(diagnostics)
+        }
+    }
+
+    /// Run HIR lowering pass
+    fn run_hir_lowering(&self, module: &Module, _source: &str) -> PassResult {
+        use crate::arena::Arena;
+        use crate::arena::interner::Interner;
+        use crate::semantic::hir::lower::HirLowerer;
+
+        // Create arena for HIR allocation
+        let arena = Arena::new();
+        let mut interner = Interner::new();
+        let mut lowerer = HirLowerer::new(&arena, &mut interner);
+
+        // Lower the module to HIR
+        match lowerer.lower_module(module) {
+            Ok(_hir_module) => {
+                // HIR lowering successful
+                // TODO: Store HIR in pass manager context for subsequent passes
+                Ok(())
+            }
+            Err(errors) => {
+                // Convert HIR lowering errors to diagnostics
+                let diagnostics: Vec<_> = errors
+                    .iter()
+                    .map(|e| Diagnostic::error(format!("HIR lowering error: {}", e)))
+                    .collect();
+                Err(diagnostics)
+            }
         }
     }
 

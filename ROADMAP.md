@@ -90,23 +90,23 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Better error aggregation from parallel workers
   - [x] Progress tracking and cancellation support
 
-- [ ] **Walk Function Completeness**
-  - [ ] Ensure all AST node types have walk functions
-  - [ ] Validate all child nodes are visited
-  - [ ] Add tests for visitor pattern correctness
+- [x] **Walk Function Completeness**
+  - [x] Ensure all AST node types have walk functions
+  - [x] Validate all child nodes are visited
+  - [x] Add tests for visitor pattern correctness
 
 ### Semantic Module - HIR
 
-- [ ] **HIR Design and Implementation**
-  - [ ] `TypedExpr` with all expression variants
-  - [ ] `TypedStmt` with all statement variants
-  - [ ] `TypedPattern` for match statements
-  - [ ] `TypedItem` for top-level declarations
-  - [ ] AST-to-HIR lowering with desugaring
-  - [ ] Resolve all name bindings to definition sites
-  - [ ] Compute class MRO (Method Resolution Order)
-  - [ ] Flatten inheritance hierarchies
-  - [ ] Validate type consistency during lowering
+- [x] **HIR Design and Implementation**
+  - [x] `TypedExpr` with all expression variants
+  - [x] `TypedStmt` with all statement variants
+  - [x] `TypedPattern` for match statements
+  - [x] `TypedItem` for top-level declarations
+  - [x] AST-to-HIR lowering with desugaring
+  - [x] Resolve all name bindings to definition sites
+  - [x] Compute class MRO (Method Resolution Order)
+  - [x] Flatten inheritance hierarchies
+  - [x] Validate type consistency during lowering
 
 ### Semantic Module - Parallel Analysis
 

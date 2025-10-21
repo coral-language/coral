@@ -72,6 +72,15 @@ pub enum Type {
     /// Module type
     Module(String),
 
+    /// Generator type with yielded element type
+    Generator(Box<Type>),
+
+    /// Slice type
+    Slice,
+
+    /// Template string type (t-strings)
+    TemplateString,
+
     /// Unknown type (for inference)
     Unknown,
 }
@@ -127,6 +136,11 @@ impl Type {
         Type::Set(Box::new(element))
     }
 
+    /// Check if this type is a function type
+    pub fn is_function(&self) -> bool {
+        matches!(self, Type::Function { .. })
+    }
+
     /// Create a dict type
     pub fn dict(key: Type, value: Type) -> Self {
         Type::Dict(Box::new(key), Box::new(value))
@@ -135,6 +149,11 @@ impl Type {
     /// Create a tuple type
     pub fn tuple(elements: Vec<Type>) -> Self {
         Type::Tuple(elements)
+    }
+
+    /// Create a generator type
+    pub fn generator(element: Type) -> Self {
+        Type::Generator(Box::new(element))
     }
 
     /// Check if this is a subtype of another type
@@ -260,6 +279,9 @@ impl Type {
                 format!("{}[{}]", base.display_name(), param_names.join(", "))
             }
             Type::Module(name) => format!("module[{}]", name),
+            Type::Generator(element) => format!("generator[{}]", element.display_name()),
+            Type::Slice => "slice".to_string(),
+            Type::TemplateString => "tstring".to_string(),
             Type::Unknown => "?".to_string(),
         }
     }
