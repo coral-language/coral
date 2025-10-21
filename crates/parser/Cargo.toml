@@ -1,0 +1,43 @@
+[package]
+name = "coral_parser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Parser for the Coral programming language"
+keywords.workspace = true
+categories.workspace = true
+publish = true
+
+[dependencies]
+logos.workspace = true
+bumpalo.workspace = true
+lasso.workspace = true
+miette.workspace = true
+smallvec.workspace = true
+thin-vec.workspace = true
+parking_lot.workspace = true
+rayon.workspace = true
+serde.workspace = true
+bincode.workspace = true
+text-size = { version = "1.1", features = ["serde"] }
+thiserror = "2.0"
+unicode-xid = "0.2"
+unicode-normalization = "0.1"
+owo-colors = { version = "4.0", features = ["supports-colors"] }
+terminal_size = "0.4"
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile = "3.8"
+
+[[bench]]
+name = "lexer_bench"
+harness = false
+
+[[bench]]
+name = "parser_bench"
+harness = false

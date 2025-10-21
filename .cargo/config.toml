@@ -1,0 +1,8 @@
+[build]
+jobs = 4 # Limit parallel compilation
+
+[env]
+# Limit test parallelism to prevent thread explosion
+CARGO_TEST_THREADS = "4"
+# Limit rayon thread pool (used in parallel.rs and semantic analyzer)
+RAYON_NUM_THREADS = "4"

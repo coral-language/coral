@@ -1,0 +1,357 @@
+// Symbol table implementation
+
+use super::scope::{BindingKind, Scope, ScopeType, Symbol};
+use crate::semantic::types::Type;
+use text_size::TextRange;
+
+/// A symbol table managing all scopes in a module
+#[derive(Debug)]
+pub struct SymbolTable {
+    /// All scopes, indexed by scope ID
+    scopes: Vec<Scope>,
+    /// Current scope stack (scope IDs)
+    scope_stack: Vec<usize>,
+    /// Module scope ID (always 0)
+    module_scope_id: usize,
+}
+
+impl SymbolTable {
+    /// Create a new symbol table with a module scope
+    pub fn new() -> Self {
+        let mut scopes = Vec::new();
+        let module_scope = Scope::new(ScopeType::Module, "<module>".to_string(), None);
+        scopes.push(module_scope);
+
+        Self {
+            scopes,
+            scope_stack: vec![0], // Start in module scope
+            module_scope_id: 0,
+        }
+    }
+
+    /// Get the current scope ID
+    pub fn current_scope_id(&self) -> usize {
+        *self
+            .scope_stack
+            .last()
+            .expect("Scope stack should never be empty")
+    }
+
+    /// Get the current scope
+    pub fn current_scope(&self) -> &Scope {
+        &self.scopes[self.current_scope_id()]
+    }
+
+    /// Get the current scope (mutable)
+    pub fn current_scope_mut(&mut self) -> &mut Scope {
+        let id = self.current_scope_id();
+        &mut self.scopes[id]
+    }
+
+    /// Get a scope by ID
+    pub fn get_scope(&self, id: usize) -> Option<&Scope> {
+        self.scopes.get(id)
+    }
+
+    /// Get a scope by ID (mutable)
+    pub fn get_scope_mut(&mut self, id: usize) -> Option<&mut Scope> {
+        self.scopes.get_mut(id)
+    }
+
+    /// Enter a new scope
+    pub fn push_scope(&mut self, scope_type: ScopeType, name: String) -> usize {
+        let parent_id = self.current_scope_id();
+        let scope_id = self.scopes.len();
+
+        let scope = Scope::new(scope_type, name, Some(parent_id));
+        self.scopes.push(scope);
+
+        // Add this scope as a child of its parent
+        self.scopes[parent_id].children.push(scope_id);
+
+        self.scope_stack.push(scope_id);
+        scope_id
+    }
+
+    /// Enter an existing child scope by name and type
+    /// Returns true if the scope was found and entered
+    pub fn enter_child_scope(&mut self, scope_type: ScopeType, name: &str) -> bool {
+        let current_id = self.current_scope_id();
+        let current_scope = &self.scopes[current_id];
+
+        // Find matching child scope
+        for &child_id in &current_scope.children {
+            let child = &self.scopes[child_id];
+            if child.scope_type == scope_type && child.name == name {
+                self.scope_stack.push(child_id);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Exit the current scope
+    pub fn pop_scope(&mut self) {
+        if self.scope_stack.len() > 1 {
+            self.scope_stack.pop();
+        }
+    }
+
+    /// Define a symbol in the current scope
+    pub fn define(&mut self, symbol: Symbol) -> Result<(), String> {
+        self.current_scope_mut().define(symbol)
+    }
+
+    /// Look up a symbol following LEGB rules
+    /// Returns (symbol, scope_id) if found
+    pub fn lookup(&self, name: &str) -> Option<(&Symbol, usize)> {
+        let current_id = self.current_scope_id();
+        let current_scope = &self.scopes[current_id];
+
+        // Check if name is declared as global
+        if current_scope.is_global(name) {
+            // Look only in module scope
+            if let Some(symbol) = self.scopes[self.module_scope_id].lookup_local(name) {
+                return Some((symbol, self.module_scope_id));
+            }
+            return None;
+        }
+
+        // Check if name is declared as nonlocal
+        if current_scope.is_nonlocal(name) {
+            // Look in enclosing scopes (skip current)
+            return self.lookup_in_enclosing(name, current_id);
+        }
+
+        // Normal LEGB lookup
+        self.lookup_legb(name, current_id)
+    }
+
+    /// Perform LEGB lookup starting from a specific scope
+    fn lookup_legb(&self, name: &str, start_scope_id: usize) -> Option<(&Symbol, usize)> {
+        let mut scope_id = start_scope_id;
+
+        loop {
+            let scope = &self.scopes[scope_id];
+
+            // Local: Check current scope
+            if let Some(symbol) = scope.lookup_local(name) {
+                return Some((symbol, scope_id));
+            }
+
+            // Move to enclosing scope
+            match scope.parent_id {
+                Some(parent_id) => scope_id = parent_id,
+                None => break, // Reached module scope
+            }
+        }
+
+        // Not found (built-ins would be checked by the caller if needed)
+        None
+    }
+
+    /// Look up in enclosing scopes (for nonlocal)
+    fn lookup_in_enclosing(&self, name: &str, current_scope_id: usize) -> Option<(&Symbol, usize)> {
+        let current_scope = &self.scopes[current_scope_id];
+
+        if let Some(parent_id) = current_scope.parent_id {
+            self.lookup_legb(name, parent_id)
+        } else {
+            None
+        }
+    }
+
+    /// Record a usage of a name
+    pub fn record_usage(&mut self, name: &str, span: TextRange) -> Result<(), String> {
+        // Find the symbol using LEGB lookup
+        if let Some((_, scope_id)) = self.lookup(name) {
+            // Add usage to the symbol
+            if let Some(symbol) = self.scopes[scope_id].lookup_local_mut(name) {
+                symbol.add_usage(span);
+                return Ok(());
+            }
+        }
+
+        Err(format!("Undefined name: '{}'", name))
+    }
+
+    /// Get all scopes
+    pub fn scopes(&self) -> &[Scope] {
+        &self.scopes
+    }
+
+    /// Get the module scope
+    pub fn module_scope(&self) -> &Scope {
+        &self.scopes[self.module_scope_id]
+    }
+
+    /// Check for unused variables in all scopes
+    pub fn find_unused_variables(&self) -> Vec<(&Symbol, usize)> {
+        let mut unused = Vec::new();
+
+        for (scope_id, scope) in self.scopes.iter().enumerate() {
+            for symbol in scope.symbols.values() {
+                // Skip function/class definitions and imports (often intentionally unused)
+                if matches!(
+                    symbol.kind,
+                    BindingKind::Assignment | BindingKind::Parameter
+                ) && !symbol.is_used
+                    && !symbol.name.starts_with('_')
+                {
+                    unused.push((symbol, scope_id));
+                }
+            }
+        }
+
+        unused
+    }
+
+    /// Set the type for a symbol by name
+    pub fn set_symbol_type(&mut self, name: &str, ty: Type) {
+        if let Some((scope_id, symbol_name)) = self.find_symbol_scope(name)
+            && let Some(symbol) = self.scopes[scope_id].lookup_local_mut(&symbol_name)
+        {
+            symbol.set_type(ty);
+        }
+    }
+
+    /// Get the type for a symbol by name
+    pub fn get_symbol_type(&self, name: &str) -> Option<&Type> {
+        self.lookup(name).and_then(|(sym, _)| sym.get_type())
+    }
+
+    /// Find which scope contains a symbol by name
+    fn find_symbol_scope(&self, name: &str) -> Option<(usize, String)> {
+        self.lookup(name)
+            .map(|(_, scope_id)| (scope_id, name.to_string()))
+    }
+
+    /// Analyze closure captures - mark symbols that are captured by nested functions
+    pub fn analyze_closures(&mut self) {
+        // For each function scope, check if it references variables from enclosing scopes
+        for scope_id in 0..self.scopes.len() {
+            if let Some(scope) = self.scopes.get(scope_id)
+                && scope.scope_type == ScopeType::Function
+            {
+                // Get list of symbols referenced in this scope
+                let referenced_names: Vec<String> = scope
+                    .symbols
+                    .values()
+                    .filter(|s| s.is_free_var)
+                    .map(|s| s.name.clone())
+                    .collect();
+
+                // Mark these symbols as captured in their defining scopes
+                for name in referenced_names {
+                    self.mark_symbol_captured(&name, scope_id);
+                }
+            }
+        }
+    }
+
+    /// Mark a symbol as captured when accessed from a nested scope
+    fn mark_symbol_captured(&mut self, name: &str, accessing_scope_id: usize) {
+        // Walk up the scope chain from the accessing scope
+        let mut current_id = accessing_scope_id;
+
+        while let Some(scope) = self.scopes.get(current_id) {
+            if let Some(parent_id) = scope.parent_id {
+                // Check if the symbol is defined in the parent scope
+                if let Some(scope) = self.scopes.get_mut(parent_id)
+                    && let Some(symbol) = scope.symbols.get_mut(name)
+                {
+                    symbol.mark_captured();
+                    return;
+                }
+                current_id = parent_id;
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Mark a symbol usage and track if it's a free variable
+    pub fn mark_usage_and_check_closure(&mut self, name: &str, span: TextRange) -> Option<()> {
+        let current_scope_id = self.current_scope_id();
+
+        // First, try to find the symbol
+        let (_, defining_scope_id) = self.lookup(name)?;
+
+        // If the defining scope is different from the current scope, it might be a free variable
+        if defining_scope_id != current_scope_id {
+            // Check if it's a free variable (from an enclosing function scope)
+            let defining_scope = self.scopes.get(defining_scope_id)?;
+            let current_scope = self.scopes.get(current_scope_id)?;
+
+            if current_scope.scope_type == ScopeType::Function
+                && defining_scope.scope_type == ScopeType::Function
+            {
+                // Mark the symbol as captured in the defining scope
+                if let Some(scope) = self.scopes.get_mut(defining_scope_id)
+                    && let Some(symbol) = scope.symbols.get_mut(name)
+                {
+                    symbol.mark_captured();
+                }
+
+                // Create a free variable entry in the current scope if it doesn't exist
+                let symbol_name = name.to_string();
+                if let Some(current) = self.scopes.get_mut(current_scope_id) {
+                    current
+                        .symbols
+                        .entry(symbol_name.clone())
+                        .or_insert_with(|| {
+                            let mut free_var = Symbol::new(
+                                symbol_name,
+                                BindingKind::Parameter, // Free variables are like implicit parameters
+                                span,
+                            );
+                            free_var.mark_free_var();
+                            free_var
+                        });
+                }
+            }
+        }
+
+        // Add usage to the symbol
+        if let Some(scope) = self.scopes.get_mut(defining_scope_id)
+            && let Some(symbol) = scope.symbols.get_mut(name)
+        {
+            symbol.add_usage(span);
+        }
+
+        Some(())
+    }
+
+    /// Get a summary of the symbol table for debugging
+    pub fn summary(&self) -> String {
+        let mut output = String::new();
+        output.push_str(&format!("Symbol Table ({}scopes):\n", self.scopes.len()));
+
+        for (id, scope) in self.scopes.iter().enumerate() {
+            output.push_str(&format!(
+                "\n  Scope #{} ({:?}): '{}'\n",
+                id, scope.scope_type, scope.name
+            ));
+            output.push_str(&format!("    Parent: {:?}\n", scope.parent_id));
+            output.push_str(&format!("    Symbols: {}\n", scope.symbols.len()));
+
+            for (name, symbol) in &scope.symbols {
+                output.push_str(&format!(
+                    "      {}: {:?}, used={}, usages={}\n",
+                    name,
+                    symbol.kind,
+                    symbol.is_used,
+                    symbol.usages.len()
+                ));
+            }
+        }
+
+        output
+    }
+}
+
+impl Default for SymbolTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}

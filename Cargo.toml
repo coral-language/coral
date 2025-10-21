@@ -1,45 +1,82 @@
-[package]
-name = "coral"
-version = "0.1.0"
-edition = "2024"
-authors = ["Rafael Fragoso <rafaelfragosom@gmail.com>"]
-description = "Coral - A fast, elegant, and type-safe programming language"
-documentation = "https://docs.rs/coral-lang"
-homepage = "https://coral-lang.org"
-repository = "https://github.com/coral/coral"
-readme = "README.md"
-license = "MIT"
-keywords = ["programming-language", "interpreter", "compiler", "functional"]
-categories = ["compilers", "parser-implementations"]
-exclude = [
-  ".github/",
-  "examples/",
-  "tests/",
-  "docs/",
+[workspace]
+resolver = "2"
+members = [
+  "crates/parser",
+  "crates/codegen",
+  "crates/cli",
+  "crates/interpreter",
+  "crates/lsp",
 ]
 
-[[bin]]
-name = "coral"
-path = "src/main.rs"
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+authors = ["Coral Language Team <team@coral-lang.org>"]
+license = "Apache-2.0"
+repository = "https://github.com/coral-language/coral"
+homepage = "https://coral-lang.org"
+keywords = [
+  "language",
+  "programming",
+  "compiler",
+  "interpreter",
+  "language server protocol",
+]
+categories = ["development-tools", "compilers"]
+description = "A modern programming language combining high performance with developer ergonomics."
+readme = "README.md"
+exclude = ["target/", "examples/", "docs/"]
 
-[lib]
-name = "coral_lang"
-path = "src/lib.rs"
-
-[dependencies]
-# Add dependencies as needed
-
-[dev-dependencies]
-# For testing
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-strip = true
+[workspace.dependencies]
+# Core dependencies
+thiserror = "2.0"
+miette = { version = "7.6", features = ["fancy"] }
+bumpalo = { version = "3.19", features = ["collections", "boxed"] }
+lasso = { version = "0.7", features = ["multi-threaded", "serialize"] }
+rayon = "1.11.0"
+serde = { version = "1.0", features = ["derive"] }
+logos = "0.15"
+rustc-hash = "2.1"
+bincode = { version = "2.0", features = ["serde"] }
+smallvec = { version = "1.15", features = ["serde", "union", "const_generics"] }
+thin-vec = { version = "0.2", features = ["serde"] }
+parking_lot = "0.12"
+# Dev dependencies
+proptest = "1.8"
+arbitrary = "1.4.2"
+criterion = { version = "0.7", features = ["html_reports"] }
+insta = { version = "1.39", features = ["yaml"] }
+pretty_assertions = "1.4"
 
 [profile.dev]
 opt-level = 0
+debug = true
+overflow-checks = true
+lto = false
+panic = "unwind"
+incremental = true
+codegen-units = 256
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+overflow-checks = false
 
 [profile.test]
+opt-level = 1
+debug = 1
+overflow-checks = true
+lto = false
+incremental = true
+codegen-units = 16
+
+[profile.bench]
 opt-level = 0
+lto = false
+debug = true
+strip = false

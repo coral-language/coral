@@ -5,8 +5,8 @@
 Cargo.lock
 
 # IDE
-.vscode/
 .idea/
+.vim/
 *.swp
 *.swo
 *~
@@ -24,9 +24,68 @@ Thumbs.db
 # Test outputs
 *.log
 
-# Documentation
-/docs/_build/
+# Coverage reports
+coverage/
+*.profraw
+*.profdata
+tarpaulin-report.html
 
-# AI
-CLAUDE.md
-.claude
+# Fuzz testing artifacts
+fuzz/target/
+fuzz/artifacts/
+fuzz/reports/
+fuzz/corpus/
+
+# Benchmark artifacts
+benches/target/
+benches/criterion/
+
+# Editor files
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# --- Cursor IDE ---
+# Workspace/session state, caches, and project-specific rules
+.cursor/
+.cursor/*
+
+# Cursor AI rules/config that are user/machine-specific
+.cursorignore
+cursor.rules
+cursor.config.json
+
+# Cursor logs & temp
+cursor.log
+cursor-debug.log
+cursor-error.log
+
+# --- Claude (Anthropic) ---
+# Claude desktop/app config and caches
+.claude/
+.claude/*
+
+# Claude project-level artifacts
+claude.config.json
+claude.settings.json
+claude.session.json
+
+# Claude prompts, transcripts, or temp files commonly generated locally
+claude-prompts/
+claude-prompts/*
+claude-transcripts/
+claude-transcripts/*
+claude-cache/
+claude-cache/*
+claude-temp/
+claude-temp/*
+
+# --- General AI assistant artifacts ---
+# Common caches, temporary files, and generated outputs
+*.ai.log
+*.ai.cache
+*.ai.tmp
+ai-cache/
+ai-cache/*
+ai-temp/
+ai-temp/*
