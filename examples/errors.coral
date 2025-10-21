@@ -8,3 +8,17 @@ def test_unreachable():
 
 result = test_unreachable()
 print(f"Result: {result}")
+
+def test_unreachable_pattern(value):
+    match value:
+        case x:
+            return "first"
+        case _:
+            return "unreachable"
+        case 42:
+            return "also unreachable"
+
+def test_wildcard_in_or(value):
+    match value:
+        case 1 | 2 | _:
+            return "bad"

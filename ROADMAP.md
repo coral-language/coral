@@ -14,12 +14,12 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Format spec validation beyond current implementation
   - [x] Multi-line f-strings with proper indentation handling
 
-- [ ] **Pattern Matching Completeness**
-  - [ ] Guard expression type validation in patterns
-  - [ ] Wildcard pattern validation (cannot appear in or-patterns)
-  - [ ] Class pattern validation (positional must come before keyword)
-  - [ ] Better error recovery for malformed patterns
-  - [ ] Validate star patterns only appear once per sequence
+- [x] **Pattern Matching Completeness**
+  - [x] Guard expression type validation in patterns
+  - [x] Wildcard pattern validation (cannot appear in or-patterns)
+  - [x] Class pattern validation (positional must come before keyword)
+  - [x] Better error recovery for malformed patterns
+  - [x] Validate star patterns only appear once per sequence
 
 - [ ] **Error Recovery Improvements**
   - [ ] More sophisticated synchronization points

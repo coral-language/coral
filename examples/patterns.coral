@@ -1,0 +1,564 @@
+# Pattern Matching Examples - Comprehensive Test Suite
+# This file demonstrates all supported pattern matching features in Coral
+
+# ============================================================================
+# Basic Patterns
+# ============================================================================
+
+# Wildcard pattern - matches anything, doesn't bind
+def check_wildcard(value):
+    match value:
+        case _:
+            return "matched"
+
+# Literal patterns - match specific values
+def check_literals(value):
+    match value:
+        case 42:
+            return "forty-two"
+        case "hello":
+            return "greeting"
+        case 3.14:
+            return "pi"
+        case True:
+            return "true"
+        case False:
+            return "false"
+        case None:
+            return "none"
+        case _:
+            return "other"
+
+# Negative number literals
+def check_negative(value):
+    match value:
+        case -1:
+            return "negative one"
+        case -42:
+            return "negative forty-two"
+        case +10:
+            return "positive ten"
+        case _:
+            return "other"
+
+# Capture pattern - binds value to name
+def check_capture(value):
+    match value:
+        case x:
+            return x
+
+# ============================================================================
+# Singleton Patterns
+# ============================================================================
+
+# Boolean patterns
+def check_bool(value):
+    match value:
+        case True:
+            return "is true"
+        case False:
+            return "is false"
+        case _:
+            return "other"
+
+# None pattern
+def check_none(value):
+    match value:
+        case None:
+            return "is none"
+        case x:
+            return "not none"
+
+# ============================================================================
+# Sequence Patterns
+# ============================================================================
+
+# List patterns
+def check_list(value):
+    match value:
+        case []:
+            return "empty list"
+        case [x]:
+            return "single element"
+        case [x, y]:
+            return "two elements"
+        case [x, y, z]:
+            return "three elements"
+        case _:
+            return "other"
+
+# Tuple patterns
+def check_tuple(value):
+    match value:
+        case ():
+            return "empty tuple"
+        case _:
+            return "other"
+
+# Star patterns - capture rest of sequence
+def check_star(value):
+    match value:
+        case []:
+            return "empty"
+        case [first, *rest]:
+            return "first and rest"
+        case _:
+            return "other"
+
+# Nested sequence patterns
+def check_nested_sequence(value):
+    match value:
+        case [[x, y], [a, b]]:
+            return "2x2 nested"
+        case [x, [y, z]]:
+            return "nested in second"
+        case [[a, b, c], d]:
+            return "nested in first"
+        case _:
+            return "other"
+
+# ============================================================================
+# Mapping Patterns
+# ============================================================================
+
+# Dictionary patterns
+def check_dict(value):
+    match value:
+        case {}:
+            return "empty dict"
+        case {"key": x}:
+            return "has key"
+        case {"x": a, "y": b}:
+            return "has x and y"
+        case _:
+            return "other"
+
+# Rest pattern in mappings
+def check_dict_rest(value):
+    match value:
+        case {"required": x, **rest}:
+            return "has required and rest"
+        case {"a": x, "b": y, **others}:
+            return "has a, b and others"
+        case _:
+            return "other"
+
+# Nested mapping patterns
+def check_nested_mapping(value):
+    match value:
+        case {"outer": {"inner": x}}:
+            return "nested dict"
+        case {"data": {"x": a, "y": b}}:
+            return "nested coordinates"
+        case _:
+            return "other"
+
+# ============================================================================
+# Class Patterns
+# ============================================================================
+
+# Simple class patterns (positional)
+def check_class_positional(value):
+    match value:
+        case Point(x, y):
+            return "point with coords"
+        case Color(r, g, b):
+            return "color with rgb"
+        case _:
+            return "other"
+
+# Class patterns with keyword arguments
+def check_class_keyword(value):
+    match value:
+        case Point(x=a, y=b):
+            return "point with named coords"
+        case Person(name=n, age=a):
+            return "person with name and age"
+        case _:
+            return "other"
+
+# Class patterns mixing positional and keyword
+def check_class_mixed(value):
+    match value:
+        case Point(x, y=b):
+            return "point mixed"
+        case Person(name, age=a):
+            return "person mixed"
+        case Color(r, g, b=blue):
+            return "color mixed"
+        case _:
+            return "other"
+
+# Nested class patterns
+def check_nested_class(value):
+    match value:
+        case Container(Point(x, y)):
+            return "container with point"
+        case Wrapper(Inner(value)):
+            return "wrapped value"
+        case _:
+            return "other"
+
+# ============================================================================
+# Or Patterns
+# ============================================================================
+
+# Simple or patterns
+def check_or_simple(value):
+    match value:
+        case 1 | 2 | 3:
+            return "one, two, or three"
+        case "yes" | "y" | "true":
+            return "affirmative"
+        case _:
+            return "other"
+
+# Or patterns with captures
+def check_or_capture(value):
+    match value:
+        case (0, x) | (x, 0):
+            return "has a zero"
+        case ["a", x] | ["b", x]:
+            return "starts with a or b"
+        case _:
+            return "other"
+
+# Or patterns with sequences
+def check_or_sequence(value):
+    match value:
+        case [1, 2] | [2, 1]:
+            return "1 and 2 in any order"
+        case (x, y, z) | [x, y, z]:
+            return "triple as tuple or list"
+        case _:
+            return "other"
+
+# ============================================================================
+# As Patterns
+# ============================================================================
+
+# Binding entire pattern to name
+def check_as_pattern(value):
+    match value:
+        case [x, y] as pair:
+            return "pair bound to name"
+        case {"key": x} as data:
+            return "dict bound to name"
+        case _:
+            return "other"
+
+# As pattern with nested pattern
+def check_as_nested(value):
+    match value:
+        case [1, x] as first_is_one:
+            return "first is one"
+        case Point(x, y) as point:
+            return "point bound"
+        case _:
+            return "other"
+
+# ============================================================================
+# Guard Expressions
+# ============================================================================
+
+# Simple guards
+def check_guard_simple(value):
+    match value:
+        case 0:
+            return "zero"
+        case x if x > 0:
+            return "positive"
+        case x if x < 0:
+            return "negative"
+        case _:
+            return "other"
+
+# Guards with multiple conditions
+def check_guard_complex(value):
+    match value:
+        case x if x > 0 and x < 10:
+            return "single digit positive"
+        case x if x >= 10 and x < 100:
+            return "two digits"
+        case x if x % 2 == 0:
+            return "even"
+        case _:
+            return "other"
+
+# Guards with sequence patterns
+def check_guard_sequence(value):
+    match value:
+        case [x, y] if x == y:
+            return "equal pair"
+        case [x, y] if x > y:
+            return "descending"
+        case [x, y] if x < y:
+            return "ascending"
+        case _:
+            return "other"
+
+# Guards with class patterns
+def check_guard_class(value):
+    match value:
+        case Point(x, y) if x == 0:
+            return "on y-axis"
+        case Point(x, y) if y == 0:
+            return "on x-axis"
+        case Point(x, y) if x == y:
+            return "on diagonal"
+        case _:
+            return "other"
+
+# ============================================================================
+# Complex Nested Patterns
+# ============================================================================
+
+# Deeply nested patterns
+def check_deep_nesting(value):
+    match value:
+        case [[[x]]]:
+            return "triply nested"
+        case {"a": {"b": {"c": x}}}:
+            return "nested dict chain"
+        case Container(Wrapper(Inner(x))):
+            return "nested classes"
+        case _:
+            return "other"
+
+# Mixed pattern types
+def check_mixed(value):
+    match value:
+        case [Point(x, y), {"name": n}]:
+            return "point and dict"
+        case {"data": [a, b, c]}:
+            return "dict with list"
+        case Container([x, y, z]):
+            return "container with list"
+        case _:
+            return "other"
+
+# Complex or patterns with nesting
+def check_complex_or(value):
+    match value:
+        case [1, [2, 3]] | [[1, 2], 3]:
+            return "nested or"
+        case {"x": [a, b]} | {"y": [a, b]}:
+            return "dict with list or"
+        case _:
+            return "other"
+
+# Star patterns with nesting
+def check_star_nested(value):
+    match value:
+        case [[first, *rest], last]:
+            return "nested star"
+        case [{"key": x}, *others]:
+            return "dict then star"
+        case _:
+            return "other"
+
+# ============================================================================
+# Value Patterns with Names
+# ============================================================================
+
+# Capture pattern (binds to name)
+def check_value_pattern(value):
+    match value:
+        case x:
+            return "captured value"
+
+# ============================================================================
+# Exhaustiveness Examples
+# ============================================================================
+
+# Boolean patterns with explicit cases
+def check_exhaustive_bool(value):
+    match value:
+        case True:
+            return "true"
+        case False:
+            return "false"
+        case _:
+            return "other"
+
+# Exhaustive with catch-all
+def check_exhaustive_catchall(value):
+    match value:
+        case 0:
+            return "zero"
+        case x if x > 0:
+            return "positive"
+        case _:
+            return "other"
+
+# Non-exhaustive examples (would warn in strict mode)
+def check_non_exhaustive(value):
+    match value:
+        case 1:
+            return "one"
+        case 2:
+            return "two"
+        case _:
+            return "other"
+
+# ============================================================================
+# Pattern Matching with Different Types
+# ============================================================================
+
+# String patterns
+def check_string(value):
+    match value:
+        case "":
+            return "empty"
+        case "hello":
+            return "greeting"
+        case s:
+            return "other string"
+
+# Number patterns
+def check_number(value):
+    match value:
+        case 0:
+            return "zero"
+        case 1:
+            return "one"
+        case n:
+            return "other number"
+
+# Mixed type patterns
+def check_mixed_types(value):
+    match value:
+        case None:
+            return "none"
+        case True | False:
+            return "boolean"
+        case 0:
+            return "zero"
+        case "":
+            return "empty string"
+        case []:
+            return "empty list"
+        case {}:
+            return "empty dict"
+        case _:
+            return "other"
+
+# ============================================================================
+# Edge Cases and Special Patterns
+# ============================================================================
+
+# Single element in parentheses (not a tuple)
+def check_parens(value):
+    match value:
+        case x:
+            return "any value"
+
+# Multiple wildcards
+def check_multiple_wildcards(value):
+    match value:
+        case [_, _, _]:
+            return "three items"
+        case _:
+            return "other"
+
+# Empty patterns
+def check_empty(value):
+    match value:
+        case ():
+            return "empty tuple"
+        case []:
+            return "empty list"
+        case {}:
+            return "empty dict"
+        case _:
+            return "other"
+
+# Patterns with trailing commas
+def check_trailing_commas(value):
+    match value:
+        case [x, y, z,]:
+            return "list with trailing comma"
+        case _:
+            return "other"
+
+# ============================================================================
+# Real-world Pattern Matching Examples
+# ============================================================================
+
+# HTTP response handling
+def handle_response(response):
+    match response:
+        case {"status": 200, "body": data}:
+            return "success"
+        case {"status": 404}:
+            return "not found"
+        case {"status": 500, "error": msg}:
+            return "server error"
+        case _:
+            return "unknown response"
+
+# AST node processing
+def process_node(node):
+    match node:
+        case BinaryOp(left, "+", right):
+            return "addition"
+        case BinaryOp(left, "-", right):
+            return "subtraction"
+        case UnaryOp("-", operand):
+            return "negation"
+        case Number(value):
+            return "number literal"
+        case _:
+            return "unknown node"
+
+# Command parsing
+def parse_command(cmd):
+    match cmd:
+        case ["quit"] | ["exit"]:
+            return "exit command"
+        case ["help", topic]:
+            return "help request"
+        case ["set", key, value]:
+            return "set command"
+        case ["get", key]:
+            return "get command"
+        case _:
+            return "unknown command"
+
+# Tree traversal
+def process_tree(tree):
+    match tree:
+        case Leaf(value):
+            return "leaf node"
+        case Node(Leaf(x), Leaf(y)):
+            return "parent of leaves"
+        case Node(left, right):
+            return "internal node"
+        case _:
+            return "unknown tree structure"
+
+# Option/Result type patterns
+def handle_result(result):
+    match result:
+        case Ok(value):
+            return "success"
+        case Err(msg):
+            return "error"
+        case None:
+            return "no value"
+        case _:
+            return "other"
+
+# Event handling
+def handle_event(event):
+    match event:
+        case Click(x, y):
+            return "click event"
+        case KeyPress(key) if key == "Enter":
+            return "enter key"
+        case KeyPress(key) if key == "Escape":
+            return "escape key"
+        case MouseMove(x, y, dx, dy):
+            return "mouse move"
+        case _:
+            return "unknown event"

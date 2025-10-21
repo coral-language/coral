@@ -117,7 +117,7 @@ impl<'a> ExhaustivenessChecker<'a> {
                             catch_all_index.unwrap() + 1
                         ),
                     },
-                    case.span,
+                    case.pattern.span(),
                 ));
             }
 
@@ -129,17 +129,35 @@ impl<'a> ExhaustivenessChecker<'a> {
 
             // Validate pattern type compatibility
             self.check_pattern_type(&case.pattern, &subject_type);
+
+            // Validate guard expression type (must be bool)
+            if let Some(ref guard) = case.guard {
+                let guard_type = self.infer_expr_type(guard);
+                if !matches!(guard_type, Type::Bool | Type::Unknown) {
+                    self.errors.push(*error(
+                        ErrorKind::PatternTypeMismatch {
+                            expected: "bool".to_string(),
+                            found: guard_type.display_name(),
+                        },
+                        guard.span(),
+                    ));
+                }
+            }
         }
 
         // Check exhaustiveness
         if !seen_catch_all {
             let missing = self.find_missing_patterns(match_stmt.cases, &subject_type);
             if !missing.is_empty() {
+                let match_header_span = text_size::TextRange::new(
+                    match_stmt.span.start(),
+                    match_stmt.subject.span().end(),
+                );
                 self.errors.push(*error(
                     ErrorKind::NonExhaustiveMatch {
                         missing_patterns: missing,
                     },
-                    match_stmt.span,
+                    match_header_span,
                 ));
             }
         }

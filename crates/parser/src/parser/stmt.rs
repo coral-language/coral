@@ -1348,6 +1348,19 @@ impl<'a> Parser<'a> {
                 patterns.push(self.parse_as_pattern()?);
             }
 
+            // Validate that wildcard patterns don't appear in or-patterns
+            for pattern in &patterns {
+                if self.is_wildcard_pattern(pattern) {
+                    return Err(error(
+                        ErrorKind::InvalidPatternSyntax {
+                            pattern: "Wildcard pattern '_' cannot appear in or-patterns"
+                                .to_string(),
+                        },
+                        pattern.span(),
+                    ));
+                }
+            }
+
             let end = patterns.last().unwrap().span().end();
             return Ok(crate::ast::patterns::Pattern::MatchOr(
                 crate::ast::patterns::MatchOrPattern {
@@ -1470,6 +1483,14 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let patterns = self.parse_pattern_sequence(TokenKind::RightBracket)?;
                 let end = self.peek().span.end();
+                if self.peek().kind != TokenKind::RightBracket {
+                    return Err(error(
+                        ErrorKind::InvalidPatternSyntax {
+                            pattern: "Unclosed '[' in sequence pattern".to_string(),
+                        },
+                        TextRange::new(start, self.peek().span.start()),
+                    ));
+                }
                 self.consume(TokenKind::RightBracket)?;
 
                 Ok(crate::ast::patterns::Pattern::MatchSequence(
@@ -1497,6 +1518,14 @@ impl<'a> Parser<'a> {
 
                 let patterns = self.parse_pattern_sequence(TokenKind::RightParen)?;
                 let end = self.peek().span.end();
+                if self.peek().kind != TokenKind::RightParen {
+                    return Err(error(
+                        ErrorKind::InvalidPatternSyntax {
+                            pattern: "Unclosed '(' in pattern".to_string(),
+                        },
+                        TextRange::new(start, self.peek().span.start()),
+                    ));
+                }
                 self.consume(TokenKind::RightParen)?;
 
                 // Single pattern in parens is just that pattern, not a sequence
@@ -1550,6 +1579,15 @@ impl<'a> Parser<'a> {
                     } else {
                         // key: pattern
                         let key = self.parse_expression()?;
+                        if self.peek().kind != TokenKind::Colon {
+                            return Err(error(
+                                ErrorKind::InvalidPatternSyntax {
+                                    pattern: "Expected ':' after key in mapping pattern"
+                                        .to_string(),
+                                },
+                                self.peek().span,
+                            ));
+                        }
                         self.consume(TokenKind::Colon)?;
                         let pattern = self.parse_pattern()?;
 
@@ -1567,6 +1605,14 @@ impl<'a> Parser<'a> {
                 }
 
                 let end = self.peek().span.end();
+                if self.peek().kind != TokenKind::RightBrace {
+                    return Err(error(
+                        ErrorKind::InvalidPatternSyntax {
+                            pattern: "Unclosed '{' in mapping pattern".to_string(),
+                        },
+                        TextRange::new(start, self.peek().span.start()),
+                    ));
+                }
                 self.consume(TokenKind::RightBrace)?;
 
                 Ok(crate::ast::patterns::Pattern::MatchMapping(
@@ -1590,11 +1636,26 @@ impl<'a> Parser<'a> {
 
             _ => {
                 // Try parsing as a value pattern (dotted name, etc.)
-                let expr = self.parse_expression()?;
-                let span = expr.span();
-                Ok(crate::ast::patterns::Pattern::MatchValue(
-                    crate::ast::patterns::MatchValuePattern { value: expr, span },
-                ))
+                match self.parse_expression() {
+                    Ok(expr) => {
+                        let span = expr.span();
+                        Ok(crate::ast::patterns::Pattern::MatchValue(
+                            crate::ast::patterns::MatchValuePattern { value: expr, span },
+                        ))
+                    }
+                    Err(_) => {
+                        // Provide better error message for malformed patterns
+                        Err(error(
+                            ErrorKind::InvalidPatternSyntax {
+                                pattern: format!(
+                                    "Invalid pattern starting with '{:?}'",
+                                    self.peek().kind
+                                ),
+                            },
+                            self.peek().span,
+                        ))
+                    }
+                }
             }
         }
     }
@@ -1604,13 +1665,26 @@ impl<'a> Parser<'a> {
         end_token: TokenKind,
     ) -> ParseResult<Vec<crate::ast::patterns::Pattern<'a>>> {
         let mut patterns = Vec::new();
+        let mut star_pattern_count = 0;
 
         while self.peek().kind != end_token && !self.is_at_end() {
             // Check for star pattern: *rest
             if self.peek().kind == TokenKind::Star {
+                let star_start = self.peek().span.start();
                 self.advance();
                 let name = self.consume_ident()?;
-                let span = TextRange::new(self.prev().span.start(), self.prev().span.end());
+                let span = TextRange::new(star_start, self.prev().span.end());
+
+                star_pattern_count += 1;
+                if star_pattern_count > 1 {
+                    return Err(error(
+                        ErrorKind::InvalidPatternSyntax {
+                            pattern: "Star pattern can appear at most once per sequence"
+                                .to_string(),
+                        },
+                        span,
+                    ));
+                }
 
                 // Star pattern is represented as MatchAs with a capture name
                 patterns.push(crate::ast::patterns::Pattern::MatchAs(
@@ -1673,9 +1747,8 @@ impl<'a> Parser<'a> {
 
             if seen_keyword {
                 return Err(error(
-                    ErrorKind::UnexpectedToken {
-                        expected: None,
-                        found: format!("{:?}", self.peek().kind),
+                    ErrorKind::InvalidPatternSyntax {
+                        pattern: "Positional patterns must come before keyword patterns in class patterns".to_string(),
                     },
                     self.peek().span,
                 ));
@@ -1710,5 +1783,13 @@ impl<'a> Parser<'a> {
                 span: TextRange::new(start, end),
             },
         ))
+    }
+
+    /// Check if a pattern is a wildcard pattern (_)
+    fn is_wildcard_pattern(&self, pattern: &crate::ast::patterns::Pattern<'a>) -> bool {
+        matches!(
+            pattern,
+            crate::ast::patterns::Pattern::MatchAs(p) if p.pattern.is_none() && p.name.is_none()
+        )
     }
 }
