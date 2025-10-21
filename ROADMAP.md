@@ -35,7 +35,7 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 
 ### Lexer Module
 
- - [x] **String Literal Enhancements**
+- [x] **String Literal Enhancements**
   - [ ] Triple-quoted strings (single and double, multi-line support pending)
   - [x] Raw strings (`r""`, `r''`)
   - [x] T-strings (`t""`, `t''`)
