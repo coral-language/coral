@@ -35,8 +35,9 @@ impl LineCursor {
             match tok_result {
                 Ok(tok) => {
                     let kind = self.convert_logos_token(tok);
-                    // Filter out Newline and Comment tokens from line tokenization (we handle them separately)
-                    if kind != TokenKind::Newline && kind != TokenKind::Comment {
+                    // Filter out Newline tokens from line tokenization (we handle them separately)
+                    // Comment tokens are now preserved for documentation and IDE support
+                    if kind != TokenKind::Newline {
                         tokens.push(Token::new(kind, span));
                     }
                 }

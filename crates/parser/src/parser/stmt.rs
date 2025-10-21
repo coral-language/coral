@@ -9,6 +9,17 @@ pub type ParseResult<T> = Result<T, Box<Error>>;
 impl<'a> Parser<'a> {
     pub(super) fn parse_stmt(&mut self) -> ParseResult<Stmt<'a>> {
         let result = match self.peek().kind {
+            TokenKind::Comment => {
+                // Skip comments - they should have been handled at a higher level
+                // If we encounter a comment here, it means the caller didn't skip them properly
+                return Err(error(
+                    ErrorKind::UnexpectedToken {
+                        expected: None,
+                        found: "comment".to_string(),
+                    },
+                    self.peek().span,
+                ));
+            }
             TokenKind::At => self.parse_decorated(),
             TokenKind::Async => self.parse_async_stmt(),
             TokenKind::Def => self.parse_func_def(&[], false),
@@ -471,6 +482,9 @@ impl<'a> Parser<'a> {
         };
         let body_slice = self.arena.alloc_slice_vec(body);
 
+        // Extract function docstring (first string literal in body, if any)
+        let docstring = Parser::extract_docstring_from_body(body_slice, self.source, self.arena);
+
         // Restore context
         self.context = saved_context;
 
@@ -483,6 +497,7 @@ impl<'a> Parser<'a> {
             returns,
             is_async,
             span: TextRange::new(start, body_slice[body_slice.len() - 1].span().end()),
+            docstring,
         }))
     }
 
@@ -697,6 +712,9 @@ impl<'a> Parser<'a> {
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
 
+        // Extract class docstring (first string literal in body, if any)
+        let docstring = Parser::extract_docstring_from_body(body_slice, self.source, self.arena);
+
         let end = body_slice.last().map(|s| s.span().end()).unwrap_or(start);
 
         Ok(Stmt::ClassDef(ClassDefStmt {
@@ -707,6 +725,7 @@ impl<'a> Parser<'a> {
             body: body_slice,
             decorators,
             span: TextRange::new(start, end),
+            docstring,
         }))
     }
 

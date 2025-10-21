@@ -86,9 +86,15 @@ impl Lexer {
                 continue;
             }
 
+            // Check if this line contains only whitespace and comments
+            // If so, don't process indentation for it
+            let line_content = line.trim_start();
+            let is_comment_only_line = line_content.starts_with('#') || line_content.is_empty();
+
             // Calculate indentation and process indentation changes
             // BUT: Skip indentation processing if we're inside brackets (implicit line joining)
-            if self.bracket_depth == 0 {
+            // OR if the line contains only comments/whitespace
+            if self.bracket_depth == 0 && !is_comment_only_line {
                 let indent_analysis = IndentationTracker::analyze_indent_level(&line);
                 let indent_pos = TextSize::from(line_start_pos as u32);
 

@@ -218,6 +218,7 @@ pub fn parse_eval(source: &str) -> CoralResult<Expr<'static>> {
     let module = arena.alloc(Module {
         body,
         span: expr_span,
+        docstring: None,
     });
 
     // Run semantic analysis with all passes enabled
@@ -260,6 +261,7 @@ pub fn parse_interactive(source: &str) -> CoralResult<Stmt<'static>> {
     let module = arena.alloc(Module {
         body,
         span: stmt_span,
+        docstring: None,
     });
 
     // Run semantic analysis with all passes enabled

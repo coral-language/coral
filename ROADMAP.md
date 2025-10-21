@@ -57,11 +57,11 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Better error messages for indentation issues
   - [x] Handle edge case: dedent at EOF with complex nesting
 
-- [ ] **Comments and Docstrings**
-  - [ ] Preserve comments for documentation generation
-  - [ ] Extract docstrings (first string in function/class/module)
+- [x] **Comments and Docstrings**
+  - [x] Preserve comments for documentation generation
+  - [x] Extract docstrings (first string in function/class/module)
   - [ ] Multi-line comment handling
-  - [ ] Comment attachment to AST nodes for IDE support
+  - [x] Comment attachment to AST nodes for IDE support
 
 ### Arena Module
 

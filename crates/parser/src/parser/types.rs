@@ -6,9 +6,9 @@ use crate::error::{
 
 pub type ParseResult<T> = Result<T, Box<Error>>;
 use crate::Arena;
-use crate::lexer::{Token, TokenKind};
+use crate::lexer::{CommentKind, CommentMap, Token, TokenKind};
 use smallvec::SmallVec;
-use text_size::TextRange;
+use text_size::{TextRange, TextSize};
 
 /// Parsing mode for different execution contexts (module, eval, interactive)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +77,8 @@ pub struct Parser<'a> {
     pub(super) recovery_manager: RecoveryManager,
     /// Track if we've seen any non-future imports or statements (for __future__ validation)
     pub(super) seen_non_future_statement: bool,
+    /// Comments preserved for documentation generation and IDE support
+    pub comment_map: CommentMap,
 }
 
 impl<'a> Parser<'a> {
@@ -95,6 +97,9 @@ impl<'a> Parser<'a> {
             errors.push(lexical_error);
         }
 
+        let mut comment_map = CommentMap::new();
+        Self::extract_comments(&tokens, source, &mut comment_map);
+
         Parser {
             tokens,
             current: 0,
@@ -107,6 +112,7 @@ impl<'a> Parser<'a> {
             warnings: lexical_warnings,
             recovery_manager: RecoveryManager::new(),
             seen_non_future_statement: false,
+            comment_map,
         }
     }
 
@@ -115,9 +121,10 @@ impl<'a> Parser<'a> {
         let mut body = Vec::new();
 
         while !self.is_at_end() && self.peek().kind != TokenKind::Eof {
-            if self.peek().kind == TokenKind::Newline {
-                self.advance();
-                continue;
+            // Skip comments and newlines
+            self.skip_comments_and_newlines();
+            if self.is_at_end() || self.peek().kind == TokenKind::Eof {
+                break;
             }
 
             // Try to parse a statement with error recovery
@@ -157,10 +164,14 @@ impl<'a> Parser<'a> {
             TextRange::default()
         };
 
+        // Extract module docstring (first string literal in module, if any)
+        let docstring = Self::extract_docstring_from_body(&body, self.source, self.arena);
+
         let body_slice = self.arena.alloc_slice_vec(body);
         let module = Module {
             body: body_slice,
             span,
+            docstring,
         };
         Ok(self.arena.alloc(module))
     }
@@ -396,7 +407,8 @@ impl<'a> Parser<'a> {
             self.advance(); // Skip the unmatched closing delimiter
         }
 
-        while self.match_token(TokenKind::Newline) {}
+        // Consume newlines and any comments that follow them
+        self.skip_comments_and_newlines();
     }
 
     pub(super) fn parse_block(&mut self) -> ParseResult<Vec<Stmt<'a>>> {
@@ -404,9 +416,10 @@ impl<'a> Parser<'a> {
         let mut stmts = Vec::new();
 
         while self.peek().kind != TokenKind::Dedent && !self.is_at_end() {
-            if self.peek().kind == TokenKind::Newline {
-                self.advance();
-                continue;
+            // Skip comments and newlines
+            self.skip_comments_and_newlines();
+            if self.peek().kind == TokenKind::Dedent || self.is_at_end() {
+                break;
             }
             stmts.push(self.parse_stmt()?);
         }
@@ -948,5 +961,123 @@ impl<'a> Parser<'a> {
     /// Check if any errors were encountered during parsing.
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
+    }
+
+    /// Skip comments and newlines, advancing the parser position.
+    pub(super) fn skip_comments_and_newlines(&mut self) {
+        while !self.is_at_end()
+            && matches!(self.peek().kind, TokenKind::Comment | TokenKind::Newline)
+        {
+            self.advance();
+        }
+    }
+
+    /// Extract comments from tokens and populate the comment map.
+    fn extract_comments(tokens: &[Token], source: &str, comment_map: &mut CommentMap) {
+        for token in tokens {
+            if token.kind == TokenKind::Comment {
+                // Extract the comment text from source (includes the '#')
+                let comment_text = &source[token.span];
+
+                // Remove the '#' prefix and trim whitespace
+                let text = comment_text
+                    .strip_prefix('#')
+                    .unwrap_or(comment_text)
+                    .trim();
+
+                // Determine if this is a trailing comment (on same line as previous code)
+                // Check if there's only whitespace (no newline) between the start of line and this comment
+                let kind = if token.span.start() > TextSize::from(0) {
+                    let before_text = &source[..token.span.start().into()];
+                    // Find the last newline in the text before this comment
+                    if let Some(last_newline_pos) = before_text.rfind('\n') {
+                        // Check if there's only whitespace between the last newline and the comment
+                        let between_newline_and_comment = &before_text[last_newline_pos + 1..];
+                        if between_newline_and_comment.trim().is_empty() {
+                            CommentKind::Line
+                        } else {
+                            CommentKind::Trailing
+                        }
+                    } else {
+                        // No newline found, so it's at the start of the input
+                        CommentKind::Line
+                    }
+                } else {
+                    CommentKind::Line
+                };
+
+                comment_map.add_comment(text.to_string(), token.span, kind);
+            }
+        }
+    }
+
+    /// Extract docstring from a statement body (first string literal expression, if any).
+    /// Returns the docstring content as a string slice allocated in the arena.
+    pub(super) fn extract_docstring_from_body(
+        body: &[Stmt<'a>],
+        source: &str,
+        arena: &'a Arena,
+    ) -> Option<&'a str> {
+        if let Some(Stmt::Expr(expr_stmt)) = body.first() {
+            // Check if the expression is a string literal (constant expression)
+            match &expr_stmt.value {
+                Expr::Constant(constant_expr) => {
+                    // Extract the string content from source
+                    let string_span = constant_expr.span;
+                    let string_text = &source[string_span];
+
+                    // Remove quotes
+                    let content = if (string_text.starts_with('"') && string_text.ends_with('"'))
+                        || (string_text.starts_with('\'') && string_text.ends_with('\''))
+                    {
+                        &string_text[1..string_text.len() - 1]
+                    } else {
+                        // Shouldn't happen for properly parsed strings
+                        string_text
+                    };
+
+                    // Interpret escapes and allocate in arena
+                    Some(arena.alloc_str(&Self::interpret_string_escapes(content)))
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Interpret basic escape sequences in a string.
+    /// This is a simplified version for docstring extraction.
+    fn interpret_string_escapes(s: &str) -> String {
+        let mut result = String::new();
+        let mut chars = s.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '\\' {
+                match chars.next() {
+                    Some('n') => result.push('\n'),
+                    Some('t') => result.push('\t'),
+                    Some('r') => result.push('\r'),
+                    Some('\\') => result.push('\\'),
+                    Some('"') => result.push('"'),
+                    Some('\'') => result.push('\''),
+                    Some('0') => result.push('\0'),   // null byte
+                    Some('b') => result.push('\x08'), // backspace
+                    Some('f') => result.push('\x0c'), // form feed
+                    Some('a') => result.push('\x07'), // bell
+                    Some('v') => result.push('\x0b'), // vertical tab
+                    Some(ch) => {
+                        // Unknown escape, keep as-is
+                        result.push('\\');
+                        result.push(ch);
+                    }
+                    None => result.push('\\'), // Trailing backslash
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+
+        result
     }
 }

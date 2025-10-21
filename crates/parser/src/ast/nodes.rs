@@ -8,6 +8,8 @@ use text_size::TextRange;
 pub struct Module<'a> {
     pub body: &'a [Stmt<'a>],
     pub span: TextRange,
+    /// The module's docstring (first string literal in the module, if any).
+    pub docstring: Option<&'a str>,
 }
 
 /// Statement types.
@@ -144,6 +146,8 @@ pub struct FuncDefStmt<'a> {
     pub returns: Option<Box<Expr<'a>>>,
     pub is_async: bool,
     pub span: TextRange,
+    /// The function's docstring (first string literal in the function body, if any).
+    pub docstring: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +159,8 @@ pub struct ClassDefStmt<'a> {
     pub body: &'a [Stmt<'a>],
     pub decorators: &'a [Expr<'a>],
     pub span: TextRange,
+    /// The class's docstring (first string literal in the class body, if any).
+    pub docstring: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]

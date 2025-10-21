@@ -108,6 +108,7 @@ mod tests {
         let module = Module {
             body: stmts,
             span: pass_span,
+            docstring: None,
         };
 
         parallel.visit_module(&module);
