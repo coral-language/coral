@@ -28,10 +28,10 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [ ] Cascading error prevention (don't report dependent errors)
   - [ ] Smart error messages for common syntax mistakes
 
-- [ ] **Soft Keyword Handling**
-  - [ ] Ensure soft keywords work correctly in all contexts
-  - [ ] Validate they can still be used as variable names
-  - [ ] Add tests for edge cases (e.g., `match = 5`)
+- [x] **Soft Keyword Handling**
+  - [x] Ensure soft keywords work correctly in all contexts
+  - [x] Validate they can still be used as variable names
+  - [x] Add tests for edge cases (e.g., `match = 5`)
 
 ### Lexer Module
 

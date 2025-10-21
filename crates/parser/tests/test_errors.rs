@@ -643,3 +643,251 @@ def bar():
     println!("Error recovery test: {:?}", errors);
     // Parser should detect the unclosed bracket error
 }
+
+// ===== Soft Keyword Tests =====
+
+#[test]
+fn test_soft_keyword_match_as_variable() {
+    // Test that 'match' can be used as a variable name
+    let source = r#"
+match = 5
+print(match)
+match += 10
+x = match * 2
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keyword 'match' should work as a variable name: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_case_as_variable() {
+    // Test that 'case' can be used as a variable name
+    let source = r#"
+case = "test"
+print(case)
+case = case.upper()
+x = len(case)
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keyword 'case' should work as a variable name: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_type_as_variable() {
+    // Test that 'type' can be used as a variable name
+    let source = r#"
+type = "string"
+print(type)
+type = int
+x = type(42)
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keyword 'type' should work as a variable name: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_match_statement() {
+    // Test that 'match' works as a match statement
+    let source = r#"
+def foo(value):
+    match value:
+        case 1:
+            print("one")
+        case 2:
+            print("two")
+        case _:
+            print("other")
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keyword 'match' should work in match statement: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_type_statement() {
+    // Test that 'type' works as a type alias statement
+    let source = r#"
+type Point = tuple[int, int]
+type Vector = list[float]
+type Matrix[T] = list[list[T]]
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keyword 'type' should work in type alias statement: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_mixed_context() {
+    // Test mixing match as variable and match statement
+    let source = r#"
+match = 42  # match as variable
+
+def check(value):
+    match value:  # match as statement
+        case 0:
+            return "zero"
+        case _:
+            return "non-zero"
+
+result = check(match)  # match as variable again
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Should handle mixed usage of soft keyword 'match': {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_type_mixed_context() {
+    // Test mixing type as variable and type statement
+    let source = r#"
+type MyInt = int  # type as statement
+
+type = str  # type as variable
+x = type("hello")  # type as variable
+
+type Point = tuple[int, int]  # type as statement again
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Should handle mixed usage of soft keyword 'type': {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_in_expressions() {
+    // Test soft keywords in various expression contexts
+    let source = r#"
+def foo():
+    match = [1, 2, 3]
+    case = {"key": "value"}
+    type = lambda x: x * 2
+
+    # Use in subscript
+    x = match[0]
+
+    # Use in attribute access (when match is an object)
+    # y = match.append
+
+    # Use in function calls
+    z = len(match)
+
+    # Use in binary operations
+    result = match + [4, 5]
+
+    return (match, case, type)
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keywords should work in all expression contexts: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_as_function_parameter() {
+    // Test soft keywords as function parameters
+    let source = r#"
+def foo(match, case, type):
+    print(match, case, type)
+    return match + case + type
+
+result = foo(1, 2, 3)
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keywords should work as function parameters: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_in_comprehension() {
+    // Test soft keywords in list comprehensions
+    let source = r#"
+match = [1, 2, 3, 4, 5]
+result = [case for case in match if case > 2]
+type = {x: x**2 for x in match}
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keywords should work in comprehensions: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_case_outside_match() {
+    // Test that 'case' can be used freely outside match statements
+    let source = r#"
+case = "uppercase"
+test_case = case.upper()
+
+def process_case(case):
+    return case.lower()
+
+result = process_case(test_case)
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keyword 'case' should work outside match statement: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_soft_keyword_with_augmented_assignment() {
+    // Test soft keywords with all augmented assignment operators
+    let source = r#"
+match = 10
+match += 5
+match -= 2
+match *= 3
+match /= 2
+match //= 1
+match %= 4
+match **= 2
+
+type = 100
+type &= 15
+type |= 8
+type ^= 3
+type <<= 2
+type >>= 1
+
+case = "@"
+case @= [[1, 2]]
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        errors.is_empty(),
+        "Soft keywords should work with augmented assignments: {:?}",
+        errors
+    );
+}
