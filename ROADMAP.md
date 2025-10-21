@@ -60,7 +60,7 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 - [x] **Comments and Docstrings**
   - [x] Preserve comments for documentation generation
   - [x] Extract docstrings (first string in function/class/module)
-  - [ ] Multi-line comment handling
+  - [x] Multi-line comment handling
   - [x] Comment attachment to AST nodes for IDE support
 
 ### Arena Module
@@ -130,7 +130,7 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [ ] Build proper `Type::Function` types
 
 - [ ] **Generator Types**
-  - [ ] Add `Type::Generator(Box<Type>)` to type system
+  - [x] Add `Type::Generator(Box<Type>)` to type system
   - [ ] Distinguish generators from lists
   - [ ] Handle yield expressions
   - [ ] Track generator protocol methods
@@ -191,18 +191,18 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 ### Semantic Module - Type Checking
 
 - [ ] **Custom Class Attributes**
-  - [ ] Build attribute/method tables for all classes
-  - [ ] Walk MRO for attribute lookup
+  - [x] Build attribute/method tables for all classes
+  - [x] Walk MRO for attribute lookup
   - [ ] Validate method signatures
-  - [ ] Handle attribute shadowing
+  - [x] Handle attribute shadowing
 
 - [ ] **Protocol Integration**
-  - [ ] Validate special methods (`__iter__`, `__enter__`, etc.)
+  - [x] Validate special methods (`__iter__`, `__enter__`, etc.)
   - [ ] Structural subtyping checks
   - [ ] Protocol implementation completeness
 
 - [ ] **Property Support**
-  - [ ] Detect `@property` decorators
+  - [x] Detect `@property` decorators
   - [ ] Treat properties as attributes
   - [ ] Validate getter/setter/deleter
 
@@ -266,10 +266,10 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 ### Cross-Cutting Improvements
 
 - [ ] **Better Diagnostics**
-  - [ ] More precise source locations (column numbers)
+  - [x] More precise source locations (column numbers)
   - [ ] Multi-line error highlighting
   - [ ] Contextual error messages
-  - [ ] Suggest fixes where possible
+  - [x] Suggest fixes where possible
 
 - [ ] **Incremental Analysis**
   - [ ] Cache analysis results per file
@@ -284,15 +284,15 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [ ] Quick fix suggestions
 
 - [ ] **Performance Instrumentation**
-  - [ ] Per-pass timing
+  - [x] Per-pass timing
   - [ ] Memory profiling
   - [ ] Identify bottlenecks
   - [ ] Optimization targets
 
 - [ ] **Configuration**
   - [ ] Per-pass strictness levels
-  - [ ] Ignore specific warnings by code
-  - [ ] Custom error formatting
+  - [x] Ignore specific warnings by code
+  - [x] Custom error formatting
   - [ ] Project-wide configuration files
 
 ## Phase 2: Backend Development
