@@ -53,12 +53,19 @@ impl Error {
     /// Convert this error to a diagnostic for display.
     pub fn to_diagnostic(&self, source: &str) -> Diagnostic {
         let metadata = self.kind.metadata();
-        let message = self.kind.format_message();
 
-        let mut diagnostic = Diagnostic::new(metadata.severity, message)
+        // Use metadata description as the message (detailed)
+        // Use metadata title as the title (short)
+        let mut diagnostic = Diagnostic::new(metadata.severity, metadata.description.to_string())
             .with_code(metadata.code)
             .with_error_type(metadata.error_type.to_string())
+            .with_title(metadata.title.to_string())
             .with_context(ErrorContext::new(source.to_string(), self.span));
+
+        // Add suggestion from metadata if available
+        if let Some(suggestion) = metadata.suggestion {
+            diagnostic = diagnostic.with_suggestion(suggestion.to_string());
+        }
 
         // Add related information as additional context
         for related in &self.related_info {
@@ -98,11 +105,6 @@ impl Error {
     /// Get the error suggestion.
     pub fn suggestion(&self) -> Option<&'static str> {
         self.kind.metadata().suggestion
-    }
-
-    /// Get the help URL for this error.
-    pub fn help_url(&self) -> Option<&'static str> {
-        self.kind.metadata().help_url
     }
 }
 

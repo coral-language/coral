@@ -1,0 +1,10 @@
+def bad_function(x: int) -> int:
+    if x > 0:
+        return x
+
+def test_unreachable():
+    return 5
+    print("This code is unreachable")
+
+result = test_unreachable()
+print(f"Result: {result}")

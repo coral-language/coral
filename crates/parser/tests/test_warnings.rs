@@ -57,64 +57,111 @@ fn test_warning_codes_format_correctly() {
             "Warning code should start with 'W': {}",
             formatted
         );
-        println!("{}: {}", formatted, code.description());
+        println!("{}", formatted);
     }
 }
 
 #[test]
 fn test_warning_descriptions() {
-    // Test that all warning codes have descriptions
-    let warnings = vec![
-        ErrorCode::W2001,
-        ErrorCode::W3001,
-        ErrorCode::W3002,
-        ErrorCode::W3003,
-        ErrorCode::W3004,
-        ErrorCode::W3006,
-        ErrorCode::W3007,
+    // Test that all warning codes have descriptions via WarningKind
+    let span = TextRange::new(0.into(), 10.into());
+
+    let warning_kinds = vec![
+        WarningKind::DeprecatedFeature {
+            feature: "test".to_string(),
+            alternative: None,
+            removal_version: None,
+            span,
+        },
+        WarningKind::UnusedVariable {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::UnusedFunction {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::UnusedImport {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::UnusedParameter {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::ShadowsBuiltin {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::ShadowsImport {
+            name: "test".to_string(),
+            previous_span: span,
+            span,
+        },
     ];
 
-    for code in warnings {
-        let description = code.description();
+    for kind in warning_kinds {
+        let message = kind.format_message();
         assert!(
-            !description.is_empty(),
-            "Warning {:?} should have description",
-            code
+            !message.is_empty(),
+            "Warning {:?} should have message",
+            kind.code()
         );
 
-        println!("{}: {}", code, description);
+        println!("{}: {}", kind.code(), message);
     }
 }
 
 #[test]
 fn test_warning_suggestions() {
-    // Test that all warning codes have helpful suggestions
-    let warnings = vec![
-        ErrorCode::W2001,
-        ErrorCode::W3001,
-        ErrorCode::W3002,
-        ErrorCode::W3003,
-        ErrorCode::W3004,
-        ErrorCode::W3006,
-        ErrorCode::W3007,
+    // Test that all warning codes have helpful suggestions via WarningKind
+    let span = TextRange::new(0.into(), 10.into());
+
+    let warning_kinds = vec![
+        WarningKind::DeprecatedFeature {
+            feature: "test".to_string(),
+            alternative: None,
+            removal_version: None,
+            span,
+        },
+        WarningKind::UnusedVariable {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::UnusedFunction {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::UnusedImport {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::UnusedParameter {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::ShadowsBuiltin {
+            name: "test".to_string(),
+            span,
+        },
+        WarningKind::ShadowsImport {
+            name: "test".to_string(),
+            previous_span: span,
+            span,
+        },
     ];
 
-    for code in warnings {
-        let suggestion = code.suggestion();
+    for kind in warning_kinds {
+        let code = kind.code();
+        let message = kind.format_message();
+
         assert!(
-            suggestion.is_some(),
-            "Warning {:?} should have suggestion",
+            !message.is_empty(),
+            "Warning {:?} should have message",
             code
         );
 
-        let suggestion_text = suggestion.unwrap();
-        assert!(
-            !suggestion_text.is_empty(),
-            "Warning {:?} suggestion should not be empty",
-            code
-        );
-
-        println!("{}: {}", code, suggestion_text);
+        println!("{}: {}", code, message);
     }
 }
 

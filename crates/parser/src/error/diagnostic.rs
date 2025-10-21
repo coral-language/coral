@@ -13,8 +13,12 @@ pub struct Diagnostic {
     pub code: Option<ErrorCode>,
     /// Error type name (e.g., "SyntaxError", "TypeError")
     pub error_type: Option<String>,
-    /// Primary error message
+    /// Error title (short description)
+    pub title: Option<String>,
+    /// Primary error message (detailed description)
     pub message: String,
+    /// Suggestion for fixing the error
+    pub suggestion: Option<String>,
     /// Error context
     pub context: Option<ErrorContext>,
 }
@@ -26,7 +30,9 @@ impl Diagnostic {
             severity,
             code: None,
             error_type: None,
+            title: None,
             message,
+            suggestion: None,
             context: None,
         }
     }
@@ -55,6 +61,18 @@ impl Diagnostic {
     /// Set the error type name.
     pub fn with_error_type(mut self, error_type: String) -> Self {
         self.error_type = Some(error_type);
+        self
+    }
+
+    /// Set the error title.
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = Some(title);
+        self
+    }
+
+    /// Set the suggestion for fixing the error.
+    pub fn with_suggestion(mut self, suggestion: String) -> Self {
+        self.suggestion = Some(suggestion);
         self
     }
 

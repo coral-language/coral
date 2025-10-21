@@ -5,7 +5,7 @@ use crate::ast::nodes::{Module, Stmt};
 use crate::error::diagnostic::Diagnostic;
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
 use std::collections::{HashMap, HashSet, VecDeque};
-use text_size::TextRange;
+use text_size::{TextRange, TextSize};
 
 /// Control flow analysis pass - detects unreachable code, validates return paths,
 /// and checks exception handling.
@@ -235,6 +235,115 @@ impl ControlFlowAnalyzer {
         }
     }
 
+    /// Get a more precise span for a statement (e.g., just the first keyword or identifier)
+    /// This makes error messages more readable by not underlining entire blocks
+    fn get_statement_keyword_span(&self, stmt: &Stmt) -> TextRange {
+        let full_span = stmt.span();
+
+        match stmt {
+            // For simple statements, the span is already just the keyword
+            Stmt::Pass(_) | Stmt::Break(_) | Stmt::Continue(_) => full_span,
+
+            // For other statements, estimate the first keyword/identifier length
+            Stmt::Return(_) => {
+                // "return" is 6 characters
+                let end = full_span.start() + TextSize::from(6u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::Raise(_) => {
+                // "raise" is 5 characters
+                let end = full_span.start() + TextSize::from(5u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::If(_) => {
+                // "if" is 2 characters
+                let end = full_span.start() + TextSize::from(2u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::While(_) => {
+                // "while" is 5 characters
+                let end = full_span.start() + TextSize::from(5u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::For(_) => {
+                // "for" is 3 characters
+                let end = full_span.start() + TextSize::from(3u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::Try(_) => {
+                // "try" is 3 characters
+                let end = full_span.start() + TextSize::from(3u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::With(_) => {
+                // "with" is 4 characters
+                let end = full_span.start() + TextSize::from(4u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::Match(_) => {
+                // "match" is 5 characters
+                let end = full_span.start() + TextSize::from(5u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::Assert(_) => {
+                // "assert" is 6 characters
+                let end = full_span.start() + TextSize::from(6u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::Import(_) => {
+                // "import" is 6 characters
+                let end = full_span.start() + TextSize::from(6u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::From(_) => {
+                // "from" is 4 characters
+                let end = full_span.start() + TextSize::from(4u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::Export(_) => {
+                // "export" is 6 characters
+                let end = full_span.start() + TextSize::from(6u32);
+                TextRange::new(full_span.start(), end.min(full_span.end()))
+            }
+            Stmt::FuncDef(func) => {
+                // Function name span (skip "def ")
+                let def_offset = TextSize::from(4u32);
+                let name_len = TextSize::from(func.name.len() as u32);
+                let name_start = full_span.start() + def_offset;
+                TextRange::new(name_start, name_start + name_len)
+            }
+            Stmt::ClassDef(class) => {
+                // Class name span (skip "class ")
+                let class_offset = TextSize::from(6u32);
+                let name_len = TextSize::from(class.name.len() as u32);
+                let name_start = full_span.start() + class_offset;
+                TextRange::new(name_start, name_start + name_len)
+            }
+            // For expression statements, try to get a more precise span from the expression
+            Stmt::Expr(expr_stmt) => {
+                match &expr_stmt.value {
+                    Expr::Call(call) => {
+                        // Use the function/method name being called
+                        call.func.span()
+                    }
+                    _ => full_span,
+                }
+            }
+            // For assignments, use the target span
+            Stmt::Assign(assign) => {
+                if let Some(first_target) = assign.targets.first() {
+                    first_target.span()
+                } else {
+                    full_span
+                }
+            }
+            Stmt::AnnAssign(ann_assign) => ann_assign.target.span(),
+            Stmt::AugAssign(aug_assign) => aug_assign.target.span(),
+            // For other statements, use the full span
+            _ => full_span,
+        }
+    }
+
     /// Analyze a module for control flow issues
     pub fn analyze_module(&mut self, module: &Module) {
         for stmt in module.body {
@@ -297,12 +406,18 @@ impl ControlFlowAnalyzer {
         {
             let returns_on_all_paths = self.check_all_paths_return(func.body);
             if !returns_on_all_paths {
+                // Use just the function name span - need to skip "def " (4 chars) to get to the name
+                let def_offset = TextSize::from(4u32); // "def " is 4 characters
+                let name_len = TextSize::from(func.name.len() as u32);
+                let name_start = func.span.start() + def_offset;
+                let signature_span = TextRange::new(name_start, name_start + name_len);
+
                 self.errors.push(*error(
                     ErrorKind::MissingReturn {
                         function: func.name.to_string(),
                         expected_type: "int".to_string(), // TODO: get actual return type
                     },
-                    func.span,
+                    signature_span,
                 ));
             }
         }
@@ -323,11 +438,12 @@ impl ControlFlowAnalyzer {
         for stmt in stmts {
             if found_terminator {
                 // Everything after a terminator is unreachable
+                // Use the more precise keyword span for better error display
                 self.errors.push(*error(
                     ErrorKind::UnreachableCode {
                         reason: terminator_reason.clone(),
                     },
-                    stmt.span(),
+                    self.get_statement_keyword_span(stmt),
                 ));
                 continue;
             }
@@ -442,11 +558,12 @@ impl ControlFlowAnalyzer {
                 && let Expr::Name(name) = exc_type
                 && !caught_exceptions.insert(name.id.to_string())
             {
+                // Use the exception type span for more precise error location
                 self.errors.push(*error(
                     ErrorKind::UnreachableExceptionHandler {
                         exception_type: name.id.to_string(),
                     },
-                    handler.span,
+                    exc_type.span(),
                 ));
             }
 

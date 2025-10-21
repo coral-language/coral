@@ -428,39 +428,42 @@ except* TypeError as e:
 #[test]
 fn test_error_messages_have_suggestions() {
     // Test that common errors provide helpful suggestions
-    use coral_parser::error::codes::ErrorCode;
+    use coral_parser::error::kinds::ErrorKind;
 
-    // Test a few representative error codes
-    let test_codes = vec![
-        ErrorCode::E2011, // Break outside loop
-        ErrorCode::E2013, // Return outside function
-        ErrorCode::E2018, // Duplicate parameter
-        ErrorCode::E2024, // Future import not first
+    // Test a few representative error kinds
+    let test_kinds = vec![
+        ErrorKind::BreakOutsideLoop,
+        ErrorKind::ReturnOutsideFunction,
+        ErrorKind::DuplicateParameter {
+            name: "test".to_string(),
+        },
+        ErrorKind::FutureImportNotFirst,
     ];
 
-    for code in test_codes {
-        let description = code.description();
-        let suggestion = code.suggestion();
+    for kind in test_kinds {
+        let metadata = kind.metadata();
+        let description = metadata.description;
+        let suggestion = metadata.suggestion;
 
         assert!(
             !description.is_empty(),
             "Error {:?} should have description",
-            code
+            metadata.code
         );
         assert!(
             suggestion.is_some(),
             "Error {:?} should have suggestion",
-            code
+            metadata.code
         );
 
         let suggestion_text = suggestion.unwrap();
         assert!(
             !suggestion_text.is_empty(),
             "Error {:?} suggestion should not be empty",
-            code
+            metadata.code
         );
 
-        println!("{}: {}", code, description);
+        println!("{}: {}", metadata.code, description);
         println!("  Suggestion: {}", suggestion_text);
     }
 }

@@ -20,92 +20,49 @@ impl DiagnosticFormatter {
     pub fn format(&self, diagnostic: &Diagnostic) -> String {
         let mut output = String::new();
 
-        // Severity header with error type and code (Error: SyntaxError [E2001])
-        match diagnostic.severity {
-            Severity::Error | Severity::Fatal => {
-                if let Some(error_type) = &diagnostic.error_type {
-                    if let Some(code) = &diagnostic.code {
-                        output.push_str(&format!(
-                            "{}: {} [{}]\n",
-                            "Error".bold().red(),
-                            error_type.bold(),
-                            code.to_string().dimmed()
-                        ));
-                    } else {
-                        output.push_str(&format!(
-                            "{}: {}\n",
-                            "Error".bold().red(),
-                            error_type.bold()
-                        ));
-                    }
-                } else {
-                    output.push_str(&format!("{}\n", "Error".bold().red()));
-                }
+        // Header: Error: Title [E0421]
+        let error_type = diagnostic
+            .error_type
+            .as_deref()
+            .unwrap_or(match diagnostic.severity {
+                Severity::Error | Severity::Fatal => "Error",
+                Severity::Warning => "Warning",
+                Severity::Info => "Info",
+            });
+
+        let title = diagnostic.title.as_deref().unwrap_or("Unknown error");
+
+        // Format header with severity-based background coloring and white text
+        let header_text = if let Some(code) = &diagnostic.code {
+            format!(" {}: {} [{}] ", error_type, title, code)
+        } else {
+            format!(" {}: {} ", error_type, title)
+        };
+
+        let header = match diagnostic.severity {
+            Severity::Fatal | Severity::Error => {
+                format!("{}\n", header_text.black().on_red())
             }
             Severity::Warning => {
-                if let Some(error_type) = &diagnostic.error_type {
-                    if let Some(code) = &diagnostic.code {
-                        output.push_str(&format!(
-                            "{}: {} [{}]\n",
-                            "Warning".bold().yellow(),
-                            error_type.bold(),
-                            code.to_string().dimmed()
-                        ));
-                    } else {
-                        output.push_str(&format!(
-                            "{}: {}\n",
-                            "Warning".bold().yellow(),
-                            error_type.bold()
-                        ));
-                    }
-                } else {
-                    output.push_str(&format!("{}\n", "Warning".bold().yellow()));
-                }
+                format!("{}\n", header_text.black().on_yellow())
             }
             Severity::Info => {
-                if let Some(error_type) = &diagnostic.error_type {
-                    if let Some(code) = &diagnostic.code {
-                        output.push_str(&format!(
-                            "{}: {} [{}]\n",
-                            "Info".bold().cyan(),
-                            error_type.bold(),
-                            code.to_string().dimmed()
-                        ));
-                    } else {
-                        output.push_str(&format!(
-                            "{}: {}\n",
-                            "Info".bold().cyan(),
-                            error_type.bold()
-                        ));
-                    }
-                } else {
-                    output.push_str(&format!("{}\n", "Info".bold().cyan()));
-                }
+                format!("{}\n", header_text.black().on_blue())
             }
-        }
+        };
 
-        // Separator
-        output.push_str(&format!("  {}\n", "|".blue()));
+        output.push_str(&header);
 
-        // Message section - use diagnostic message (specific error),
-        // only fall back to context description for generic errors
-        let message = &diagnostic.message;
-
-        output.push_str(&format!(
-            "  {} {}: {}\n",
-            "|".blue(),
-            "Message".white().bold(),
-            message
-        ));
+        // Main message (plain text)
+        output.push_str(&format!("\n{}\n\n", diagnostic.message));
 
         // Context
         if self.config.show_context
             && let Some(context) = &diagnostic.context
         {
             let (line, col) = context.line_and_column();
-            output.push_str(&format!("  {}\n", "|".blue()));
 
-            // Location line with cyan
+            // Location line: --> src/utils/math.coral:3:1 (blue arrow, underlined path)
             let location_str = if let Some(filename) = &context.filename {
                 format!("{}:{}:{}", filename, line, col)
             } else {
@@ -113,11 +70,13 @@ impl DiagnosticFormatter {
             };
 
             output.push_str(&format!(
-                "  +--> {}: {}\n",
-                "Location".cyan().bold(),
-                location_str
+                "   {} {}\n",
+                "-->".blue(),
+                location_str.underline()
             ));
-            output.push_str(&format!("  {}\n", "|".blue()));
+
+            // Separator pipe
+            output.push_str(&format!("    {}\n", "|".cyan()));
 
             // Context lines
             if self.config.context_lines > 0 {
@@ -134,59 +93,98 @@ impl DiagnosticFormatter {
                 for (line_num, line_text) in context_lines {
                     let is_error_line = line_num == line;
                     if is_error_line {
-                        // Error line
-                        output.push_str(&format!("  |{:5} | {}\n", line_num, line_text));
-
-                        // Error indicator with yellow carets
-                        output.push_str(&format!(
-                            "  |      | {}{}\n",
-                            " ".repeat(col_offset),
-                            "^".repeat(length).bright_yellow().bold()
-                        ));
-
-                        // "Here" pointer - show the actual error text location
-                        let error_text = if end <= context.source.len() {
-                            let text = &context.source[start..end.min(start + 40)];
-                            if !text.trim().is_empty() {
-                                format!("Error at '{}'", text.trim())
-                            } else {
-                                "Error at this location".to_string()
-                            }
+                        // Error line - highlight the error part in red
+                        let before_error = if col_offset < line_text.len() {
+                            &line_text[..col_offset]
                         } else {
-                            "Error at this location".to_string()
+                            &line_text[..]
+                        };
+                        let error_part = if col_offset < line_text.len() {
+                            let end_offset = (col_offset + length).min(line_text.len());
+                            &line_text[col_offset..end_offset]
+                        } else {
+                            ""
+                        };
+                        let after_error = if col_offset + length < line_text.len() {
+                            &line_text[(col_offset + length)..]
+                        } else {
+                            ""
                         };
 
                         output.push_str(&format!(
-                            "  |      +-- {}: {}\n",
-                            "Here".bright_yellow().bold(),
-                            error_text
+                            " {} {} {}{}{}",
+                            format!("{:>2}", line_num).cyan(),
+                            "|".cyan(),
+                            before_error,
+                            error_part.red(),
+                            after_error
+                        ));
+                        output.push('\n');
+
+                        // Error indicator with red underline
+                        output.push_str(&format!(
+                            "    {} {}{}\n",
+                            "|".cyan(),
+                            " ".repeat(col_offset),
+                            "-".repeat(length).red()
                         ));
                     } else {
-                        // Context line dimmed
-                        output.push_str(&format!("  |{:5} | {}\n", line_num, line_text.dimmed()));
+                        // Context line (normal)
+                        output.push_str(&format!(
+                            " {} {} {}\n",
+                            format!("{:>2}", line_num).cyan(),
+                            "|".cyan(),
+                            line_text
+                        ));
                     }
                 }
             } else {
                 // Just show the error line
-                output.push_str(&format!("  |{:5} | {}\n", line, context.error_line()));
+                output.push_str(&format!(
+                    " {} {} {}\n",
+                    format!("{:>2}", line).cyan(),
+                    "|".cyan(),
+                    context.error_line()
+                ));
             }
-
-            output.push_str(&format!("  {}\n", "|".blue()));
 
             // Related spans as notes
-            for (_, note) in &context.related_spans {
-                output.push_str(&format!("  = {}: {}\n", "note".cyan().bold(), note));
-            }
-
-            // Suggestion section (separate from context message)
-            if let Some(suggestion) = &context.suggestion {
-                output.push_str(&format!(
-                    "  +--> {}: {}\n",
-                    "Suggestion".green().bold(),
-                    suggestion
-                ));
+            if !context.related_spans.is_empty() {
+                for (_, note) in &context.related_spans {
+                    output.push_str(&format!("    {} {}\n", "= note".cyan(), note));
+                }
                 output.push('\n');
             }
+        }
+
+        // Add line break before suggestions
+        output.push('\n');
+
+        // Suggestion section - check both diagnostic and context
+        let suggestion = if let Some(ctx) = &diagnostic.context {
+            diagnostic.suggestion.as_ref().or(ctx.suggestion.as_ref())
+        } else {
+            diagnostic.suggestion.as_ref()
+        };
+
+        if let Some(suggestion) = suggestion {
+            output.push_str(&format!("{}:\n", "Suggestions".green().bold()));
+            // Split by newlines and format as list items
+            for line in suggestion.lines() {
+                if !line.trim().is_empty() {
+                    output.push_str(&format!("  - {}\n", line.trim()));
+                }
+            }
+            output.push('\n');
+        }
+
+        // Add help URL if we have an error code
+        if let Some(code) = &diagnostic.code {
+            output.push_str(&format!(
+                "{}\n{}\n",
+                "For a detailed explanation of this error, visit:".dimmed(),
+                format!("https://coral-lang.org/docs/diagnostics/{}", code).underline()
+            ));
         }
 
         output

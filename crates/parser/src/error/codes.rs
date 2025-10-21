@@ -62,8 +62,8 @@ pub enum ErrorCode {
     E3004, // Used before definition
 
     // ===== Control Flow Errors (E3100-E3199) =====
-    E3100, // Unreachable code
-    E3101, // Infinite loop detected
+    W3100, // Unreachable code (warning)
+    W3101, // Infinite loop detected (warning)
     E3102, // Missing return statement
     E3103, // Inconsistent return types
     E3104, // Dead code after return
@@ -203,8 +203,8 @@ impl ErrorCode {
             ErrorCode::E3004 => 3004,
 
             // Control Flow
-            ErrorCode::E3100 => 3100,
-            ErrorCode::E3101 => 3101,
+            ErrorCode::W3100 => 3100,
+            ErrorCode::W3101 => 3101,
             ErrorCode::E3102 => 3102,
             ErrorCode::E3103 => 3103,
             ErrorCode::E3104 => 3104,
@@ -313,418 +313,31 @@ impl ErrorCode {
 
     /// Get the default severity for this error code.
     pub fn default_severity(&self) -> Severity {
-        match self.code() / 1000 {
-            1..=9 => Severity::Error,
-            _ => Severity::Error,
+        // Determine severity based on the variant name prefix
+        // W-prefixed codes are warnings, E-prefixed are errors, I-prefixed are info
+        let variant_name = format!("{:?}", self);
+
+        if variant_name.starts_with('W') {
+            Severity::Warning
+        } else if variant_name.starts_with('I') {
+            Severity::Info
+        } else {
+            // E-prefixed or any other prefix defaults to Error
+            Severity::Error
         }
     }
-
-    /// Get a human-readable description for this error code.
-    pub fn description(&self) -> &'static str {
-        match self {
-            // Lexical errors
-            ErrorCode::E1001 => "Invalid character in source code",
-            ErrorCode::E1002 => "String literal is not properly terminated",
-            ErrorCode::E1003 => "Number literal has invalid format",
-            ErrorCode::E1004 => "Identifier name is not valid",
-            ErrorCode::E1005 => "Inconsistent use of tabs and spaces in indentation",
-            ErrorCode::E1006 => "Invalid escape sequence in string",
-
-            // Syntax errors
-            ErrorCode::E2001 => "Unexpected token encountered during parsing",
-            ErrorCode::E2002 => "Expected a specific token but found something else",
-            ErrorCode::E2003 => "File ended unexpectedly while parsing",
-            ErrorCode::E2004 => "Invalid syntax structure",
-            ErrorCode::E2005 => "Indentation is inconsistent or incorrect",
-            ErrorCode::E2006 => "Opening delimiter has no matching closing delimiter",
-            ErrorCode::E2007 => "Closing delimiter has no matching opening delimiter",
-            ErrorCode::E2008 => "Expected ':' after context",
-            ErrorCode::E2009 => "Expected expression",
-            ErrorCode::E2010 => "Invalid assignment target",
-            ErrorCode::E2011 => "'break' can only be used inside loops",
-            ErrorCode::E2012 => "'continue' can only be used inside loops",
-            ErrorCode::E2013 => "'return' can only be used inside functions",
-            ErrorCode::E2014 => "'yield' can only be used inside functions",
-            ErrorCode::E2015 => "'await' can only be used inside async functions",
-            ErrorCode::E2016 => "'async for' can only be used inside async functions",
-            ErrorCode::E2017 => "'async with' can only be used inside async functions",
-            ErrorCode::E2018 => "Duplicate parameter name",
-            ErrorCode::E2019 => "Duplicate keyword argument",
-            ErrorCode::E2020 => "Positional argument cannot follow keyword argument",
-            ErrorCode::E2021 => "Parameters are in invalid order",
-            ErrorCode::E2022 => "Cannot mix except and except* in the same try statement",
-            ErrorCode::E2023 => "except* requires a specific exception type, not a bare except",
-            ErrorCode::E2024 => "'from __future__ import' must occur at the beginning of the file",
-            ErrorCode::E2025 => "Relative import cannot go beyond top-level package",
-            ErrorCode::E2026 => "Invalid relative import syntax",
-            ErrorCode::E2027 => "Unexpected indent",
-            ErrorCode::E2028 => "Expected an indented block",
-            ErrorCode::E2029 => "Unindent does not match any outer indentation level",
-
-            // Name Resolution errors
-            ErrorCode::E3001 => "Name is used before being defined",
-            ErrorCode::E3002 => "Name is already defined in this scope",
-            ErrorCode::E3003 => "nonlocal declaration without enclosing scope",
-            ErrorCode::E3004 => "Name is used before definition",
-
-            // Control Flow errors
-            ErrorCode::E3100 => "Code is unreachable",
-            ErrorCode::E3101 => "Infinite loop detected",
-            ErrorCode::E3102 => "Missing return statement",
-            ErrorCode::E3103 => "Inconsistent return types",
-            ErrorCode::E3104 => "Dead code after return statement",
-
-            // Type errors
-            ErrorCode::E4001 => "Type mismatch between expected and actual types",
-            ErrorCode::E4002 => "Incompatible types in binary operation",
-            ErrorCode::E4003 => "Incompatible type in unary operation",
-            ErrorCode::E4004 => "Wrong number of arguments",
-            ErrorCode::E4005 => "Invalid argument type",
-            ErrorCode::E4006 => "Return type doesn't match function signature",
-            ErrorCode::E4007 => "Invalid subscript operation",
-            ErrorCode::E4008 => "Invalid attribute access",
-            ErrorCode::E4009 => "Cannot call non-callable",
-            ErrorCode::E4010 => "Cannot subscript non-subscriptable",
-            ErrorCode::E4011 => "Cannot iterate non-iterable",
-            ErrorCode::E4012 => "Cannot infer type",
-            ErrorCode::E4013 => "Ambiguous type",
-            ErrorCode::E4014 => "Type annotation required",
-            ErrorCode::E4015 => "Invalid type annotation",
-
-            // Protocol errors
-            ErrorCode::E4100 => "Class doesn't implement required protocol method",
-            ErrorCode::E4101 => "Method signature doesn't match protocol",
-            ErrorCode::E4102 => "Protocol cannot have implementations",
-            ErrorCode::E4103 => "Invalid protocol definition",
-            ErrorCode::E4104 => "Protocol not satisfied",
-            ErrorCode::E4105 => "Runtime checkable protocol violation",
-
-            // Import errors
-            ErrorCode::E5001 => "Module could not be found or loaded",
-            ErrorCode::E5002 => "Circular dependency detected between modules",
-            ErrorCode::E5003 => "Import statement has invalid syntax",
-            ErrorCode::E5004 => "Import from non-module",
-            ErrorCode::E5005 => "Cannot import name",
-            ErrorCode::E5006 => "Relative import in non-package",
-
-            // Module System errors
-            ErrorCode::E5100 => "Exporting undefined name",
-            ErrorCode::E5101 => "Duplicate export",
-            ErrorCode::E5102 => "Invalid module introspection function",
-            ErrorCode::E5103 => "Export from non-existent module",
-            ErrorCode::E5104 => "Invalid export syntax",
-
-            // Concurrency errors
-            ErrorCode::E6001 => "Data race: shared mutable data accessed without synchronization",
-            ErrorCode::E6002 => "Potential deadlock: circular lock dependency detected",
-            ErrorCode::E6003 => "Attempting to send non-Send type across threads",
-            ErrorCode::E6004 => "Attempting to share non-Sync type between threads",
-            ErrorCode::E6005 => "Lock acquired but never released",
-            ErrorCode::E6006 => "Accessing shared data without holding required lock",
-            ErrorCode::E6007 => "Double lock acquisition",
-            ErrorCode::E6008 => "Lock order violation",
-
-            // Memory Safety errors
-            ErrorCode::E7001 => "Variable used after being freed/deallocated",
-            ErrorCode::E7002 => "Attempting to free already freed memory",
-            ErrorCode::E7003 => "Resource not properly cleaned up",
-            ErrorCode::E7004 => "Reference to variable that went out of scope",
-            ErrorCode::E7005 => "Circular reference that cannot be automatically freed",
-            ErrorCode::E7006 => "Invalid lifetime",
-            ErrorCode::E7007 => "Moved value used",
-
-            // Pattern Matching errors
-            ErrorCode::E8001 => "Match statement is not exhaustive",
-            ErrorCode::E8002 => "Pattern is unreachable",
-            ErrorCode::E8003 => "Pattern type doesn't match subject type",
-            ErrorCode::E8004 => "Invalid pattern syntax",
-            ErrorCode::E8005 => "Duplicate pattern binding",
-
-            // Decorator errors
-            ErrorCode::E9001 => "Decorator not found",
-            ErrorCode::E9002 => "Invalid decorator target",
-            ErrorCode::E9003 => "Decorator signature mismatch",
-            ErrorCode::E9004 => "Decorator application failed",
-            ErrorCode::E9005 => "Invalid decorator composition",
-
-            // Deprecation warnings
-            ErrorCode::W2001 => "Using deprecated feature",
-
-            // Code quality warnings
-            ErrorCode::W3001 => "Variable assigned but never used",
-            ErrorCode::W3002 => "Function defined but never called",
-            ErrorCode::W3003 => "Import never used",
-            ErrorCode::W3004 => "Parameter never used in function body",
-            ErrorCode::W3006 => "Name shadows a builtin",
-            ErrorCode::W3007 => "Import shadows a previous import",
-        }
-    }
-
-    /// Get a helpful suggestion for fixing this error.
-    pub fn suggestion(&self) -> Option<&'static str> {
-        match self {
-            // Lexical errors
-            ErrorCode::E1001 => {
-                Some("Remove the invalid character or escape it if it's part of a string.")
-            }
-            ErrorCode::E1002 => {
-                Some("Add a closing quote (', \", ''', or \"\"\") to complete the string.")
-            }
-            ErrorCode::E1003 => {
-                Some("Check the number format. Valid examples: 42, 3.14, 1e-5, 0xFF, 0o77, 0b1010.")
-            }
-            ErrorCode::E1004 => Some(
-                "Identifiers must start with a letter or underscore, followed by letters, digits, or underscores.",
-            ),
-            ErrorCode::E1005 => Some(
-                "Use consistent indentation throughout (either spaces or tabs, not both). Most code uses 4 spaces.",
-            ),
-            ErrorCode::E1006 => {
-                Some("Use valid escape sequences like \\n, \\t, \\r, \\\\, \\', \\\".")
-            }
-
-            // Syntax errors
-            ErrorCode::E2001 => Some(
-                "Look for missing operators, parentheses, commas, or quotation marks around this location.",
-            ),
-            ErrorCode::E2002 => Some(
-                "Check that you've included all required parts of the statement (colons, keywords, etc.).",
-            ),
-            ErrorCode::E2003 => Some(
-                "You may have unclosed brackets (), [], {}, quotes, or an incomplete statement at the end.",
-            ),
-            ErrorCode::E2004 => {
-                Some("Review the syntax structure and check for typos or missing elements.")
-            }
-            ErrorCode::E2005 => Some(
-                "Use consistent indentation throughout (either spaces or tabs, not both). Most code uses 4 spaces.",
-            ),
-            ErrorCode::E2006 => Some("Add the matching closing delimiter: ), ], or }."),
-            ErrorCode::E2007 => {
-                Some("Remove this closing delimiter or add a matching opening delimiter earlier.")
-            }
-            ErrorCode::E2008 => Some("Add a colon ':' after the statement header."),
-            ErrorCode::E2009 => Some("Provide an expression or statement here."),
-            ErrorCode::E2010 => Some(
-                "You can only assign to variables, attributes, subscripts, or tuple/list unpacking targets.",
-            ),
-            ErrorCode::E2011 => Some("Place 'break' inside a 'for' or 'while' loop body."),
-            ErrorCode::E2012 => Some("Place 'continue' inside a 'for' or 'while' loop body."),
-            ErrorCode::E2013 => {
-                Some("Place 'return' inside a function definition (def or async def).")
-            }
-            ErrorCode::E2014 => {
-                Some("Place 'yield' inside a function definition (def or async def).")
-            }
-            ErrorCode::E2015 => Some("Place 'await' inside an async function definition."),
-            ErrorCode::E2016 => Some("Place 'async for' inside an async function definition."),
-            ErrorCode::E2017 => Some("Place 'async with' inside an async function definition."),
-            ErrorCode::E2018 => {
-                Some("Parameter names must be unique within the function signature.")
-            }
-            ErrorCode::E2019 => Some("Each keyword argument can only be specified once."),
-            ErrorCode::E2020 => Some("Put all positional arguments before keyword arguments."),
-            ErrorCode::E2021 => Some("Correct order: positional, *args, keyword-only, **kwargs."),
-            ErrorCode::E2022 => {
-                Some("Use either 'except' or 'except*', not both in the same try statement.")
-            }
-            ErrorCode::E2023 => Some("Use 'except* ExceptionType:' instead of 'except*:'."),
-            ErrorCode::E2024 => {
-                Some("Move 'from __future__ import' to the top of the file, after any docstring.")
-            }
-            ErrorCode::E2025 => Some("Reduce the number of leading dots in the relative import."),
-            ErrorCode::E2026 => {
-                Some("Use valid relative import syntax: 'from .module import name'.")
-            }
-            ErrorCode::E2027 => {
-                Some("Check your indentation level and ensure it matches the expected level.")
-            }
-            ErrorCode::E2028 => Some("Add an indented block after the colon."),
-            ErrorCode::E2029 => {
-                Some("Match the indentation level to a previous level or add proper indentation.")
-            }
-
-            // Name Resolution errors
-            ErrorCode::E3001 => {
-                Some("Define the name before using it, or check for typos in the name.")
-            }
-            ErrorCode::E3002 => {
-                Some("Choose a different name or remove one of the duplicate definitions.")
-            }
-            ErrorCode::E3003 => Some(
-                "Ensure the name exists in an enclosing scope before declaring it as nonlocal.",
-            ),
-            ErrorCode::E3004 => {
-                Some("Define the name before using it, or check for typos in the name.")
-            }
-
-            // Control Flow errors
-            ErrorCode::E3100 => Some("Remove the unreachable code or fix the control flow logic."),
-            ErrorCode::E3101 => {
-                Some("Add a condition that will eventually become false to break the loop.")
-            }
-            ErrorCode::E3102 => {
-                Some("Add a return statement or ensure all code paths return a value.")
-            }
-            ErrorCode::E3103 => Some("Ensure all return statements return the same type."),
-            ErrorCode::E3104 => Some("Remove the dead code or restructure the control flow."),
-
-            // Type errors
-            ErrorCode::E4001 => {
-                Some("Make sure both operands are compatible types for this operation.")
-            }
-            ErrorCode::E4002 => Some("This operation may not be supported for the given type."),
-            ErrorCode::E4003 => {
-                Some("This unary operation may not be supported for the given type.")
-            }
-            ErrorCode::E4004 => {
-                Some("Provide the expected number of arguments for this function call.")
-            }
-            ErrorCode::E4005 => {
-                Some("Convert the argument to the expected type or provide a different value.")
-            }
-            ErrorCode::E4006 => Some("Ensure the return type matches the function signature."),
-            ErrorCode::E4007 => Some("Make sure the subscript operation is valid for this type."),
-            ErrorCode::E4008 => Some("Check that the attribute exists and is accessible."),
-            ErrorCode::E4009 => {
-                Some("Make sure the object is callable (function, method, or callable object).")
-            }
-            ErrorCode::E4010 => {
-                Some("Make sure the object supports subscripting (list, dict, etc.).")
-            }
-            ErrorCode::E4011 => {
-                Some("Make sure the object is iterable (list, tuple, string, etc.).")
-            }
-            ErrorCode::E4012 => Some("Add explicit type annotations to help the type checker."),
-            ErrorCode::E4013 => {
-                Some("Provide more specific type information to resolve ambiguity.")
-            }
-            ErrorCode::E4014 => Some("Add a type annotation to clarify the expected type."),
-            ErrorCode::E4015 => Some("Use valid type annotation syntax."),
-
-            // Protocol errors
-            ErrorCode::E4100 => Some("Implement the missing method in the class."),
-            ErrorCode::E4101 => Some("Update the method signature to match the protocol."),
-            ErrorCode::E4102 => Some("Remove the method implementation from the protocol."),
-            ErrorCode::E4103 => Some("Fix the protocol definition syntax."),
-            ErrorCode::E4104 => Some("Implement all required methods from the protocol."),
-            ErrorCode::E4105 => {
-                Some("Ensure the protocol is properly marked as runtime checkable.")
-            }
-
-            // Import errors
-            ErrorCode::E5001 => {
-                Some("Check that the module name is correct and the module is installed.")
-            }
-            ErrorCode::E5002 => Some("Reorganize your modules to break the circular dependency."),
-            ErrorCode::E5003 => {
-                Some("Use valid import syntax: 'import module' or 'from module import name'.")
-            }
-            ErrorCode::E5004 => {
-                Some("Make sure you're importing from a module, not a class or function.")
-            }
-            ErrorCode::E5005 => Some("Check that the name exists in the module."),
-            ErrorCode::E5006 => Some("Use relative imports only within packages."),
-
-            // Module System errors
-            ErrorCode::E5100 => Some("Define the name before exporting it."),
-            ErrorCode::E5101 => Some("Remove the duplicate export or use different names."),
-            ErrorCode::E5102 => {
-                Some("Use a valid module introspection function like 'is_main', 'name', or 'path'.")
-            }
-            ErrorCode::E5103 => Some("Make sure the module exists before exporting from it."),
-            ErrorCode::E5104 => Some("Use valid export syntax."),
-
-            // Concurrency errors
-            ErrorCode::E6001 => {
-                Some("Use locks (Lock, RLock) or atomic types to protect shared mutable state.")
-            }
-            ErrorCode::E6002 => {
-                Some("Always acquire locks in a consistent order across your program.")
-            }
-            ErrorCode::E6003 => {
-                Some("Consider using thread-safe alternatives or Arc/Mutex wrappers.")
-            }
-            ErrorCode::E6004 => Some("Use Arc/Mutex or other synchronization primitives."),
-            ErrorCode::E6005 => Some(
-                "Use 'with' statement for automatic lock release or ensure manual release in all branches.",
-            ),
-            ErrorCode::E6006 => Some("Acquire the lock before accessing this shared variable."),
-            ErrorCode::E6007 => Some("Use RLock for reentrant locking or restructure your code."),
-            ErrorCode::E6008 => Some("Establish a consistent lock ordering convention."),
-
-            // Memory Safety errors
-            ErrorCode::E7001 => {
-                Some("Coral automatically tracks lifetimes to prevent use-after-free bugs.")
-            }
-            ErrorCode::E7002 => {
-                Some("Coral prevents double-free through automatic lifetime analysis.")
-            }
-            ErrorCode::E7003 => {
-                Some("Consider using 'with' statement for automatic resource cleanup.")
-            }
-            ErrorCode::E7004 => {
-                Some("Coral ensures references never outlive the data they point to.")
-            }
-            ErrorCode::E7005 => {
-                Some("Consider breaking the cycle by using weak references or explicit cleanup.")
-            }
-            ErrorCode::E7006 => Some("Check the lifetime annotations and scope boundaries."),
-            ErrorCode::E7007 => Some("Avoid using moved values after they've been moved."),
-
-            // Pattern Matching errors
-            ErrorCode::E8001 => {
-                Some("Add patterns to cover all possible values or add a wildcard pattern.")
-            }
-            ErrorCode::E8002 => Some("Remove the unreachable pattern or reorder patterns."),
-            ErrorCode::E8003 => Some("Ensure the pattern type matches the subject type."),
-            ErrorCode::E8004 => Some("Use valid pattern syntax."),
-            ErrorCode::E8005 => Some("Use different variable names for pattern bindings."),
-
-            // Decorator errors
-            ErrorCode::E9001 => Some("Check that the decorator is imported and available."),
-            ErrorCode::E9002 => Some("Make sure the decorator is compatible with the target."),
-            ErrorCode::E9003 => {
-                Some("Update the decorator signature to match the expected signature.")
-            }
-            ErrorCode::E9004 => Some("Check the decorator implementation and fix the error."),
-            ErrorCode::E9005 => Some("Ensure decorators are composed correctly."),
-
-            // Deprecation warnings
-            ErrorCode::W2001 => Some("Check the documentation for the recommended alternative."),
-
-            // Code quality warnings
-            ErrorCode::W3001 => Some(
-                "Remove the unused variable or use it in your code. Prefix with '_' to suppress this warning.",
-            ),
-            ErrorCode::W3002 => Some("Remove the unused function or call it from your code."),
-            ErrorCode::W3003 => Some("Remove the unused import statement."),
-            ErrorCode::W3004 => Some(
-                "Remove the unused parameter or prefix it with '_' to indicate it's intentionally unused.",
-            ),
-            ErrorCode::W3006 => Some("Choose a different name that doesn't shadow the builtin."),
-            ErrorCode::W3007 => Some("Remove one of the imports or use an alias with 'as'."),
+    /// Get the appropriate prefix for this error code (E, W, or I)
+    pub fn prefix(&self) -> char {
+        match self.default_severity() {
+            Severity::Info => 'I',
+            Severity::Warning => 'W',
+            Severity::Error | Severity::Fatal => 'E',
         }
     }
 }
 
 impl std::fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let code_num = self.code();
-        // Warning codes start with W, error codes start with E
-        if matches!(
-            self,
-            ErrorCode::W2001
-                | ErrorCode::W3001
-                | ErrorCode::W3002
-                | ErrorCode::W3003
-                | ErrorCode::W3004
-                | ErrorCode::W3006
-                | ErrorCode::W3007
-        ) {
-            write!(f, "W{:04}", code_num)
-        } else {
-            write!(f, "E{:04}", code_num)
-        }
+        write!(f, "{}{:04}", self.prefix(), self.code())
     }
 }
