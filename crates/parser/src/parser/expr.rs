@@ -1825,7 +1825,7 @@ impl<'a> Parser<'a> {
     ) -> ParseResult<Expr<'a>> {
         // Create a new lexer for the expression string
         let mut lexer = crate::Lexer::new(expr_str);
-        let (tokens, _lexical_errors) = lexer.tokenize();
+        let (tokens, _lexical_errors, _lexical_warnings) = lexer.tokenize();
 
         // If there are no tokens or only EOF, return error
         if tokens.is_empty() || (tokens.len() == 1 && tokens[0].kind == TokenKind::Eof) {

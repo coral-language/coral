@@ -21,7 +21,7 @@ use coral_parser::{
 /// Helper function to tokenize source and return token kinds.
 fn tokenize(source: &str) -> Vec<TokenKind> {
     let mut lexer = Lexer::new(source);
-    let (tokens, errors) = lexer.tokenize();
+    let (tokens, errors, _warnings) = lexer.tokenize();
 
     // Ensure no lexical errors
     assert!(

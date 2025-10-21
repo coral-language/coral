@@ -22,6 +22,8 @@ pub enum WarningCategory {
     Import,
     /// Deprecated features
     Deprecation,
+    /// Indentation warnings
+    Indentation,
 }
 
 /// Warning kinds - only includes non-fatal, code quality issues.
@@ -59,6 +61,20 @@ pub enum WarningKind {
         feature: String,
         alternative: Option<String>,
         removal_version: Option<String>,
+        span: TextRange,
+    },
+
+    // ===== Indentation Warnings =====
+    /// Mixed tabs and spaces in indentation
+    MixedTabsAndSpaces {
+        line_content: String,
+        span: TextRange,
+    },
+
+    /// Inconsistent indentation style
+    InconsistentIndentation {
+        expected_style: String,
+        found_style: String,
         span: TextRange,
     },
 }
@@ -125,6 +141,10 @@ impl WarningKind {
 
             // Deprecation warnings
             WarningKind::DeprecatedFeature { .. } => ErrorCode::W2001,
+
+            // Indentation warnings
+            WarningKind::MixedTabsAndSpaces { .. } => ErrorCode::W1005,
+            WarningKind::InconsistentIndentation { .. } => ErrorCode::W1005,
         }
     }
 
@@ -142,6 +162,9 @@ impl WarningKind {
             }
 
             WarningKind::DeprecatedFeature { .. } => WarningCategory::Deprecation,
+
+            WarningKind::MixedTabsAndSpaces { .. }
+            | WarningKind::InconsistentIndentation { .. } => WarningCategory::Indentation,
         }
     }
 
@@ -149,6 +172,7 @@ impl WarningKind {
     pub fn error_type(&self) -> &'static str {
         match self.category() {
             WarningCategory::Deprecation => "DeprecationWarning",
+            WarningCategory::Indentation => "IndentationWarning",
             WarningCategory::UnusedCode => "UnusedCodeWarning",
             WarningCategory::Shadowing => "ShadowingWarning",
             WarningCategory::Import => "ImportWarning",
@@ -190,6 +214,21 @@ impl WarningKind {
                     msg.push_str(&format!(" (will be removed in version {})", ver));
                 }
                 msg
+            }
+
+            WarningKind::MixedTabsAndSpaces { line_content, .. } => {
+                format!("Mixed tabs and spaces in indentation: '{}'", line_content)
+            }
+
+            WarningKind::InconsistentIndentation {
+                expected_style,
+                found_style,
+                ..
+            } => {
+                format!(
+                    "Inconsistent indentation: expected {}, found {}",
+                    expected_style, found_style
+                )
             }
         }
     }

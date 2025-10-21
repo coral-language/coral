@@ -23,6 +23,24 @@ fn parse_and_get_errors(source: &str) -> Vec<String> {
         .collect()
 }
 
+/// Helper function to parse source and collect warnings.
+fn parse_and_get_warnings(source: &str) -> Vec<String> {
+    let arena = Arena::new();
+    let lexer = Lexer::new(source);
+
+    let mut parser = Parser::new(lexer, &arena);
+    let _ = parser.parse_module();
+
+    parser
+        .warnings()
+        .iter()
+        .map(|warn| {
+            let diagnostic = warn.to_diagnostic(source);
+            format!("{}: {}", warn.code(), diagnostic.message)
+        })
+        .collect()
+}
+
 /// Helper to check if error is present with specific code.
 fn has_error_code(errors: &[String], code: &str) -> bool {
     errors.iter().any(|e| e.starts_with(code))
@@ -57,10 +75,15 @@ fn test_e1003_invalid_number() {
 }
 
 #[test]
-fn test_e1005_mixed_tabs_spaces() {
+fn test_w1005_mixed_tabs_spaces() {
     let source = "def foo():\n\tx = 1\n    y = 2"; // Mix of tab and spaces
-    let errors = parse_and_get_errors(source);
-    println!("E1005 errors: {:?}", errors);
+    let warnings = parse_and_get_warnings(source);
+    println!("W1005 warnings: {:?}", warnings);
+    assert!(!warnings.is_empty(), "Should produce indentation warnings");
+    assert!(
+        warnings.iter().any(|w| w.contains("W1005")),
+        "Should have W1005 warning code"
+    );
 }
 
 // ===== Syntax Errors (E2xxx) =====

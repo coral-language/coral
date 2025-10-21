@@ -3,7 +3,7 @@
 use super::cursor::LineCursor;
 use super::indentation::IndentationTracker;
 use super::token::{Token, TokenKind};
-use crate::error::UnifiedError as Error;
+use crate::error::{UnifiedError as Error, warnings::Warning};
 use text_size::{TextRange, TextSize};
 
 /// Lexer that tokenizes source code with indentation tracking.
@@ -34,10 +34,11 @@ impl Lexer {
     }
 
     /// Tokenize the entire input with indentation handling.
-    /// Returns tokens and any lexical errors encountered.
-    pub fn tokenize(&mut self) -> (Vec<Token>, Vec<Error>) {
+    /// Returns tokens, lexical errors, and warnings encountered.
+    pub fn tokenize(&mut self) -> (Vec<Token>, Vec<Error>, Vec<Warning>) {
         let mut tokens = Vec::new();
         let mut errors = Vec::new();
+        let mut warnings = Vec::new();
         let lines = self.input.lines().collect::<Vec<_>>();
         let mut line_start_pos = 0;
         let mut line_idx = 0;
@@ -88,11 +89,22 @@ impl Lexer {
             // Calculate indentation and process indentation changes
             // BUT: Skip indentation processing if we're inside brackets (implicit line joining)
             if self.bracket_depth == 0 {
-                let indent_level = IndentationTracker::calculate_indent_level(&line);
+                let indent_analysis = IndentationTracker::analyze_indent_level(&line);
                 let indent_pos = TextSize::from(line_start_pos as u32);
+
+                // Check for indentation warnings
+                let line_span = TextRange::new(
+                    indent_pos,
+                    indent_pos + TextSize::from(indent_analysis.raw_indent.len() as u32),
+                );
+                let indent_warnings = self
+                    .indentation
+                    .check_indentation_consistency(&indent_analysis, line_span);
+                warnings.extend(indent_warnings);
+
                 let (indent_tokens, indent_errors) = self
                     .indentation
-                    .process_indentation(indent_level, indent_pos);
+                    .process_indentation(indent_analysis.level, indent_pos);
                 tokens.extend(indent_tokens);
                 errors.extend(indent_errors);
             }
@@ -142,6 +154,6 @@ impl Lexer {
         tokens.extend(self.indentation.finalize(eof_pos));
 
         tokens.push(Token::new(TokenKind::Eof, TextRange::new(eof_pos, eof_pos)));
-        (tokens, errors)
+        (tokens, errors, warnings)
     }
 }

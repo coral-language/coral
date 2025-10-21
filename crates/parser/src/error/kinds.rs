@@ -21,9 +21,6 @@ pub enum ErrorKind {
     /// Identifier name is not valid
     InvalidIdentifier,
 
-    /// Inconsistent use of tabs and spaces in indentation
-    MixedTabsAndSpaces,
-
     /// Invalid escape sequence in string
     InvalidEscapeSequence,
 

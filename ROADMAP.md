@@ -51,11 +51,11 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Validate octal digits in octal literals
   - [x] Validate binary digits in binary literals
 
-- [ ] **Indentation Edge Cases**
-  - [ ] Mix of tabs and spaces detection and warnings
-  - [ ] Inconsistent indentation warnings
-  - [ ] Better error messages for indentation issues
-  - [ ] Handle edge case: dedent at EOF with complex nesting
+- [x] **Indentation Edge Cases**
+  - [x] Mix of tabs and spaces detection and warnings
+  - [x] Inconsistent indentation warnings
+  - [x] Better error messages for indentation issues
+  - [x] Handle edge case: dedent at EOF with complex nesting
 
 - [ ] **Comments and Docstrings**
   - [ ] Preserve comments for documentation generation
@@ -310,7 +310,7 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [ ] Core VM loop and execution engine
   - [ ] Stack management and frame handling
   - [ ] Exception handling and unwinding
-  - [ ] Garbage collection integration
+  - [ ] No garbage collection
 
 - [ ] **Standard Library**
   - [ ] Core built-in functions and types

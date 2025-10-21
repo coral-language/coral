@@ -1,13 +1,42 @@
 //! Indentation tracking for indentation-based syntax.
 
 use super::token::{Token, TokenKind};
-use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
+use crate::error::{
+    UnifiedError as Error, UnifiedErrorKind as ErrorKind, error,
+    warnings::{Warning, WarningKind},
+};
 use text_size::{TextRange, TextSize};
+
+/// Indentation style used in the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndentStyle {
+    /// Uses only spaces for indentation
+    Spaces,
+    /// Uses only tabs for indentation
+    Tabs,
+    /// Mixed use of tabs and spaces
+    Mixed,
+}
+
+/// Analysis result of indentation in a line.
+#[derive(Debug, Clone)]
+pub struct IndentationAnalysis {
+    /// The indentation level (in spaces, with tabs expanded to 8 spaces)
+    pub level: usize,
+    /// The indentation style detected
+    pub style: IndentStyle,
+    /// Whether this line has mixed tabs and spaces
+    pub has_mixed: bool,
+    /// The raw indentation string
+    pub raw_indent: String,
+}
 
 /// Tracks indentation levels for indentation-based syntax.
 pub struct IndentationTracker {
     /// Stack of indentation levels (in spaces)
     indent_stack: Vec<usize>,
+    /// The indentation style established for this file
+    indentation_style: Option<IndentStyle>,
 }
 
 impl IndentationTracker {
@@ -15,6 +44,7 @@ impl IndentationTracker {
     pub fn new() -> Self {
         IndentationTracker {
             indent_stack: vec![0],
+            indentation_style: None,
         }
     }
 
@@ -38,20 +68,29 @@ impl IndentationTracker {
                 TextRange::new(position, position),
             ));
         } else if indent_level < current_indent {
-            // Decreased indentation - may need multiple DEDENTs
-            while let Some(&level) = self.indent_stack.last() {
-                if level <= indent_level {
+            // Check if this is a valid unindent level (must match some level in stack)
+            let mut is_valid_unindent = false;
+            for &level in &self.indent_stack {
+                if level == indent_level {
+                    is_valid_unindent = true;
                     break;
                 }
-                self.indent_stack.pop();
-                tokens.push(Token::new(
-                    TokenKind::Dedent,
-                    TextRange::new(position, position),
-                ));
             }
 
-            // Check for indentation error (indent level doesn't match any level in stack)
-            if self.indent_stack.last() != Some(&indent_level) {
+            if is_valid_unindent {
+                // Valid unindent - generate DEDENTs until we reach the target level
+                while let Some(&level) = self.indent_stack.last() {
+                    if level <= indent_level {
+                        break;
+                    }
+                    self.indent_stack.pop();
+                    tokens.push(Token::new(
+                        TokenKind::Dedent,
+                        TextRange::new(position, position),
+                    ));
+                }
+            } else {
+                // Invalid unindent - generate error but don't change stack or generate tokens
                 let error = error(
                     ErrorKind::UnindentMismatch,
                     TextRange::new(position, position),
@@ -78,14 +117,136 @@ impl IndentationTracker {
         tokens
     }
 
+    /// Analyze indentation in a line and return detailed information.
+    ///
+    /// This method detects tabs vs spaces, mixed usage, and calculates the indentation level
+    /// (expanding tabs to 8 spaces for consistency).
+    pub fn analyze_indent_level(line: &str) -> IndentationAnalysis {
+        let raw_indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+        let mut has_spaces = false;
+        let mut has_tabs = false;
+        let mut level = 0;
+
+        for ch in raw_indent.chars() {
+            match ch {
+                ' ' => {
+                    has_spaces = true;
+                    level += 1;
+                }
+                '\t' => {
+                    has_tabs = true;
+                    // Standard: 1 tab = 8 spaces for indentation calculation
+                    level += 8;
+                }
+                _ => break,
+            }
+        }
+
+        let style = match (has_spaces, has_tabs) {
+            (true, false) => IndentStyle::Spaces,
+            (false, true) => IndentStyle::Tabs,
+            (true, true) => IndentStyle::Mixed,
+            (false, false) => IndentStyle::Spaces, // No indentation defaults to spaces
+        };
+
+        IndentationAnalysis {
+            level,
+            style,
+            has_mixed: has_spaces && has_tabs,
+            raw_indent,
+        }
+    }
+
+    /// Check indentation consistency and generate warnings if needed.
+    ///
+    /// This method establishes the indentation style for the file and warns about
+    /// inconsistencies or mixed usage.
+    pub fn check_indentation_consistency(
+        &mut self,
+        analysis: &IndentationAnalysis,
+        line_span: TextRange,
+    ) -> Vec<Warning> {
+        let mut warnings = Vec::new();
+
+        // Always warn about mixed tabs and spaces in a single line
+        if analysis.has_mixed {
+            warnings.push(Warning::new(
+                WarningKind::MixedTabsAndSpaces {
+                    line_content: analysis.raw_indent.clone(),
+                    span: line_span,
+                },
+                line_span,
+            ));
+        }
+
+        // Establish or check indentation style consistency
+        // Only check consistency for lines that actually have indentation
+        if analysis.level > 0 {
+            match (&self.indentation_style, analysis.style) {
+                (None, IndentStyle::Spaces) => {
+                    // First indented line uses spaces - establish this as the style
+                    self.indentation_style = Some(IndentStyle::Spaces);
+                }
+                (None, IndentStyle::Tabs) => {
+                    // First indented line uses tabs - establish this as the style
+                    self.indentation_style = Some(IndentStyle::Tabs);
+                }
+                (None, IndentStyle::Mixed) => {
+                    // First indented line is mixed - this is already warned about above
+                    // Don't establish a style since it's inconsistent
+                }
+                (Some(IndentStyle::Spaces), IndentStyle::Tabs) => {
+                    // Previously established spaces, but now seeing tabs
+                    warnings.push(Warning::new(
+                        WarningKind::InconsistentIndentation {
+                            expected_style: IndentStyle::Spaces.as_str().to_string(),
+                            found_style: IndentStyle::Tabs.as_str().to_string(),
+                            span: line_span,
+                        },
+                        line_span,
+                    ));
+                }
+                (Some(IndentStyle::Tabs), IndentStyle::Spaces) => {
+                    // Previously established tabs, but now seeing spaces
+                    warnings.push(Warning::new(
+                        WarningKind::InconsistentIndentation {
+                            expected_style: IndentStyle::Tabs.as_str().to_string(),
+                            found_style: IndentStyle::Spaces.as_str().to_string(),
+                            span: line_span,
+                        },
+                        line_span,
+                    ));
+                }
+                _ => {
+                    // Consistent usage or already established mixed style - no warning needed
+                }
+            }
+        }
+
+        warnings
+    }
+
     /// Calculate indentation level (count leading spaces/tabs).
+    /// DEPRECATED: Use analyze_indent_level for more detailed analysis.
+    #[allow(dead_code)]
     pub fn calculate_indent_level(line: &str) -> usize {
-        line.len() - line.trim_start().len()
+        Self::analyze_indent_level(line).level
     }
 }
 
 impl Default for IndentationTracker {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl IndentStyle {
+    /// Get a string representation of this indentation style.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IndentStyle::Spaces => "spaces",
+            IndentStyle::Tabs => "tabs",
+            IndentStyle::Mixed => "mixed",
+        }
     }
 }

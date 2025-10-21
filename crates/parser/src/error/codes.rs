@@ -23,6 +23,7 @@ pub enum ErrorCode {
     E1004, // Invalid identifier
     E1005, // Mixed tabs and spaces
     E1006, // Invalid escape sequence
+    W1005, // Mixed tabs and spaces (warning)
 
     // ===== Syntax Errors (E2xxx) =====
     E2001, // Unexpected token
@@ -164,6 +165,7 @@ impl ErrorCode {
             ErrorCode::E1004 => 1004,
             ErrorCode::E1005 => 1005,
             ErrorCode::E1006 => 1006,
+            ErrorCode::W1005 => 1005,
 
             // Syntax
             ErrorCode::E2001 => 2001,

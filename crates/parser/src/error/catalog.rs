@@ -103,17 +103,6 @@ impl ErrorKind {
                     "Identifiers must start with a letter or underscore, followed by letters, digits, or underscores",
                 ),
             },
-            ErrorKind::MixedTabsAndSpaces => ErrorMetadata {
-                code: ErrorCode::E1005,
-                severity: Severity::Error,
-                category: ErrorCategory::Lexical,
-                error_type: "IndentationError",
-                title: "Inconsistent use of tabs and spaces in indentation",
-                description: "The code mixes tabs and spaces for indentation, which is not allowed",
-                suggestion: Some(
-                    "Use consistent indentation throughout (either spaces or tabs, not both). Most code uses 4 spaces",
-                ),
-            },
             ErrorKind::InvalidEscapeSequence => ErrorMetadata {
                 code: ErrorCode::E1006,
                 severity: Severity::Error,
@@ -177,7 +166,7 @@ impl ErrorKind {
                 title: "Indentation is inconsistent or incorrect",
                 description: "The indentation does not follow indentation-based syntax rules",
                 suggestion: Some(
-                    "Use consistent indentation throughout (either spaces or tabs, not both). Most code uses 4 spaces",
+                    "Ensure all lines in a block have the same indentation level. Use either spaces or tabs consistently throughout your code.",
                 ),
             },
             ErrorKind::UnclosedDelimiter { .. } => ErrorMetadata {
@@ -411,8 +400,10 @@ impl ErrorKind {
                 category: ErrorCategory::Syntax,
                 error_type: "IndentationError",
                 title: "Unindent does not match any outer indentation level",
-                description: "The dedent doesn't align with any previous indentation level",
-                suggestion: Some("Check that your indentation is consistent"),
+                description: "The dedent amount doesn't align with any previous indentation level in the nesting hierarchy",
+                suggestion: Some(
+                    "Indentation levels must decrease to match a previous level. Check your block structure and ensure consistent indentation.",
+                ),
             },
 
             // Name Resolution errors
@@ -1113,9 +1104,6 @@ impl ErrorKind {
             }
             ErrorKind::InvalidNumber => "Number literal has invalid format".to_string(),
             ErrorKind::InvalidIdentifier => "Identifier name is not valid".to_string(),
-            ErrorKind::MixedTabsAndSpaces => {
-                "Inconsistent use of tabs and spaces in indentation".to_string()
-            }
             ErrorKind::InvalidEscapeSequence => "Invalid escape sequence in string".to_string(),
 
             // Syntax errors

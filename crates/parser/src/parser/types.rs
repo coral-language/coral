@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::error::{
     RecoveryAction, RecoveryManager, RecoveryStrategy, SyncPoint, UnifiedError as Error,
-    UnifiedErrorKind as ErrorKind, error,
+    UnifiedErrorKind as ErrorKind, error, warnings::Warning,
 };
 
 pub type ParseResult<T> = Result<T, Box<Error>>;
@@ -71,6 +71,8 @@ pub struct Parser<'a> {
     pub(super) delimiter_stack: Vec<DelimiterInfo>,
     /// Collection of errors encountered during parsing (for error recovery)
     pub(super) errors: Vec<Error>,
+    /// Collection of warnings encountered during parsing
+    pub(super) warnings: Vec<Warning>,
     /// Error recovery manager
     pub(super) recovery_manager: RecoveryManager,
     /// Track if we've seen any non-future imports or statements (for __future__ validation)
@@ -84,17 +86,13 @@ impl<'a> Parser<'a> {
 
     pub fn with_mode(mut lexer: crate::Lexer, arena: &'a Arena, mode: Mode) -> Self {
         let source = arena.alloc_str(lexer.source());
-        let (tokens, lexical_errors) = lexer.tokenize();
+        let (tokens, lexical_errors, lexical_warnings) = lexer.tokenize();
 
         // Convert lexical errors to Errors for backward compatibility
         let mut errors = Vec::new();
         for lexical_error in lexical_errors {
-            errors.push(*error(
-                ErrorKind::InvalidSyntax {
-                    message: "Lexical error".to_string(),
-                },
-                lexical_error.span,
-            ));
+            // Preserve the original error kind instead of converting to InvalidSyntax
+            errors.push(lexical_error);
         }
 
         Parser {
@@ -106,6 +104,7 @@ impl<'a> Parser<'a> {
             context: ParserContext::new(),
             delimiter_stack: Vec::new(),
             errors,
+            warnings: lexical_warnings,
             recovery_manager: RecoveryManager::new(),
             seen_non_future_statement: false,
         }
@@ -934,6 +933,11 @@ impl<'a> Parser<'a> {
     /// Get all errors collected during parsing.
     pub fn errors(&self) -> &[Error] {
         &self.errors
+    }
+
+    /// Get all warnings encountered during parsing.
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
     }
 
     /// Get the recovery manager for statistics.
