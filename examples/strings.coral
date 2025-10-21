@@ -1,0 +1,166 @@
+# String Literal Examples in Coral
+# This file demonstrates all valid string literal types supported by the language
+
+# ===== Basic String Literals =====
+
+# Single-quoted strings
+single = 'Hello, World!'
+single_with_double = 'She said "Hello"'
+
+# Double-quoted strings
+double = "Hello, World!"
+double_with_single = "It's a beautiful day"
+
+# ===== Triple-Quoted Strings =====
+# Note: Triple-quoted strings (multi-line) are not yet fully supported
+# They will be added in a future update with custom lexer logic
+
+# ===== Escape Sequences =====
+
+# Common escape sequences
+escape_newline = "Line 1\nLine 2"
+escape_tab = "Column1\tColumn2"
+escape_backslash = "Path: C:\\Users\\name"
+escape_quote = "He said \"Hello\""
+escape_single = 'It\'s working'
+
+# Other escape sequences
+escape_carriage = "Text\rOverwrite"
+escape_backspace = "ABC\bD"
+escape_form_feed = "Page1\fPage2"
+escape_bell = "Alert\a"
+escape_vertical_tab = "Line1\vLine2"
+
+# Hex escape sequences
+hex_escape = "\x48\x65\x6C\x6C\x6F"  # "Hello"
+
+# Octal escape sequences
+octal_escape = "\110\145\154\154\157"  # "Hello"
+
+# Unicode escape sequences
+unicode_16bit = "\u0048\u0065\u006C\u006C\u006F"  # "Hello"
+unicode_32bit = "\U00000048\U00000065\U0000006C\U0000006C\U0000006F"  # "Hello"
+
+# Unicode characters directly
+emoji = "Hello 👋 World 🌍"
+accents = "Café, naïve, résumé"
+symbols = "© ® ™ € £ ¥"
+math = "π ≈ 3.14159, √2 ≈ 1.414"
+
+# ===== Raw Strings =====
+
+# Raw single-quoted (backslashes are literal)
+raw_single = r'C:\Users\name\file.txt'
+raw_regex = r'\d+\.\d+'
+
+# Raw double-quoted
+raw_double = r"C:\Windows\System32"
+raw_pattern = r"\n\t\r"  # These are literal characters, not escape sequences
+
+# ===== F-Strings (Format Strings) =====
+
+# Basic f-strings with expressions
+name = "Alice"
+age = 30
+f_single = f'My name is {name}'
+f_double = f"I am {age} years old"
+
+# F-strings with expressions
+x = 10
+y = 20
+f_expr = f"The sum of {x} and {y} is {x + y}"
+f_complex = f"Square of {x} is {x * x}"
+
+# F-strings with format specs
+pi = 3.14159
+f_format = f"Pi to 2 decimals: {pi:.2f}"
+large_num = 1000000
+f_comma = f"Large number: {large_num:,}"
+
+# ===== Raw F-Strings =====
+
+# Raw f-strings (backslashes are literal, but expressions work)
+path = "Documents"
+rf_single = rf'C:\Users\{path}\file.txt'
+rf_double = rf"Path: C:\{path}\data.csv"
+
+# ===== Bytes Literals =====
+
+# Basic bytes (must contain only ASCII)
+bytes_single = b'Hello, bytes!'
+bytes_double = b"Binary data"
+
+# Bytes with escape sequences
+bytes_escape = b"Line1\nLine2\tTab"
+bytes_hex = b"\x48\x65\x6C\x6C\x6F"
+
+# ===== Raw Bytes Literals =====
+
+# Raw bytes (backslashes are literal)
+raw_bytes_single = rb'Binary\ndata\twith\rescapes'
+raw_bytes_double = rb"More\x00binary"
+
+# ===== Empty Strings =====
+
+empty = ""
+empty_single = ''
+empty_raw = r""
+empty_raw_single = r''
+empty_bytes = b""
+empty_raw_bytes = rb""
+
+# ===== Adjacent String Literals (implicit concatenation) =====
+
+# Multiple strings on one line are concatenated
+adjacent = "Hello, " "World!"
+multi_line_adjacent = (
+    "This is a very long string "
+    "that is broken across multiple lines "
+    "for better readability."
+)
+
+# Different quote styles can be mixed
+mixed_quotes = 'Single' "Double"
+
+# ===== Strings with Special Characters =====
+
+# Null byte
+null_byte = "\x00"
+
+# All printable ASCII
+ascii_chars = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+
+# Unicode categories
+greek = "αβγδε"
+cyrillic = "абвгд"
+chinese = "你好世界"
+japanese = "こんにちは"
+arabic = "مرحبا"
+hebrew = "שלום"
+
+# Emoji and symbols
+faces = "😀😃😄😁😆😊☺️😎"
+hearts = "❤️💛💚💙💜🖤🤍🤎"
+animals = "🐶🐱🐭🐹🐰🦊🐻"
+
+# ===== String Operations Examples =====
+
+# Strings support various operations
+concatenation = "Hello" + " " + "World"
+repetition = "Echo! " * 3
+substring_check = "Hello" in "Hello, World"
+
+# String methods (examples of what's typically available)
+uppercase = "hello".upper()
+lowercase = "WORLD".lower()
+title_case = "hello world".title()
+stripped = "  spaces  ".strip()
+
+# Indexing and slicing
+text = "Python"
+first_char = text[0]
+last_char = text[-1]
+slice_text = text[1:4]
+
+# Length
+length = len("Hello")

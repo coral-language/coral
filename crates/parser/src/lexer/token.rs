@@ -71,6 +71,7 @@ pub enum TokenKind {
     Number,
     Complex,
     String,
+    RawString,
     Bytes,
     RawBytes,
     FString,
@@ -232,31 +233,37 @@ pub enum LogosToken {
     Number,
 
     // Bytes literals must be checked before regular strings
-    #[regex(r#"[bB]"""([^"\\]|\\.)*"""|[bB]'''([^'\\]|\\.)*'''|[bB]"([^"\\]|\\.)*"|[bB]'([^'\\]|\\.)*'"#)]
+    #[regex(r#"[bB]"(?:[^"\n\\]|\\.)*"|[bB]'(?:[^'\n\\]|\\.)*'"#)]
     Bytes,
 
-    // Raw bytes literals
-    #[regex(r#"[rR][bB]"""([^"\\]|\\.)*"""|[rR][bB]'''([^'\\]|\\.)*'''|[bB][rR]"""([^"\\]|\\.)*"""|[bB][rR]'''([^'\\]|\\.)*'''|[rR][bB]"([^"\\]|\\.)*"|[rR][bB]'([^'\\]|\\.)*'|[bB][rR]"([^"\\]|\\.)*"|[bB][rR]'([^'\\]|\\.)*'"#)]
+    // Raw bytes literals - backslashes are literal, no escape processing
+    #[regex(r#"[rR][bB]"[^"\n]*"|[rR][bB]'[^'\n]*'|[bB][rR]"[^"\n]*"|[bB][rR]'[^'\n]*'"#)]
     RawBytes,
 
-    // Regular strings (single, double, triple-quoted)
-    #[regex(r#""""([^"\\]|\\.)*"""|'''([^'\\]|\\.)*'''|"([^"\\]|\\.)*"|'([^'\\]|\\.)*'"#)]
+    // Raw strings - must come before regular strings to match first
+    // Backslashes are literal, no escape processing
+    #[regex(r#"[rR]"[^"\n]*"|[rR]'[^'\n]*'"#)]
+    RawString,
+
+    // Regular strings (single and double quoted)
+    #[regex(r#""(?:[^"\n\\]|\\.)*"|'(?:[^'\n\\]|\\.)*'"#)]
     String,
 
-    // F-strings (single, double, triple-quoted) - must come before raw f-strings
-    #[regex(r#"[fF]"""([^"\\]|\\.|(\{[^}]*\}))*"""|[fF]'''([^'\\]|\\.|(\{[^}]*\}))*'''|[fF]"([^"\\]|\\.|(\{[^}]*\}))*"|[fF]'([^'\\]|\\.|(\{[^}]*\}))*'"#)]
+    // F-strings (single and double quoted)
+    #[regex(r#"[fF]"(?:[^"\n\\]|\\.|(\{[^}]*\}))*"|[fF]'(?:[^'\n\\]|\\.|(\{[^}]*\}))*'"#)]
     FString,
 
-    // Raw F-strings (rf"...", fr"...", RF"...", etc.) - must come after regular f-strings
-    #[regex(r#"[rR][fF]"""([^"\\]|\\.|(\{[^}]*\}))*"""|[rR][fF]'''([^'\\]|\\.|(\{[^}]*\}))*'''|[fF][rR]"""([^"\\]|\\.|(\{[^}]*\}))*"""|[fF][rR]'''([^'\\]|\\.|(\{[^}]*\}))*'''|[rR][fF]"([^"\\]|\\.|(\{[^}]*\}))*"|[rR][fF]'([^'\\]|\\.|(\{[^}]*\}))*'|[fF][rR]"([^"\\]|\\.|(\{[^}]*\}))*"|[fF][rR]'([^'\\]|\\.|(\{[^}]*\}))*'"#)]
+    // Raw F-strings (rf"...", fr"...", RF"...", etc.)
+    // In raw f-strings, backslashes are literal but braces still work for interpolation
+    #[regex(r#"[rR][fF]"(?:[^"\n]|(\{[^}]*\}))*"|[rR][fF]'(?:[^'\n]|(\{[^}]*\}))*'|[fF][rR]"(?:[^"\n]|(\{[^}]*\}))*"|[fF][rR]'(?:[^'\n]|(\{[^}]*\}))*'"#)]
     RawFString,
 
-    // T-strings (template strings) - single, double, triple-quoted
-    #[regex(r#"[tT]"""([^"\\]|\\.|(\{[^}]*\}))*"""|[tT]'''([^'\\]|\\.|(\{[^}]*\}))*'''|[tT]"([^"\\]|\\.|(\{[^}]*\}))*"|[tT]'([^'\\]|\\.|(\{[^}]*\}))*'"#)]
+    // T-strings (template strings) - single and double quoted
+    #[regex(r#"[tT]"(?:[^"\n\\]|\\.|(\{[^}]*\}))*"|[tT]'(?:[^'\n\\]|\\.|(\{[^}]*\}))*'"#)]
     TString,
 
     // Raw t-strings
-    #[regex(r#"[rR][tT]"""([^"\\]|\\.)*"""|[rR][tT]'''([^'\\]|\\.)*'''|[tT][rR]"""([^"\\]|\\.)*"""|[tT][rR]'''([^'\\]|\\.)*'''|[rR][tT]"([^"\\]|\\.)*"|[rR][tT]'([^'\\]|\\.)*'|[tT][rR]"([^"\\]|\\.)*"|[tT][rR]'([^'\\]|\\.)*'"#)]
+    #[regex(r#"[rR][tT]"[^"\n]*"|[rR][tT]'[^'\n]*'|[tT][rR]"[^"\n]*"|[tT][rR]'[^'\n]*'"#)]
     RawTString,
 
     #[token("+")]

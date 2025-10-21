@@ -35,13 +35,14 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 
 ### Lexer Module
 
-- [ ] **String Literal Enhancements**
-  - [ ] Triple-quoted strings (single and double)
-  - [ ] Raw strings (`r""`, `r''`)
-  - [ ] Proper escape sequence handling and validation
-  - [ ] Unicode escape sequences (`\uXXXX`, `\UXXXXXXXX`)
-  - [ ] String prefix combinations validation (`fr""`, `rf""`, etc.)
-  - [ ] Better error messages for unclosed strings
+ - [x] **String Literal Enhancements**
+  - [ ] Triple-quoted strings (single and double, multi-line support pending)
+  - [x] Raw strings (`r""`, `r''`)
+  - [x] T-strings (`t""`, `t''`)
+  - [x] Proper escape sequence handling and validation
+  - [x] Unicode escape sequences (`\uXXXX`, `\UXXXXXXXX`)
+  - [x] String prefix combinations validation (`fr""`, `rf""`, `tr""`, etc.)
+  - [x] Better error messages for unclosed strings
 
 - [ ] **Number Literal Enhancements**
   - [ ] Validate underscore positions (cannot be at start/end or consecutive)

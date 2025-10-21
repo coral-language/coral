@@ -494,5 +494,3 @@ Hex:       {score:>#10x}
 {'='*50}
 Status:    {('Excellent' if ratio > 0.9 else 'Good'):^10}
 """
-
-print("F-String examples completed successfully!")

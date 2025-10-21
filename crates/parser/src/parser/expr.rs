@@ -785,7 +785,7 @@ impl<'a> Parser<'a> {
                     span: token.span,
                 }))
             }
-            TokenKind::String => {
+            TokenKind::String | TokenKind::RawString => {
                 let mut tokens = vec![self.advance()];
 
                 // Collect consecutive string literals for implicit concatenation
@@ -796,8 +796,8 @@ impl<'a> Parser<'a> {
                         self.advance();
                     }
 
-                    // Check if next token is a string
-                    if self.peek().kind == TokenKind::String {
+                    // Check if next token is a string or raw string
+                    if matches!(self.peek().kind, TokenKind::String | TokenKind::RawString) {
                         tokens.push(self.advance());
                     } else {
                         break;
@@ -811,9 +811,18 @@ impl<'a> Parser<'a> {
                     let end = usize::from(token.span.end());
                     let text = &self.source[start..end];
 
-                    // Extract the actual string content (removing quotes)
+                    // Extract the actual string content (removing quotes and prefixes)
                     // Handle various quote styles: "...", '...', """...""", '''...'''
-                    let content = if text.starts_with("\"\"\"") || text.starts_with("'''") {
+                    // Also handle raw strings: r"...", r'...', r"""...""", r'''...'''
+                    let content = if text.starts_with("r\"\"\"") || text.starts_with("R\"\"\"") {
+                        &text[4..text.len() - 3]
+                    } else if text.starts_with("r'''") || text.starts_with("R'''") {
+                        &text[4..text.len() - 3]
+                    } else if text.starts_with("r\"") || text.starts_with("R\"") {
+                        &text[2..text.len() - 1]
+                    } else if text.starts_with("r'") || text.starts_with("R'") {
+                        &text[2..text.len() - 1]
+                    } else if text.starts_with("\"\"\"") || text.starts_with("'''") {
                         // Triple-quoted string
                         &text[3..text.len() - 3]
                     } else if text.starts_with('"') || text.starts_with('\'') {

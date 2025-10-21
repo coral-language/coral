@@ -1,0 +1,116 @@
+# T-String Examples - Template String Literals
+# This file demonstrates all supported t-string features in Coral
+# T-strings are template strings that evaluate to Template objects
+
+# ============================================================================
+# Basic T-Strings
+# ============================================================================
+
+# Simple template strings
+name = "Alice"
+template = t"Hello, {name}!"
+
+# T-strings with single quotes
+single_template = t'My name is {name}'
+
+# T-strings with uppercase prefix (same as lowercase)
+upper_template = T"Hello, {name}!"
+
+# ============================================================================
+# T-Strings with Expressions
+# ============================================================================
+
+# Mathematical expressions
+x = 10
+y = 20
+math_template = t"The sum of {x} and {y} is {x + y}"
+
+# Function calls and complex expressions
+items = [1, 2, 3, 4, 5]
+list_template = t"List has {len(items)} items: {items}"
+
+# Nested expressions
+nested_template = t"Result: {x * (y + 5)}"
+
+# ============================================================================
+# Raw T-Strings
+# ============================================================================
+
+# Raw t-strings (backslashes are literal)
+path = "Documents"
+raw_template = rt"C:\Users\{path}\file.txt"
+
+# Raw t-string with single quotes
+raw_single = rt'C:\Program Files\{path}'
+
+# Different raw prefixes (all equivalent)
+tr_template = tr"Path: C:\{path}\data"
+rt_template = rt"Path: C:\{path}\data"
+
+# ============================================================================
+# T-Strings with Format Specifications
+# ============================================================================
+
+# Basic formatting
+pi = 3.14159265359
+formatted_template = t"Pi: {pi:.2f}"
+
+# Width and alignment
+left_template = t"{'left':<10} aligned"
+right_template = t"{'right':>10} aligned"
+center_template = t"{'center':^10} aligned"
+
+# Fill characters
+filled_template = t"{'x':*^10}"
+
+# Number formatting
+large_number = 1234567
+comma_template = t"Number: {large_number:,}"
+zero_pad_template = t"Zero-padded: {42:05d}"
+
+# ============================================================================
+# T-Strings with Conversions
+# ============================================================================
+
+# !s - str() conversion
+value = 42
+str_template = t"Value: {value!s}"
+
+# !r - repr() conversion
+data = "hello\nworld"
+repr_template = t"Data: {data!r}"
+
+# !a - ascii() conversion
+unicode_text = "café"
+ascii_template = t"ASCII: {unicode_text!a}"
+
+# ============================================================================
+# Combined Conversions and Format Specs
+# ============================================================================
+
+# Conversion with format spec
+obj = "test"
+combined_template = t"{obj!r:>20}"
+
+# Complex formatting
+complex_template = t"{1234.5678:+010,.2f}"
+
+# ============================================================================
+# Escaping in T-Strings
+# ============================================================================
+
+# Escaping braces
+escaped_braces = t"Use {{ and }} to escape braces"
+
+# Double braces for literal braces
+literal_braces = t"Format: {{value}}"
+
+# ============================================================================
+# Advanced Examples
+# ============================================================================
+
+# Template with multiple expressions (single line)
+advanced_template = t"User: {name}, Age: {age}, Balance: {balance:.2f}, Status: {status!r}"
+
+# Template with calculations
+calc_template = t"Area of circle with radius {r} is {3.14159 * r * r:.2f}"
