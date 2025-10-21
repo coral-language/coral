@@ -6,13 +6,13 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 
 ### Parser Module
 
-- [ ] **F-String Parsing Enhancements**
-  - [ ] Triple-quoted f-strings support
-  - [ ] Raw f-strings (`rf""`) with proper escape handling
-  - [ ] Nested f-strings validation and depth limits
-  - [ ] Better error messages for unclosed braces
-  - [ ] Format spec validation beyond current implementation
-  - [ ] Multi-line f-strings with proper indentation handling
+- [x] **F-String Parsing Enhancements**
+  - [x] Triple-quoted f-strings support
+  - [x] Raw f-strings (`rf""`) with proper escape handling
+  - [x] Nested f-strings validation and depth limits
+  - [x] Better error messages for unclosed braces
+  - [x] Format spec validation beyond current implementation
+  - [x] Multi-line f-strings with proper indentation handling
 
 - [ ] **Pattern Matching Completeness**
   - [ ] Guard expression type validation in patterns

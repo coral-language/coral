@@ -1,0 +1,498 @@
+# F-String Examples - Comprehensive Test Suite
+# This file demonstrates all supported f-string features in Coral
+
+# ============================================================================
+# Basic F-Strings
+# ============================================================================
+
+# Simple interpolation
+name = "Alice"
+message = f"Hello, {name}!"
+
+# Expression in f-string
+x = 10
+y = 20
+result = f"The sum of {x} and {y} is {x + y}"
+
+# Multiple expressions
+a = 5
+b = 3
+calculation = f"{a} + {b} = {a + b}, {a} * {b} = {a * b}"
+
+# ============================================================================
+# F-String Conversions (!s, !r, !a)
+# ============================================================================
+
+# !s - str() conversion
+value = 42
+text = f"Value as string: {value!s}"
+
+# !r - repr() conversion
+data = "hello\nworld"
+debug = f"Data repr: {data!r}"
+
+# !a - ascii() conversion
+unicode_text = "café"
+ascii_text = f"ASCII: {unicode_text!a}"
+
+# ============================================================================
+# Format Specifications
+# ============================================================================
+
+# Basic number formatting
+pi = 3.14159265359
+formatted_pi = f"Pi: {pi:.2f}"
+
+# Width and alignment
+left_aligned = f"{'left':<10} aligned"
+right_aligned = f"{'right':>10} aligned"
+centered = f"{'center':^10} aligned"
+
+# Fill character with alignment
+filled_left = f"{'x':*<10}"
+filled_right = f"{'x':*>10}"
+filled_center = f"{'x':*^10}"
+
+# Sign handling
+positive = 42
+negative = -42
+always_sign = f"{positive:+} and {negative:+}"
+space_sign = f"{positive: } and {negative: }"
+
+# Zero padding
+padded = f"{42:05d}"
+
+# Thousands separator
+large_number = 1234567
+with_comma = f"{large_number:,}"
+with_underscore = f"{large_number:_}"
+
+# Precision
+decimal = 3.14159
+two_digits = f"{decimal:.2f}"
+four_digits = f"{decimal:.4f}"
+
+# Type codes
+integer = 42
+binary = f"{integer:b}"
+octal = f"{integer:o}"
+hexadecimal = f"{integer:x}"
+uppercase_hex = f"{integer:X}"
+scientific = f"{123.456:e}"
+uppercase_scientific = f"{123.456:E}"
+general_format = f"{123.456:g}"
+percentage = f"{0.75:%}"
+
+# Combined format specs
+complex_format = f"{1234.5678:+010,.2f}"
+
+# ============================================================================
+# Conversion + Format Spec
+# ============================================================================
+
+# Combine !r with format spec
+obj = "test"
+combined = f"{obj!r:>20}"
+
+# Combine !s with format spec
+num = 42
+str_format = f"{num!s:>10}"
+
+# ============================================================================
+# Nested Expressions
+# ============================================================================
+
+# Nested function calls
+def get_name():
+    return "Bob"
+
+greeting = f"Hello, {get_name().upper()}!"
+
+# Complex expressions
+numbers = [1, 2, 3, 4, 5]
+summary = f"Sum: {sum(numbers)}, Max: {max(numbers)}, Min: {min(numbers)}"
+
+# Nested arithmetic
+nested = f"Result: {((10 + 20) * 3) / 2}"
+
+# List comprehension in f-string
+squares = f"Squares: {[i*i for i in range(5)]}"
+
+# Dictionary access
+person = {"name": "Charlie", "age": 30}
+person_info = f"{person['name']} is {person['age']} years old"
+
+# Attribute access
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+point = Point(10, 20)
+coords = f"Point at ({point.x}, {point.y})"
+
+# Method calls
+text = "hello"
+upper_text = f"Uppercase: {text.upper()}"
+
+# ============================================================================
+# Escaped Braces
+# ============================================================================
+
+# Double braces for literal braces
+literal_braces = f"{{This is in literal braces}}"
+mixed = f"Value: {42}, {{literal braces}}"
+
+# Multiple escapes
+multiple = f"{{{{nested}}}} = {2 + 2}"
+
+# ============================================================================
+# Multi-line F-Strings
+# ============================================================================
+
+# F-string with newlines
+multiline = f"First line\nSecond line with {name}\nThird line"
+
+# F-string split across lines (implicit concatenation)
+long_message = (
+    f"This is a very long message that "
+    f"spans multiple lines and includes {name}"
+)
+
+# ============================================================================
+# Triple-Quoted F-Strings
+# ============================================================================
+
+# Triple-quoted with double quotes
+triple_double = f"""
+This is a triple-quoted f-string
+with {name} on multiple lines
+and proper indentation
+"""
+
+# Triple-quoted with single quotes
+triple_single = f'''
+Another triple-quoted f-string
+Name: {name}
+Value: {x}
+'''
+
+# Triple-quoted with expressions on multiple lines
+multi_expr = f"""
+User Information:
+  Name: {name}
+  Score: {x + y}
+  Status: {"Active" if x > 5 else "Inactive"}
+"""
+
+# ============================================================================
+# Raw F-Strings
+# ============================================================================
+
+# Raw f-string with rf prefix
+raw_path = rf"C:\Users\{name}\Documents"
+
+# Raw f-string with fr prefix
+raw_regex = fr"\d+\.\d+ = {pi:.2f}"
+
+# Raw f-string preserves backslashes
+raw_newline = rf"Line 1\nLine 2 with {name}"
+
+# ============================================================================
+# Raw Triple-Quoted F-Strings
+# ============================================================================
+
+# Raw triple-quoted f-string
+raw_triple = rf"""
+Path: C:\Users\{name}\Desktop
+Pattern: \d+\w+\s+
+Value: {x}
+"""
+
+# With fr prefix
+raw_triple_fr = fr"""
+Regex pattern: \d{{1,3}}\.\d{{1,3}}
+Result: {x + y}
+"""
+
+# ============================================================================
+# Nested Format Specs (Format spec containing expressions)
+# ============================================================================
+
+# Width from variable
+width = 10
+dynamic_width = f"{name:{width}}"
+
+# Precision from variable
+precision = 2
+dynamic_precision = f"{pi:.{precision}f}"
+
+# Both width and precision from variables
+dynamic_both = f"{pi:{width}.{precision}f}"
+
+# ============================================================================
+# Complex Nested Expressions
+# ============================================================================
+
+# Conditional expressions
+age = 25
+status = f"Status: {('Adult' if age >= 18 else 'Minor')}"
+
+# Nested f-strings (in format spec)
+inner_value = 5
+outer = f"Result: {inner_value:0{inner_value}d}"
+
+# Lambda expressions
+double = lambda x: x * 2
+lambda_result = f"Double of 5 is {double(5)}"
+
+# ============================================================================
+# Edge Cases
+# ============================================================================
+
+# Empty f-string
+empty = f""
+
+# F-string with only spaces
+spaces = f"   "
+
+# Single character in braces
+single = f"{x}"
+
+# Expression with operators
+operators = f"{x + y - 5 * 2 / 3}"
+
+# Comparison in f-string
+comparison = f"Is x > y? {x > y}"
+
+# Boolean expressions
+bool_expr = f"Result: {True and False or True}"
+
+# String concatenation inside
+concat = f"{'Hello' + ' ' + 'World'}"
+
+# Multiple nested parentheses
+nested_parens = f"{((((x + y))))}"
+
+# ============================================================================
+# Format Spec Edge Cases
+# ============================================================================
+
+# Empty format spec
+empty_spec = f"{x:}"
+
+# Just type code
+just_type = f"{x:d}"
+
+# Just alignment
+just_align = f"{name:>}"
+
+# Alternate form
+alternate = f"{15:#x}"
+alternate_oct = f"{15:#o}"
+alternate_bin = f"{15:#b}"
+
+# ============================================================================
+# String Operations in F-Strings
+# ============================================================================
+
+# String slicing
+text = "Hello World"
+sliced = f"First 5 chars: {text[:5]}"
+
+# String methods
+methods = f"Upper: {text.upper()}, Lower: {text.lower()}"
+
+# String multiplication
+repeated = f"Repeat: {'x' * 5}"
+
+# String formatting
+formatted = f"Formatted: {str.format('Hello {}', name)}"
+
+# ============================================================================
+# Numeric Operations
+# ============================================================================
+
+# Bitwise operations
+bits = 12
+bitwise = f"AND: {bits & 7}, OR: {bits | 3}, XOR: {bits ^ 5}"
+
+# Floor division
+floor_div = f"Floor division: {17 // 3}"
+
+# Power operator
+power = f"Power: {2 ** 8}"
+
+# Modulo
+modulo = f"Modulo: {17 % 5}"
+
+# ============================================================================
+# Case Sensitivity Tests
+# ============================================================================
+
+# Uppercase F
+uppercase_f = F"Uppercase F prefix with {name}"
+
+# Mixed case in raw f-strings
+mixed_rf = Rf"Mixed case RF with {name}"
+mixed_fr = Fr"Mixed case FR with {name}"
+mixed_RF = RF"All caps RF with {name}"
+mixed_FR = FR"All caps FR with {name}"
+
+# Triple-quoted with mixed case
+triple_F = F"""Triple with uppercase F and {name}"""
+
+# ============================================================================
+# Quote Combinations
+# ============================================================================
+
+# Single quotes in double-quoted f-string
+single_in_double = f"She said: 'Hello {name}'"
+
+# Double quotes in single-quoted f-string
+double_in_single = f'He said: "Welcome {name}"'
+
+# Mixed quotes in triple-quoted
+mixed_quotes = f"""
+Single: 'quote'
+Double: "quote"
+Name: {name}
+"""
+
+# ============================================================================
+# Whitespace Handling
+# ============================================================================
+
+# Leading and trailing spaces
+spaces_around = f"  {name}  "
+
+# Tabs and spaces
+tabs = f"\t{name}\t"
+
+# Multiple whitespace types
+mixed_whitespace = f"  \t  {name}  \t  "
+
+# Newlines before and after
+newlines = f"\n{name}\n"
+
+# ============================================================================
+# Special Characters
+# ============================================================================
+
+# Unicode characters
+unicode = f"Unicode: \u2764 {name}"
+
+# Emoji
+emoji = f"Emoji: 😀 {name}"
+
+# Special symbols
+symbols = f"Symbols: @ # $ % ^ & * {name}"
+
+# ============================================================================
+# Implicit String Concatenation with F-Strings
+# ============================================================================
+
+# Adjacent f-strings
+adjacent = f"First {x}" f" Second {y}"
+
+# F-string with regular string
+mixed_concat = f"F-string {x} " "regular string"
+
+# Multiple f-strings in sequence
+multi = f"One {x} " f"Two {y} " f"Three {x + y}"
+
+# ============================================================================
+# Format Spec with Nested Braces
+# ============================================================================
+
+# Format spec with expression for width
+expr_width = 15
+nested_format = f"{name:{expr_width}s}"
+
+# Format spec with expression for precision
+expr_prec = 3
+nested_prec = f"{pi:{expr_width}.{expr_prec}f}"
+
+# ============================================================================
+# Real-World Examples
+# ============================================================================
+
+# SQL query building
+table = "users"
+column = "name"
+query = f"SELECT {column} FROM {table} WHERE id = {42}"
+
+# File paths
+username = "alice"
+filename = "data.txt"
+path = f"/home/{username}/documents/{filename}"
+
+# Log messages
+level = "INFO"
+message = "Operation completed"
+log = f"[{level}] {message} - User: {username}"
+
+# URL building
+base_url = "https://api.example.com"
+endpoint = "users"
+user_id = 123
+url = f"{base_url}/{endpoint}/{user_id}"
+
+# HTML generation
+title = "Welcome"
+content = "Hello, World!"
+html = f"<h1>{title}</h1><p>{content}</p>"
+
+# JSON-like formatting (manual)
+key = "name"
+val = "Alice"
+json_like = f'{{"{key}": "{val}"}}'
+
+# CSV row
+fields = ["Alice", 30, "Engineer"]
+csv_row = f"{fields[0]},{fields[1]},{fields[2]}"
+
+# Configuration string
+setting = "timeout"
+value = 30
+config = f"{setting}={value}"
+
+# Error message
+error_code = 404
+error_msg = "Not Found"
+error = f"Error {error_code}: {error_msg}"
+
+# Progress indicator
+current = 45
+total = 100
+progress = f"Progress: {current}/{total} ({current/total*100:.1f}%)"
+
+# ============================================================================
+# Comments in F-Strings (not allowed in expressions)
+# ============================================================================
+
+# F-strings cannot contain # in the expression part directly
+# But can be in strings within the expression
+comment_safe = f"Hash symbol: {'#'}"
+
+# ============================================================================
+# All Features Combined
+# ============================================================================
+
+# The ultimate f-string combining multiple features
+user = "Admin"
+score = 9876
+ratio = 0.9876
+ultimate = f"""
+{'='*50}
+User Report for {user!r}
+{'='*50}
+Score:     {score:>10,d}
+Percentage: {ratio:>9.1%}
+Binary:    {score:>10b}
+Hex:       {score:>#10x}
+{'='*50}
+Status:    {('Excellent' if ratio > 0.9 else 'Good'):^10}
+"""
+
+print("F-String examples completed successfully!")

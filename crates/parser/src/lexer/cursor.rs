@@ -98,6 +98,7 @@ impl LineCursor {
             LogosToken::Bytes => TokenKind::Bytes,
             LogosToken::RawBytes => TokenKind::RawBytes,
             LogosToken::FString => TokenKind::FString,
+            LogosToken::RawFString => TokenKind::RawFString,
             LogosToken::TString => TokenKind::TString,
             LogosToken::RawTString => TokenKind::RawTString,
             LogosToken::Plus => TokenKind::Plus,

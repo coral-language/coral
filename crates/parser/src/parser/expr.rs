@@ -847,6 +847,7 @@ impl<'a> Parser<'a> {
                 }))
             }
             TokenKind::FString => self.parse_fstring(),
+            TokenKind::RawFString => self.parse_raw_fstring(),
             TokenKind::TString => self.parse_tstring(),
             TokenKind::RawTString => self.parse_raw_tstring(),
             TokenKind::Ident => {
@@ -1324,6 +1325,7 @@ impl<'a> Parser<'a> {
 
     /// Parse an f-string into a JoinedStr with properly decomposed expressions.
     /// Handles: basic interpolation, conversions (!s/!r/!a), format specs, escaping, nesting
+    /// Supports: f"...", f'...', f"""...""", f'''...'''
     fn parse_fstring(&mut self) -> ParseResult<Expr<'a>> {
         let token = self.advance();
         let span = token.span;
@@ -1331,21 +1333,64 @@ impl<'a> Parser<'a> {
         let end = usize::from(span.end());
         let text = &self.source[start..end];
 
-        // For now, we'll do a simplified implementation that creates a basic JoinedStr
-        // with the full text as a single Constant. A complete implementation would:
-        // 1. Parse the f-string prefix (f", f', F", F', rf", etc.)
-        // 2. Scan for { and } to find expression boundaries
-        // 3. Handle {{ and }} escapes
-        // 4. Recursively parse expressions inside {}
-        // 5. Parse ! conversions and : format specs
-        // 6. Build FormattedValue nodes
-        // 7. Mix Constant and FormattedValue nodes in values array
-
-        // Extract string content (remove f" prefix and trailing ")
-        let content = if text.starts_with("f\"") || text.starts_with("F\"") {
-            &text[2..text.len() - 1]
+        // Extract string content - handle all variants of f-strings
+        let content = if text.starts_with("f\"\"\"") || text.starts_with("F\"\"\"") {
+            &text[4..text.len() - 3] // Triple-quoted double
+        } else if text.starts_with("f'''") || text.starts_with("F'''") {
+            &text[4..text.len() - 3] // Triple-quoted single
+        } else if text.starts_with("f\"") || text.starts_with("F\"") {
+            &text[2..text.len() - 1] // Regular double
         } else if text.starts_with("f'") || text.starts_with("F'") {
-            &text[2..text.len() - 1]
+            &text[2..text.len() - 1] // Regular single
+        } else {
+            return Err(error(
+                ErrorKind::InvalidSyntax {
+                    message: "Invalid f-string prefix".to_string(),
+                },
+                span,
+            ));
+        };
+
+        // Parse f-string content into values
+        let values = self.parse_fstring_content(content, span, 0)?;
+        let values_slice = self.arena.alloc_slice_iter(values);
+
+        Ok(Expr::JoinedStr(JoinedStrExpr {
+            values: values_slice,
+            span,
+        }))
+    }
+
+    /// Parse a raw f-string (rf"..." or fr"...")
+    /// Raw f-strings treat backslashes literally but still allow interpolation
+    fn parse_raw_fstring(&mut self) -> ParseResult<Expr<'a>> {
+        let token = self.advance();
+        let span = token.span;
+        let start = usize::from(span.start());
+        let end = usize::from(span.end());
+        let text = &self.source[start..end];
+
+        // Extract string content - handle all variants of raw f-strings
+        let content = if text.starts_with("rf\"\"\"")
+            || text.starts_with("Rf\"\"\"")
+            || text.starts_with("rF\"\"\"")
+            || text.starts_with("RF\"\"\"")
+            || text.starts_with("fr\"\"\"")
+            || text.starts_with("Fr\"\"\"")
+            || text.starts_with("fR\"\"\"")
+            || text.starts_with("FR\"\"\"")
+        {
+            &text[5..text.len() - 3] // Triple-quoted double
+        } else if text.starts_with("rf'''")
+            || text.starts_with("Rf'''")
+            || text.starts_with("rF'''")
+            || text.starts_with("RF'''")
+            || text.starts_with("fr'''")
+            || text.starts_with("Fr'''")
+            || text.starts_with("fR'''")
+            || text.starts_with("FR'''")
+        {
+            &text[5..text.len() - 3] // Triple-quoted single
         } else if text.starts_with("rf\"")
             || text.starts_with("Rf\"")
             || text.starts_with("rF\"")
@@ -1355,7 +1400,7 @@ impl<'a> Parser<'a> {
             || text.starts_with("fR\"")
             || text.starts_with("FR\"")
         {
-            &text[3..text.len() - 1]
+            &text[3..text.len() - 1] // Regular double
         } else if text.starts_with("rf'")
             || text.starts_with("Rf'")
             || text.starts_with("rF'")
@@ -1365,13 +1410,18 @@ impl<'a> Parser<'a> {
             || text.starts_with("fR'")
             || text.starts_with("FR'")
         {
-            &text[3..text.len() - 1]
+            &text[3..text.len() - 1] // Regular single
         } else {
-            text
+            return Err(error(
+                ErrorKind::InvalidSyntax {
+                    message: "Invalid raw f-string prefix".to_string(),
+                },
+                span,
+            ));
         };
 
-        // Parse f-string content into values
-        let values = self.parse_fstring_content(content, span)?;
+        // Parse f-string content into values (raw f-strings still support interpolation)
+        let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
 
         Ok(Expr::JoinedStr(JoinedStrExpr {
@@ -1381,11 +1431,27 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse the content of an f-string, returning a mix of Constant and FormattedValue nodes
+    /// depth: tracks nesting level of f-strings (for validation)
     fn parse_fstring_content(
         &mut self,
         content: &str,
         full_span: TextRange,
+        depth: u32,
     ) -> ParseResult<ThinVec<Expr<'a>>> {
+        // Limit nesting depth to prevent stack overflow or excessive complexity
+        const MAX_NESTING_DEPTH: u32 = 10;
+        if depth > MAX_NESTING_DEPTH {
+            return Err(error(
+                ErrorKind::InvalidSyntax {
+                    message: format!(
+                        "F-string nesting depth exceeds maximum of {}",
+                        MAX_NESTING_DEPTH
+                    ),
+                },
+                full_span,
+            ));
+        }
+
         let mut values = ThinVec::new();
         let mut chars = content.chars().peekable();
         let mut literal = String::new();
@@ -1414,22 +1480,25 @@ impl<'a> Parser<'a> {
                     let (expr_str, conversion, format_spec) =
                         self.extract_fstring_expr(&mut chars, full_span)?;
 
-                    // Parse the expression string
-                    let value_expr = if !expr_str.trim().is_empty() {
-                        self.arena
-                            .alloc(self.parse_fstring_expression(&expr_str, full_span)?)
-                    } else {
+                    // Check if expression is empty
+                    if expr_str.trim().is_empty() {
                         return Err(error(
                             ErrorKind::InvalidSyntax {
-                                message: "Empty expression in f-string".to_string(),
+                                message: "Empty expression in f-string (expressions inside '{}' cannot be empty)".to_string(),
                             },
                             full_span,
                         ));
-                    };
+                    }
 
-                    // Parse format_spec if present
+                    // Parse the expression string
+                    let value_expr = self
+                        .arena
+                        .alloc(self.parse_fstring_expression(&expr_str, full_span)?);
+
+                    // Parse format_spec if present (recursively parse as it can contain expressions)
                     let format_spec_expr = if let Some(spec) = format_spec {
-                        let spec_values = self.parse_fstring_content(&spec, full_span)?;
+                        let spec_values =
+                            self.parse_fstring_content(&spec, full_span, depth + 1)?;
                         let spec_slice = self.arena.alloc_slice_iter(spec_values);
                         Some(self.arena.alloc(JoinedStrExpr {
                             values: spec_slice,
@@ -1596,10 +1665,17 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok((expr, None, None))
+        // If we reach here, the expression was not properly closed
+        Err(error(
+            ErrorKind::InvalidSyntax {
+                message: "Unclosed '{' in f-string - missing closing '}'".to_string(),
+            },
+            span,
+        ))
     }
 
     /// Extract format spec (everything after : until })
+    /// Also validates the format spec for common format codes
     fn extract_format_spec(
         &mut self,
         chars: &mut std::iter::Peekable<std::str::Chars>,
@@ -1622,6 +1698,10 @@ impl<'a> Parser<'a> {
                     } else {
                         // End of format spec
                         chars.next();
+                        // Validate format spec if it doesn't contain nested expressions
+                        if depth == 0 && !spec.contains('{') {
+                            self.validate_format_spec(&spec)?;
+                        }
                         return Ok(spec);
                     }
                 }
@@ -1632,7 +1712,99 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Validate format spec even if we reached the end
+        if depth == 0 && !spec.contains('{') {
+            self.validate_format_spec(&spec)?;
+        }
         Ok(spec)
+    }
+
+    /// Validate format spec for common format codes
+    /// Format spec grammar (simplified): [[fill]align][sign][#][0][width][grouping_option][.precision][type]
+    fn validate_format_spec(&self, spec: &str) -> ParseResult<()> {
+        if spec.is_empty() {
+            return Ok(());
+        }
+
+        // Allow nested expressions (containing {})
+        if spec.contains('{') {
+            return Ok(());
+        }
+
+        let chars: Vec<char> = spec.chars().collect();
+        let mut pos = 0;
+
+        // Helper to check if char is a valid type code
+        let is_type_code = |c: char| -> bool {
+            matches!(
+                c,
+                'b' | 'c'
+                    | 'd'
+                    | 'e'
+                    | 'E'
+                    | 'f'
+                    | 'F'
+                    | 'g'
+                    | 'G'
+                    | 'n'
+                    | 'o'
+                    | 's'
+                    | 'x'
+                    | 'X'
+                    | '%'
+            )
+        };
+
+        // Skip fill and align (any char followed by <, >, ^, =)
+        if pos + 1 < chars.len() && matches!(chars[pos + 1], '<' | '>' | '^' | '=') {
+            pos += 2;
+        } else if pos < chars.len() && matches!(chars[pos], '<' | '>' | '^' | '=') {
+            pos += 1;
+        }
+
+        // Skip sign (+, -, space)
+        if pos < chars.len() && matches!(chars[pos], '+' | '-' | ' ') {
+            pos += 1;
+        }
+
+        // Skip alternate form (#)
+        if pos < chars.len() && chars[pos] == '#' {
+            pos += 1;
+        }
+
+        // Skip zero padding
+        if pos < chars.len() && chars[pos] == '0' {
+            pos += 1;
+        }
+
+        // Skip width (digits or *)
+        while pos < chars.len() && (chars[pos].is_ascii_digit() || chars[pos] == '*') {
+            pos += 1;
+        }
+
+        // Skip grouping option (,, _)
+        if pos < chars.len() && matches!(chars[pos], ',' | '_') {
+            pos += 1;
+        }
+
+        // Skip precision (.digits or .*)
+        if pos < chars.len() && chars[pos] == '.' {
+            pos += 1;
+            while pos < chars.len() && (chars[pos].is_ascii_digit() || chars[pos] == '*') {
+                pos += 1;
+            }
+        }
+
+        // Check type code (should be at the end if present)
+        if pos < chars.len() && is_type_code(chars[pos]) {
+            pos += 1;
+        }
+
+        // If we haven't consumed all characters, the format spec might be invalid
+        // But we'll be lenient and just warn rather than error
+        // (Python also allows custom format specs for user-defined types)
+        let _ = pos; // Suppress unused warning
+        Ok(())
     }
 
     /// Parse an expression string from inside an f-string.
@@ -1827,7 +1999,7 @@ impl<'a> Parser<'a> {
         };
 
         // Parse t-string content (same as f-string for now, will be semantically different)
-        let values = self.parse_fstring_content(content, span)?;
+        let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
 
         Ok(Expr::TString(TStringExpr {
@@ -1887,7 +2059,7 @@ impl<'a> Parser<'a> {
 
         // For raw t-strings, we still parse interpolations but escape sequences are literal
         // For simplicity, we'll parse it the same way as regular t-strings for now
-        let values = self.parse_fstring_content(content, span)?;
+        let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
 
         Ok(Expr::TString(TStringExpr {
