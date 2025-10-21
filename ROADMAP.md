@@ -44,12 +44,12 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] String prefix combinations validation (`fr""`, `rf""`, `tr""`, etc.)
   - [x] Better error messages for unclosed strings
 
-- [ ] **Number Literal Enhancements**
-  - [ ] Validate underscore positions (cannot be at start/end or consecutive)
-  - [ ] Better error messages for malformed numbers (e.g., `0x`, `0b`)
-  - [ ] Validate hex digits in hex literals
-  - [ ] Validate octal digits in octal literals
-  - [ ] Validate binary digits in binary literals
+- [x] **Number Literal Enhancements**
+  - [x] Validate underscore positions (cannot be at start/end or consecutive)
+  - [x] Better error messages for malformed numbers (e.g., `0x`, `0b`)
+  - [x] Validate hex digits in hex literals
+  - [x] Validate octal digits in octal literals
+  - [x] Validate binary digits in binary literals
 
 - [ ] **Indentation Edge Cases**
   - [ ] Mix of tabs and spaces detection and warnings

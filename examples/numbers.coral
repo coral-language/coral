@@ -1,0 +1,196 @@
+# Number Literal Examples in Coral
+# This file demonstrates all valid number literal types supported by the language
+
+# ===== Decimal Integers =====
+
+# Basic decimal integers
+zero = 0
+positive = 42
+negative = -123
+
+# Large numbers with underscores (for readability)
+million = 1_000_000
+billion = 1_000_000_000
+large_number = 123_456_789
+
+# ===== Floating-Point Numbers =====
+
+# Basic floating-point numbers
+pi = 3.14159
+euler = 2.71828
+negative_float = -1.5
+
+# Numbers without integer part
+fraction = .5
+small_fraction = .001
+
+# Numbers without fractional part
+whole = 5.
+zero_point = 0.
+
+# Large floats with underscores
+large_float = 1_234.567_89
+scientific_coeff = 6.022_140_76e23
+
+# ===== Scientific Notation =====
+
+# Basic scientific notation
+avogadro = 6.022e23
+planck = 6.626e-34
+speed_of_light = 2.998e8
+
+# With explicit positive exponents
+explicit_positive = 1.23e+5
+
+# Large numbers with underscores in mantissa
+large_scientific = 1_234.567_89e-10
+
+# ===== Binary Literals =====
+
+# Basic binary numbers
+binary_zero = 0b0
+binary_one = 0b1
+binary_ten = 0b1010
+binary_ff = 0b11111111
+
+# Binary with underscores for readability
+byte = 0b1111_0000
+word = 0b11111111_00000000
+large_binary = 0b10101010_11110000_11001100_00110011
+
+# Uppercase prefix
+uppercase_binary = 0B1010
+
+# ===== Octal Literals =====
+
+# Basic octal numbers
+octal_zero = 0o0
+octal_seven = 0o7
+octal_ten = 0o12
+octal_ff = 0o377
+
+# Octal with underscores for readability
+permissions = 0o755
+large_octal = 0o123_456_701
+
+# Uppercase prefix
+uppercase_octal = 0O755
+
+# ===== Hexadecimal Literals =====
+
+# Basic hexadecimal numbers
+hex_zero = 0x0
+hex_fifteen = 0xf
+hex_255 = 0xff
+hex_large = 0xdeadbeef
+
+# Hex with underscores for readability
+rgb_red = 0xff_00_00
+mac_address = 0x00_1B_44_11_3A_B7
+uuid = 0x550e8400_e29b_41d4_a716_446655440000
+
+# Mixed case hex digits
+mixed_case = 0xDeAdBeEf
+uppercase_hex = 0XDEADBEEF
+
+# ===== Complex Numbers =====
+
+# Basic complex numbers
+imaginary_unit = 1j
+imaginary_unit_upper = 1J
+pure_imaginary = 3j
+negative_imaginary = -2j
+
+# Complex numbers with real and imaginary parts
+complex_zero = 0j
+complex_int = 3+4j
+complex_float = 3.14-2.71j
+
+# Complex with scientific notation
+complex_scientific = 1.23e-4+5.67e8j
+
+# Complex with underscores
+complex_underscores = 1_234.567_89+9_876.543_21j
+
+# ===== Edge Cases and Special Values =====
+
+# All valid single-digit numbers
+digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+# Zero in different bases
+decimal_zero = 0
+binary_zero = 0b0
+octal_zero = 0o0
+hex_zero = 0x0
+float_zero = 0.0
+complex_zero = 0j
+
+# One in different bases
+decimal_one = 1
+binary_one = 0b1
+octal_one = 0o1
+hex_one = 0x1
+
+# Maximum representable integers (conceptually)
+max_int32 = 2147483647
+max_int64 = 9223372036854775807
+
+# Very small numbers
+epsilon = 2.22e-16
+planck_length = 1.616255e-35
+
+# ===== Numbers in Expressions =====
+
+# Arithmetic with different number types
+sum = 42 + 3.14 + 0xff + 0b1010
+product = 1_000 * 2.5 * 0o10
+
+# Comparisons
+is_equal = 42 == 0x2a
+is_greater = 3.14 > 3
+
+# Function calls with numbers
+result = pow(2, 8)  # 256
+sqrt_result = sqrt(16.0)  # 4.0
+
+# ===== Numbers in Collections =====
+
+# Lists of numbers
+primes = [2, 3, 5, 7, 11, 13, 17, 19]
+fibonacci = [0, 1, 1, 2, 3, 5, 8, 13, 21]
+
+# Dictionaries with numeric keys and values
+constants = {
+    3.14159: "pi",
+    2.71828: "e",
+    1.41421: "sqrt(2)"
+}
+
+# Sets of numbers
+evens = {0, 2, 4, 6, 8}
+odds = {1, 3, 5, 7, 9}
+
+# ===== Bitwise Operations =====
+
+# Bitwise operations on integers
+flags = 0b0001_1100
+mask = 0xff
+result_and = flags & mask
+result_or = flags | mask
+result_xor = flags ^ mask
+result_shift = flags << 2
+
+# ===== Number Formatting Examples =====
+
+# These demonstrate how numbers might be formatted in output
+# (actual formatting depends on runtime implementation)
+
+# Integer formatting
+decimal_format = format(255, "d")    # "255"
+binary_format = format(255, "b")     # "11111111"
+octal_format = format(255, "o")      # "377"
+hex_format = format(255, "x")        # "ff"
+
+# Float formatting
+float_format = format(3.14159, ".2f")  # "3.14"
+scientific_format = format(1234.5, "e")  # "1.2345e+03"

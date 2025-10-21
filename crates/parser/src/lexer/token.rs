@@ -225,11 +225,12 @@ pub enum LogosToken {
     #[regex(r"[\p{XID_Start}_][\p{XID_Continue}]*")]
     Ident, // Complex numbers must be checked before regular numbers
     // Supports underscores and all number formats
-    #[regex(r"(0[bB][01](_?[01])*|0[oO][0-7](_?[0-7])*|0[xX][0-9a-fA-F](_?[0-9a-fA-F])*|[0-9](_?[0-9])*(\.[0-9](_?[0-9])*)?([eE][+-]?[0-9](_?[0-9])*)?)[jJ]")]
+    #[regex(r"(0[bB][01][01]*(_?[01])*|0[oO][0-7][0-7]*(_?[0-7])*|0[xX][0-9a-fA-F][0-9a-fA-F]*(_?[0-9a-fA-F])*|[0-9](_?[0-9])*(\.[0-9](_?[0-9])*)?([eE][+-]?[0-9](_?[0-9])*)?)[jJ]")]
     Complex,
 
     // Binary, octal, hex, decimal with underscores and scientific notation
-    #[regex(r"0[bB][01](_?[01])*|0[oO][0-7](_?[0-7])*|0[xX][0-9a-fA-F](_?[0-9a-fA-F])*|[0-9](_?[0-9])*(\.[0-9](_?[0-9])*)?([eE][+-]?[0-9](_?[0-9])*)?")]
+    // Require at least one digit after base prefixes (0b, 0o, 0x)
+    #[regex(r"0[bB][01][01]*(_?[01])*|0[oO][0-7][0-7]*(_?[0-7])*|0[xX][0-9a-fA-F][0-9a-fA-F]*(_?[0-9a-fA-F])*|[0-9](_?[0-9])*(\.[0-9](_?[0-9])*)?([eE][+-]?[0-9](_?[0-9])*)?")]
     Number,
 
     // Bytes literals must be checked before regular strings
