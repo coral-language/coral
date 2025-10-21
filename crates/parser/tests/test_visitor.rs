@@ -644,3 +644,209 @@ fn test_transformation_memory_safety() {
     assert!(stats.allocated_bytes > 0);
     assert!(stats.chunk_count >= 1);
 }
+
+#[test]
+fn test_visitor_funcdef_returns_traversal() {
+    let arena = Arena::new();
+
+    // Create a function with return type annotation
+    let return_type_expr = arena.alloc(Expr::Name(NameExpr {
+        id: arena.alloc_str("int"),
+        span: TextRange::default(),
+    }));
+
+    let func_def = Stmt::FuncDef(FuncDefStmt {
+        name: arena.alloc_str("test_func"),
+        type_params: &[],
+        args: Arguments {
+            posonlyargs: &[],
+            args: &[],
+            vararg: None,
+            kwonlyargs: &[],
+            kw_defaults: &[],
+            kwarg: None,
+            defaults: &[],
+        },
+        body: &[],
+        decorators: &[],
+        returns: Some(Box::new(return_type_expr.clone())),
+        is_async: false,
+        span: TextRange::default(),
+        docstring: None,
+    });
+
+    let module = arena.alloc(Module {
+        body: arena.alloc_slice_iter([func_def]),
+        span: TextRange::default(),
+        docstring: None,
+    });
+
+    struct TestVisitor {
+        stmt_count: usize,
+        expr_count: usize,
+        name_count: usize,
+    }
+
+    impl<'a> MutVisitor<'a> for TestVisitor {
+        fn visit_stmt(&mut self, stmt: &Stmt<'a>) {
+            self.stmt_count += 1;
+            coral_parser::visitor::mut_walk::walk_stmt(self, stmt);
+        }
+
+        fn visit_expr(&mut self, expr: &Expr<'a>) {
+            self.expr_count += 1;
+            if let Expr::Name(_) = expr {
+                self.name_count += 1;
+            }
+            coral_parser::visitor::mut_walk::walk_expr(self, expr);
+        }
+    }
+
+    let mut visitor = TestVisitor {
+        stmt_count: 0,
+        expr_count: 0,
+        name_count: 0,
+    };
+
+    visitor.visit_module(module);
+
+    // Should have visited 1 statement (FuncDef), 1 expression (return type), 1 name
+    assert_eq!(visitor.stmt_count, 1);
+    assert_eq!(visitor.expr_count, 1);
+    assert_eq!(visitor.name_count, 1);
+}
+
+#[test]
+fn test_visitor_formatted_value_format_spec_traversal() {
+    let arena = Arena::new();
+
+    // Create a FormattedValue with format_spec
+    let value_expr = create_constant(&arena, "3.14159");
+    let format_spec_literal = arena.alloc(Expr::Constant(ConstantExpr {
+        value: arena.alloc_str(".2f"),
+        span: TextRange::default(),
+    }));
+
+    let format_spec = arena.alloc(JoinedStrExpr {
+        values: arena.alloc_slice_iter([format_spec_literal.clone()]),
+        span: TextRange::default(),
+    });
+
+    let formatted_value = arena.alloc(Expr::FormattedValue(FormattedValueExpr {
+        value: value_expr,
+        conversion: None,
+        format_spec: Some(format_spec),
+        span: TextRange::default(),
+    }));
+
+    let expr_stmt = Stmt::Expr(ExprStmt {
+        value: formatted_value.clone(),
+        span: TextRange::default(),
+    });
+
+    let module = arena.alloc(Module {
+        body: arena.alloc_slice_iter([expr_stmt]),
+        span: TextRange::default(),
+        docstring: None,
+    });
+
+    struct TestVisitor {
+        stmt_count: usize,
+        expr_count: usize,
+        constant_count: usize,
+    }
+
+    impl<'a> MutVisitor<'a> for TestVisitor {
+        fn visit_stmt(&mut self, stmt: &Stmt<'a>) {
+            self.stmt_count += 1;
+            coral_parser::visitor::mut_walk::walk_stmt(self, stmt);
+        }
+
+        fn visit_expr(&mut self, expr: &Expr<'a>) {
+            self.expr_count += 1;
+            if let Expr::Constant(_) = expr {
+                self.constant_count += 1;
+            }
+            coral_parser::visitor::mut_walk::walk_expr(self, expr);
+        }
+    }
+
+    let mut visitor = TestVisitor {
+        stmt_count: 0,
+        expr_count: 0,
+        constant_count: 0,
+    };
+
+    visitor.visit_module(module);
+
+    // Should have visited:
+    // - 1 statement (ExprStmt)
+    // - 3 expressions (FormattedValue, value constant, format_spec constant)
+    // - 2 constants (value "3.14159" and format_spec ".2f")
+    assert_eq!(visitor.stmt_count, 1);
+    assert_eq!(visitor.expr_count, 3);
+    assert_eq!(visitor.constant_count, 2);
+}
+
+#[test]
+fn test_visitor_formatted_value_no_format_spec() {
+    let arena = Arena::new();
+
+    // Create a FormattedValue without format_spec
+    let value_expr = create_constant(&arena, "hello");
+
+    let formatted_value = arena.alloc(Expr::FormattedValue(FormattedValueExpr {
+        value: value_expr,
+        conversion: None,
+        format_spec: None,
+        span: TextRange::default(),
+    }));
+
+    let expr_stmt = Stmt::Expr(ExprStmt {
+        value: formatted_value.clone(),
+        span: TextRange::default(),
+    });
+
+    let module = arena.alloc(Module {
+        body: arena.alloc_slice_iter([expr_stmt]),
+        span: TextRange::default(),
+        docstring: None,
+    });
+
+    struct TestVisitor {
+        stmt_count: usize,
+        expr_count: usize,
+        constant_count: usize,
+    }
+
+    impl<'a> MutVisitor<'a> for TestVisitor {
+        fn visit_stmt(&mut self, stmt: &Stmt<'a>) {
+            self.stmt_count += 1;
+            coral_parser::visitor::mut_walk::walk_stmt(self, stmt);
+        }
+
+        fn visit_expr(&mut self, expr: &Expr<'a>) {
+            self.expr_count += 1;
+            if let Expr::Constant(_) = expr {
+                self.constant_count += 1;
+            }
+            coral_parser::visitor::mut_walk::walk_expr(self, expr);
+        }
+    }
+
+    let mut visitor = TestVisitor {
+        stmt_count: 0,
+        expr_count: 0,
+        constant_count: 0,
+    };
+
+    visitor.visit_module(module);
+
+    // Should have visited:
+    // - 1 statement (ExprStmt)
+    // - 2 expressions (FormattedValue, value constant)
+    // - 1 constant (value "hello")
+    assert_eq!(visitor.stmt_count, 1);
+    assert_eq!(visitor.expr_count, 2);
+    assert_eq!(visitor.constant_count, 1);
+}

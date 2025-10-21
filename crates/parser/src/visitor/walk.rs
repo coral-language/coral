@@ -24,6 +24,9 @@ pub fn walk_stmt<'a, V: Visitor<'a> + ?Sized>(visitor: &V, stmt: &Stmt<'a>) {
             for decorator in f.decorators {
                 visitor.visit_expr(decorator);
             }
+            if let Some(ref returns) = f.returns {
+                visitor.visit_expr(returns);
+            }
             for s in f.body {
                 visitor.visit_stmt(s);
             }
@@ -259,7 +262,11 @@ pub fn walk_expr<'a, V: Visitor<'a> + ?Sized>(visitor: &V, expr: &Expr<'a>) {
         }
         Expr::FormattedValue(f) => {
             visitor.visit_expr(f.value);
-            // format_spec is a JoinedStr, not an Expr, so we skip it for now
+            if let Some(format_spec) = f.format_spec {
+                for value in format_spec.values {
+                    visitor.visit_expr(value);
+                }
+            }
         }
         Expr::JoinedStr(j) => {
             for value in j.values {
