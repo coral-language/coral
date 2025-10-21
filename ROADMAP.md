@@ -79,11 +79,10 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 
 ### Visitor Module
 
-- [ ] **Mutable Visitor Implementation**
-  - [ ] Design transformation API that works with arena allocation
-  - [ ] AST transformation helpers (e.g., `transform_expr`, `transform_stmt`)
-  - [ ] Pattern for building new AST nodes from old ones
-  - [ ] Examples of common transformations (desugaring, optimization)
+- [x] **Mutable Visitor Implementation**
+  - [x] Design transformation API that works with arena allocation
+  - [x] AST transformation helpers (e.g., `transform_expr`, `transform_stmt`)
+  - [x] Pattern for building new AST nodes from old ones
 
 - [ ] **Parallel Visitor Enhancements**
   - [ ] Work-stealing for unbalanced trees

@@ -1,7 +1,64 @@
 //! Visitor pattern for AST traversal with concurrency support.
+//!
+//! This module provides multiple visitor patterns for working with Coral's AST:
+//!
+//! ## Immutable Visitor (`Visitor` trait)
+//!
+//! For read-only traversal of the AST. Provides thread-safe concurrent traversal
+//! and is the foundation for analysis passes.
+//!
+//! ```rust,ignore
+//! struct NodeCounter {
+//!     count: AtomicUsize,
+//! }
+//!
+//! impl<'a> Visitor<'a> for NodeCounter {
+//!     fn visit_expr(&self, expr: &Expr<'a>) {
+//!         self.count.fetch_add(1, Ordering::SeqCst);
+//!         walk::walk_expr(self, expr); // Continue traversal
+//!     }
+//! }
+//! ```
+//!
+//! ## Mutable Visitor (`MutVisitor` trait)
+//!
+//! For traversal that needs to maintain state. Useful for collecting information
+//! about nodes that need transformation or performing analysis that requires
+//! mutable state.
+//!
+//! ## Transformation API (`transform` module)
+//!
+//! For creating modified AST nodes in Coral's arena-allocated system. Since the
+//! AST is immutable, transformations require allocating new nodes.
+//!
+//! ```rust,ignore
+//! let transformer = Transformer::new(&arena);
+//! let new_expr = transformer.transform_expr(old_expr, |expr| {
+//!     match expr {
+//!         Expr::Constant(c) if c.value == "42" => {
+//!             Expr::Constant(ConstantExpr {
+//!                 value: "forty-two",
+//!                 span: c.span,
+//!             })
+//!         }
+//!         other => other.clone(),
+//!     }
+//! });
+//! ```
+//!
+//! ## Parallel Traversal (`ParallelVisitor`)
+//!
+//! For concurrent analysis of independent AST subtrees using rayon.
+//!
+//! ## Walk Functions
+//!
+//! Each visitor type has corresponding walk functions that implement the default
+//! traversal behavior for each AST node type.
 
 pub mod mut_visit;
+pub mod mut_walk;
 pub mod parallel;
+pub mod transform;
 pub mod walk;
 
 use crate::ast::*;
