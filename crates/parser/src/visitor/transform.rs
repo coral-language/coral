@@ -7,9 +7,9 @@
 //! ## Basic Usage
 //!
 //! ```rust,ignore
-//! use coral_parser::visitor::Transformer;
+//! use coral_parser::visitor::transform::Transformer;
 //!
-//! let arena = Arena::new();
+//! let arena = coral_parser::Arena::new();
 //! let transformer = Transformer::new(&arena);
 //!
 //! // Transform an expression

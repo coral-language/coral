@@ -84,11 +84,11 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] AST transformation helpers (e.g., `transform_expr`, `transform_stmt`)
   - [x] Pattern for building new AST nodes from old ones
 
-- [ ] **Parallel Visitor Enhancements**
-  - [ ] Work-stealing for unbalanced trees
-  - [ ] Granularity control (when to parallelize vs sequential)
-  - [ ] Better error aggregation from parallel workers
-  - [ ] Progress tracking and cancellation support
+- [x] **Parallel Visitor Enhancements**
+  - [x] Work-stealing for unbalanced trees
+  - [x] Granularity control (when to parallelize vs sequential)
+  - [x] Better error aggregation from parallel workers
+  - [x] Progress tracking and cancellation support
 
 - [ ] **Walk Function Completeness**
   - [ ] Ensure all AST node types have walk functions

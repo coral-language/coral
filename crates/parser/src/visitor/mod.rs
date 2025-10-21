@@ -7,7 +7,12 @@
 //! For read-only traversal of the AST. Provides thread-safe concurrent traversal
 //! and is the foundation for analysis passes.
 //!
-//! ```rust,ignore
+//! ```rust
+//! use std::sync::atomic::{AtomicUsize, Ordering};
+//! use coral_parser::visitor::Visitor;
+//! use coral_parser::Expr;
+//! use coral_parser::visitor::walk;
+//!
 //! struct NodeCounter {
 //!     count: AtomicUsize,
 //! }

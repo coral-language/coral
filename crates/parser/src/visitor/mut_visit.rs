@@ -11,7 +11,8 @@
 //! ## Usage Pattern
 //!
 //! ```rust,ignore
-//! use coral_parser::visitor::{MutVisitor, Transformer};
+//! use coral_parser::visitor::mut_visit::MutVisitor;
+//! use coral_parser::visitor::transform::Transformer;
 //!
 //! struct MyTransformer<'a> {
 //!     transformer: Transformer<'a>,
@@ -27,7 +28,7 @@
 //!             }
 //!             _ => {
 //!                 // Continue traversal
-//!                 super::mut_walk::walk_expr(self, expr);
+//!                 coral_parser::visitor::mut_walk::walk_expr(self, expr);
 //!             }
 //!         }
 //!     }
