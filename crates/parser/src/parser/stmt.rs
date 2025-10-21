@@ -360,8 +360,14 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::If)?;
 
         let test = self.parse_expression()?;
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
+
+        // Expect colon with recovery
+        if self.peek().kind != TokenKind::Colon {
+            self.recover_missing_colon("if statement")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
+        }
 
         // Check if this is a single-line if statement or a block
         let body = if self.peek().kind == TokenKind::Indent {
@@ -374,14 +380,25 @@ impl<'a> Parser<'a> {
 
         while self.match_token(TokenKind::Elif) {
             let _elif_test = self.parse_expression()?;
-            self.consume(TokenKind::Colon)?;
-            self.consume_newline();
+
+            // Expect colon with recovery
+            if self.peek().kind != TokenKind::Colon {
+                self.recover_missing_colon("elif clause")?;
+            } else {
+                self.consume(TokenKind::Colon)?;
+                self.consume_newline();
+            }
             let _ = self.parse_block()?;
         }
 
         if self.match_token(TokenKind::Else) {
-            self.consume(TokenKind::Colon)?;
-            self.consume_newline();
+            // Expect colon with recovery
+            if self.peek().kind != TokenKind::Colon {
+                self.recover_missing_colon("else clause")?;
+            } else {
+                self.consume(TokenKind::Colon)?;
+                self.consume_newline();
+            }
             orelse = self.parse_block()?;
         }
 
@@ -432,17 +449,14 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Expect colon after function signature
+        // Expect colon after function signature with recovery
         if self.peek().kind != TokenKind::Colon {
-            return Err(error(
-                ErrorKind::MissingColon {
-                    context: "function definition".to_string(),
-                },
-                self.peek().span,
-            ));
+            // Try to recover by inserting virtual colon
+            self.recover_missing_colon("function definition")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
         }
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
 
         // Enter function context
         let saved_context = self.context;
@@ -477,8 +491,14 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::While)?;
 
         let test = self.parse_expression()?;
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
+
+        // Expect colon with recovery
+        if self.peek().kind != TokenKind::Colon {
+            self.recover_missing_colon("while statement")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
+        }
 
         // Enter loop context
         let saved_context = self.context;
@@ -492,8 +512,13 @@ impl<'a> Parser<'a> {
 
         let mut orelse = Vec::new();
         if self.match_token(TokenKind::Else) {
-            self.consume(TokenKind::Colon)?;
-            self.consume_newline();
+            // Expect colon with recovery
+            if self.peek().kind != TokenKind::Colon {
+                self.recover_missing_colon("else clause")?;
+            } else {
+                self.consume(TokenKind::Colon)?;
+                self.consume_newline();
+            }
             orelse = self.parse_block()?;
         }
         let orelse_slice = self.arena.alloc_slice_vec(orelse);
@@ -521,8 +546,14 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenKind::In)?;
         let iter = self.parse_expression()?;
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
+
+        // Expect colon with recovery
+        if self.peek().kind != TokenKind::Colon {
+            self.recover_missing_colon("for statement")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
+        }
 
         // Enter loop context
         let saved_context = self.context;
@@ -536,8 +567,13 @@ impl<'a> Parser<'a> {
 
         let mut orelse = Vec::new();
         if self.match_token(TokenKind::Else) {
-            self.consume(TokenKind::Colon)?;
-            self.consume_newline();
+            // Expect colon with recovery
+            if self.peek().kind != TokenKind::Colon {
+                self.recover_missing_colon("else clause")?;
+            } else {
+                self.consume(TokenKind::Colon)?;
+                self.consume_newline();
+            }
             orelse = self.parse_block()?;
         }
         let orelse_slice = self.arena.alloc_slice_vec(orelse);
@@ -650,8 +686,13 @@ impl<'a> Parser<'a> {
             )
         };
 
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
+        // Expect colon with recovery
+        if self.peek().kind != TokenKind::Colon {
+            self.recover_missing_colon("class definition")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
+        }
 
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
@@ -887,8 +928,14 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_try_stmt(&mut self) -> ParseResult<Stmt<'a>> {
         let start = self.peek().span.start();
         self.consume(TokenKind::Try)?;
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
+
+        // Expect colon with recovery
+        if self.peek().kind != TokenKind::Colon {
+            self.recover_missing_colon("try statement")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
+        }
 
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
@@ -943,8 +990,14 @@ impl<'a> Parser<'a> {
                 (typ, name)
             };
 
-            self.consume(TokenKind::Colon)?;
-            self.consume_newline();
+            // Expect colon with recovery
+            if self.peek().kind != TokenKind::Colon {
+                self.recover_missing_colon("except clause")?;
+            } else {
+                self.consume(TokenKind::Colon)?;
+                self.consume_newline();
+            }
+
             let handler_body = self.parse_block()?;
             let handler_body_slice = self.arena.alloc_slice_vec(handler_body);
             let handler_end = handler_body_slice
@@ -963,15 +1016,25 @@ impl<'a> Parser<'a> {
 
         let mut orelse = Vec::new();
         if self.match_token(TokenKind::Else) {
-            self.consume(TokenKind::Colon)?;
-            self.consume_newline();
+            // Expect colon with recovery
+            if self.peek().kind != TokenKind::Colon {
+                self.recover_missing_colon("else clause")?;
+            } else {
+                self.consume(TokenKind::Colon)?;
+                self.consume_newline();
+            }
             orelse = self.parse_block()?;
         }
 
         let mut finalbody = Vec::new();
         if self.match_token(TokenKind::Finally) {
-            self.consume(TokenKind::Colon)?;
-            self.consume_newline();
+            // Expect colon with recovery
+            if self.peek().kind != TokenKind::Colon {
+                self.recover_missing_colon("finally clause")?;
+            } else {
+                self.consume(TokenKind::Colon)?;
+                self.consume_newline();
+            }
             finalbody = self.parse_block()?;
         }
 
@@ -1013,8 +1076,14 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
+        // Expect colon with recovery
+        if self.peek().kind != TokenKind::Colon {
+            self.recover_missing_colon("with statement")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
+        }
+
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
         let end = body_slice.last().map(|s| s.span().end()).unwrap_or(start);
@@ -1274,8 +1343,15 @@ impl<'a> Parser<'a> {
         }
 
         let subject = self.parse_expression()?;
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
+
+        // Expect colon with recovery
+        if self.peek().kind != TokenKind::Colon {
+            self.recover_missing_colon("match statement")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
+        }
+
         self.consume(TokenKind::Indent)?;
 
         let mut cases = Vec::new();
@@ -1317,8 +1393,13 @@ impl<'a> Parser<'a> {
             None
         };
 
-        self.consume(TokenKind::Colon)?;
-        self.consume_newline();
+        // Expect colon with recovery
+        if self.peek().kind != TokenKind::Colon {
+            self.recover_missing_colon("case clause")?;
+        } else {
+            self.consume(TokenKind::Colon)?;
+            self.consume_newline();
+        }
 
         let body_vec = self.parse_block()?;
         let body = self.arena.alloc_slice_vec(body_vec);

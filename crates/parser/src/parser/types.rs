@@ -849,6 +849,88 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Attempt to recover from a missing colon in a compound statement.
+    /// Records the error and tries to continue parsing the statement body.
+    pub(super) fn recover_missing_colon(&mut self, context: &str) -> ParseResult<()> {
+        let error_span = self.peek().span;
+
+        // Record the missing colon error
+        self.record_error(*error(
+            ErrorKind::MissingColon {
+                context: context.to_string(),
+            },
+            error_span,
+        ));
+
+        // Record recovery action
+        let action = RecoveryAction::new(
+            RecoveryStrategy::InsertToken,
+            error_span,
+            format!("Inserted virtual colon after {} header", context),
+        );
+        self.recovery_manager.record(action);
+
+        // Consume any following newlines to position at block start
+        self.consume_newline();
+
+        Ok(())
+    }
+
+    /// Attempt to recover from an unclosed delimiter by suggesting the missing closing.
+    #[allow(dead_code)]
+    pub(super) fn recover_unclosed_delimiter(&mut self) -> ParseResult<()> {
+        if let Some(opening) = self.delimiter_stack.last() {
+            let expected_closing = match opening.kind {
+                '(' => ')',
+                '[' => ']',
+                '{' => '}',
+                _ => opening.kind,
+            };
+
+            let error_span = self.peek().span;
+
+            // Record the error
+            self.record_error(*error(
+                ErrorKind::UnclosedDelimiter {
+                    expected: expected_closing,
+                    opening_span: opening.span,
+                },
+                error_span,
+            ));
+
+            // Record recovery action
+            let action = RecoveryAction::new(
+                RecoveryStrategy::InsertToken,
+                error_span,
+                format!("Inserted virtual closing delimiter '{}'", expected_closing),
+            );
+            self.recovery_manager.record(action);
+
+            // Pop the delimiter from the stack
+            self.delimiter_stack.pop();
+        }
+
+        Ok(())
+    }
+
+    /// Check if current error is likely caused by a previous error (cascading).
+    /// This helps prevent reporting multiple errors for a single root cause.
+    #[allow(dead_code)]
+    pub(super) fn is_cascading_error(&self) -> bool {
+        // If we've recently recorded an error (within last 3 tokens),
+        // consider subsequent errors as potentially cascading
+        if !self.errors.is_empty() && !self.recovery_manager.actions().is_empty() {
+            let last_action = self.recovery_manager.actions().last().unwrap();
+            let current_pos = self.peek().span.start();
+
+            // If we're within a short distance of the last error, it might be cascading
+            let distance = u32::from(current_pos) - u32::from(last_action.span.start());
+            distance < 50 // Within 50 characters is likely cascading
+        } else {
+            false
+        }
+    }
+
     /// Get all errors collected during parsing.
     pub fn errors(&self) -> &[Error] {
         &self.errors

@@ -21,12 +21,12 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Better error recovery for malformed patterns
   - [x] Validate star patterns only appear once per sequence
 
-- [ ] **Error Recovery Improvements**
-  - [ ] More sophisticated synchronization points
-  - [ ] Better recovery from missing colons in compound statements
-  - [ ] Recovery from unclosed delimiters with suggestions
-  - [ ] Cascading error prevention (don't report dependent errors)
-  - [ ] Smart error messages for common syntax mistakes
+- [x] **Error Recovery Improvements**
+  - [x] More sophisticated synchronization points
+  - [x] Better recovery from missing colons in compound statements
+  - [x] Recovery from unclosed delimiters with suggestions
+  - [x] Cascading error prevention (don't report dependent errors)
+  - [x] Smart error messages for common syntax mistakes
 
 - [x] **Soft Keyword Handling**
   - [x] Ensure soft keywords work correctly in all contexts

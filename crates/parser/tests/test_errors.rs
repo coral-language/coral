@@ -644,6 +644,208 @@ def bar():
     // Parser should detect the unclosed bracket error
 }
 
+// ===== Error Recovery Improvement Tests =====
+
+#[test]
+fn test_recovery_missing_colon_function() {
+    // Test recovery from missing colon in function definition
+    let source = r#"
+def foo()
+    return 42
+
+def bar():
+    return 24
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in function definition"
+    );
+    // Parser should recover and continue to parse bar()
+    println!("Missing colon in function: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_missing_colon_if() {
+    // Test recovery from missing colon in if statement
+    let source = r#"
+if x > 5
+    print("big")
+
+print("done")
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in if statement"
+    );
+    println!("Missing colon in if: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_missing_colon_while() {
+    // Test recovery from missing colon in while statement
+    let source = r#"
+while x < 10
+    x += 1
+
+print("done")
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in while statement"
+    );
+    println!("Missing colon in while: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_missing_colon_for() {
+    // Test recovery from missing colon in for statement
+    let source = r#"
+for i in range(10)
+    print(i)
+
+print("done")
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in for statement"
+    );
+    println!("Missing colon in for: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_missing_colon_class() {
+    // Test recovery from missing colon in class definition
+    let source = r#"
+class Foo
+    pass
+
+class Bar:
+    pass
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in class definition"
+    );
+    println!("Missing colon in class: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_missing_colon_try() {
+    // Test recovery from missing colon in try statement
+    let source = r#"
+try
+    risky()
+except Exception:
+    handle()
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in try statement"
+    );
+    println!("Missing colon in try: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_missing_colon_except() {
+    // Test recovery from missing colon in except clause
+    let source = r#"
+try:
+    risky()
+except Exception
+    handle()
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in except clause"
+    );
+    println!("Missing colon in except: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_missing_colon_with() {
+    // Test recovery from missing colon in with statement
+    let source = r#"
+with open("file.txt") as f
+    data = f.read()
+
+print(data)
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in with statement"
+    );
+    println!("Missing colon in with: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_missing_colon_match() {
+    // Test recovery from missing colon in match statement
+    let source = r#"
+match value
+    case 1:
+        print("one")
+    case 2:
+        print("two")
+"#;
+    let errors = parse_and_get_errors(source);
+    assert!(
+        has_error_code(&errors, "E2008"),
+        "Should detect missing colon in match statement"
+    );
+    println!("Missing colon in match: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_multiple_missing_colons() {
+    // Test recovery from multiple missing colons
+    let source = r#"
+def foo()
+    if x > 5
+        return True
+    return False
+
+def bar():
+    while y < 10
+        y += 1
+"#;
+    let errors = parse_and_get_errors(source);
+    // Should detect at least 2 missing colons
+    let colon_errors: Vec<_> = errors.iter().filter(|e| e.contains("E2008")).collect();
+    assert!(
+        colon_errors.len() >= 2,
+        "Should detect multiple missing colons, found: {}",
+        colon_errors.len()
+    );
+    println!("Multiple missing colons: {:?}", errors);
+}
+
+#[test]
+fn test_recovery_sophisticated_sync() {
+    // Test that synchronization points work correctly
+    let source = r#"
+def broken(
+    x = [1, 2, 3
+
+def good():
+    return 42
+
+class MyClass:
+    pass
+"#;
+    let errors = parse_and_get_errors(source);
+    // Should detect unclosed delimiter but still parse the following definitions
+    assert!(!errors.is_empty(), "Should detect errors");
+    println!("Sophisticated sync: {:?}", errors);
+}
+
 // ===== Soft Keyword Tests =====
 
 #[test]

@@ -31,6 +31,8 @@ pub enum SyncPoint {
     Expression,
     /// Block boundaries (dedent, opening braces)
     Block,
+    /// Compound statement headers (if/while/for/def/class followed by colon)
+    CompoundStatement,
     /// End of file
     Eof,
 }
@@ -41,12 +43,16 @@ impl SyncPoint {
         match self {
             SyncPoint::Statement => Self::is_statement_keyword(token),
             SyncPoint::Expression => {
-                Self::is_statement_keyword(token) || matches!(token, TokenKind::Newline)
+                Self::is_statement_keyword(token) || Self::is_expression_boundary(token)
             }
             SyncPoint::Block => {
                 Self::is_statement_keyword(token)
-                    || matches!(token, TokenKind::Dedent | TokenKind::Newline)
+                    || matches!(
+                        token,
+                        TokenKind::Dedent | TokenKind::Newline | TokenKind::Indent
+                    )
             }
+            SyncPoint::CompoundStatement => Self::is_compound_keyword(token),
             SyncPoint::Eof => matches!(token, TokenKind::Eof),
         }
     }
@@ -79,6 +85,39 @@ impl SyncPoint {
                 | TokenKind::At // Decorator
                 | TokenKind::Newline
                 | TokenKind::Dedent
+        )
+    }
+
+    /// Check if a token marks a compound statement (needs colon).
+    fn is_compound_keyword(token: &TokenKind) -> bool {
+        matches!(
+            token,
+            TokenKind::Def
+                | TokenKind::Class
+                | TokenKind::If
+                | TokenKind::Elif
+                | TokenKind::Else
+                | TokenKind::While
+                | TokenKind::For
+                | TokenKind::Try
+                | TokenKind::Except
+                | TokenKind::Finally
+                | TokenKind::With
+                | TokenKind::Async
+                | TokenKind::Match
+        )
+    }
+
+    /// Check if a token is an expression boundary.
+    fn is_expression_boundary(token: &TokenKind) -> bool {
+        matches!(
+            token,
+            TokenKind::Newline
+                | TokenKind::Semicolon
+                | TokenKind::Comma
+                | TokenKind::RightParen
+                | TokenKind::RightBracket
+                | TokenKind::RightBrace
         )
     }
 }
