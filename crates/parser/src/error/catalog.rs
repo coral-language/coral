@@ -502,6 +502,62 @@ impl ErrorKind {
                 suggestion: Some("Reorder exception handlers from most specific to most general"),
             },
 
+            ErrorKind::UninitializedVariable { .. } => ErrorMetadata {
+                code: ErrorCode::E3150,
+                severity: Severity::Error,
+                category: ErrorCategory::Semantic,
+                error_type: "UninitializedVariable",
+                title: "Use of uninitialized variable",
+                description: "Variable is used before being assigned a value",
+                suggestion: Some("Initialize the variable before using it"),
+            },
+            ErrorKind::ConditionallyUninitializedVariable { .. } => ErrorMetadata {
+                code: ErrorCode::E3151,
+                severity: Severity::Error,
+                category: ErrorCategory::Semantic,
+                error_type: "UninitializedVariable",
+                title: "Variable may not be initialized",
+                description: "Variable may not be initialized on all code paths",
+                suggestion: Some("Ensure the variable is initialized in all branches"),
+            },
+            ErrorKind::SelfReferentialInitialization { .. } => ErrorMetadata {
+                code: ErrorCode::E3152,
+                severity: Severity::Error,
+                category: ErrorCategory::Semantic,
+                error_type: "SelfReferentialInitialization",
+                title: "Self-referential initialization",
+                description: "Variable is used in its own initialization",
+                suggestion: Some("Use a different variable or initialize with a literal value"),
+            },
+
+            ErrorKind::ConstantCondition { .. } => ErrorMetadata {
+                code: ErrorCode::W3170,
+                severity: Severity::Warning,
+                category: ErrorCategory::Semantic,
+                error_type: "ConstantCondition",
+                title: "Constant condition",
+                description: "Condition always evaluates to the same value",
+                suggestion: Some("Remove the condition or simplify the code"),
+            },
+            ErrorKind::DeadBranch { .. } => ErrorMetadata {
+                code: ErrorCode::W3171,
+                severity: Severity::Warning,
+                category: ErrorCategory::Semantic,
+                error_type: "DeadCode",
+                title: "Dead branch",
+                description: "Branch will never be executed due to constant condition",
+                suggestion: Some("Remove the dead branch"),
+            },
+            ErrorKind::SimplifiableExpression { .. } => ErrorMetadata {
+                code: ErrorCode::W3172,
+                severity: Severity::Warning,
+                category: ErrorCategory::Semantic,
+                error_type: "SimplifiableExpression",
+                title: "Expression can be simplified",
+                description: "Expression contains constant values that can be folded",
+                suggestion: Some("Simplify the expression to improve readability"),
+            },
+
             // Type System errors
             ErrorKind::TypeMismatch { .. } => ErrorMetadata {
                 code: ErrorCode::E4001,
@@ -1194,6 +1250,49 @@ impl ErrorKind {
             ErrorKind::DeadCodeAfterReturn => "Dead code after return statement".to_string(),
             ErrorKind::UnreachableExceptionHandler { exception_type } => {
                 format!("Exception handler for '{}' is unreachable", exception_type)
+            }
+
+            ErrorKind::UninitializedVariable { var_name } => {
+                format!("Variable '{}' is used before being initialized", var_name)
+            }
+            ErrorKind::ConditionallyUninitializedVariable {
+                var_name,
+                missing_paths,
+            } => {
+                if missing_paths.is_empty() {
+                    format!(
+                        "Variable '{}' may not be initialized on all code paths",
+                        var_name
+                    )
+                } else {
+                    format!(
+                        "Variable '{}' may not be initialized in: {}",
+                        var_name,
+                        missing_paths.join(", ")
+                    )
+                }
+            }
+            ErrorKind::SelfReferentialInitialization { var_name } => {
+                format!("Variable '{}' is used in its own initialization", var_name)
+            }
+
+            ErrorKind::ConstantCondition { value, suggestion } => {
+                format!("Condition always evaluates to '{}': {}", value, suggestion)
+            }
+            ErrorKind::DeadBranch {
+                branch_type,
+                reason,
+            } => {
+                format!("The '{}' branch is never executed: {}", branch_type, reason)
+            }
+            ErrorKind::SimplifiableExpression {
+                original,
+                simplified,
+            } => {
+                format!(
+                    "Expression '{}' can be simplified to '{}'",
+                    original, simplified
+                )
             }
 
             // Type system errors

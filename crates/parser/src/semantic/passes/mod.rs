@@ -1,6 +1,8 @@
 pub mod concurrency_check;
+pub mod constant_propagation;
 pub mod control_flow;
 pub mod decorator_resolution;
+pub mod definite_assignment;
 pub mod exhaustiveness;
 pub mod import_resolution;
 pub mod manager;

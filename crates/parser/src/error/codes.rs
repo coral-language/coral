@@ -70,6 +70,12 @@ pub enum ErrorCode {
     E3102, // Missing return statement
     E3103, // Inconsistent return types
     E3104, // Dead code after return
+    E3150, // Uninitialized variable
+    E3151, // Conditionally uninitialized variable
+    E3152, // Self-referential initialization
+    W3170, // Constant condition (warning)
+    W3171, // Dead branch (warning)
+    W3172, // Simplifiable expression (warning)
 
     // ===== Type System Errors (E4xxx) =====
     E4001, // Type mismatch
@@ -212,6 +218,12 @@ impl ErrorCode {
             ErrorCode::E3102 => 3102,
             ErrorCode::E3103 => 3103,
             ErrorCode::E3104 => 3104,
+            ErrorCode::E3150 => 3150,
+            ErrorCode::E3151 => 3151,
+            ErrorCode::E3152 => 3152,
+            ErrorCode::W3170 => 3170,
+            ErrorCode::W3171 => 3171,
+            ErrorCode::W3172 => 3172,
 
             // Type System
             ErrorCode::E4001 => 4001,

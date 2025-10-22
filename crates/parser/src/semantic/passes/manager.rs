@@ -338,6 +338,26 @@ impl PassManager {
             enabled_by_default: true,
         });
 
+        self.register_pass(PassMetadata {
+            id: "definite_assignment",
+            name: "Definite Assignment Analysis",
+            description: "Detects use of uninitialized variables",
+            priority: PassPriority::Medium,
+            dependencies: vec!["control_flow"],
+            parallelizable: true,
+            enabled_by_default: true,
+        });
+
+        self.register_pass(PassMetadata {
+            id: "constant_propagation",
+            name: "Constant Propagation",
+            description: "Propagates constants and detects dead code from constant conditions",
+            priority: PassPriority::Medium,
+            dependencies: vec!["control_flow"],
+            parallelizable: true,
+            enabled_by_default: true,
+        });
+
         // Low priority passes
         self.register_pass(PassMetadata {
             id: "exhaustiveness",
@@ -766,6 +786,8 @@ impl PassManager {
             "type_inference" => self.run_type_inference(module, source),
             "type_checking" => self.run_type_checking(module, source),
             "control_flow" => self.run_control_flow(module, source),
+            "definite_assignment" => self.run_definite_assignment(module, source),
+            "constant_propagation" => self.run_constant_propagation(module, source),
             "exhaustiveness" => self.run_exhaustiveness(module, source),
             "decorator_resolution" => self.run_decorator_resolution(module, source),
             "ownership_check" => self.run_ownership_check(module, source),
@@ -838,6 +860,51 @@ impl PassManager {
 
         // Collect warnings
         for warning in analyzer.warnings() {
+            diagnostics.push(warning.to_diagnostic(source));
+        }
+
+        if diagnostics.is_empty() {
+            Ok(())
+        } else {
+            Err(diagnostics)
+        }
+    }
+
+    /// Run definite assignment analysis pass
+    fn run_definite_assignment(&self, module: &Module, source: &str) -> PassResult {
+        use crate::semantic::passes::control_flow::ControlFlowAnalyzer;
+        use crate::semantic::passes::definite_assignment::DefiniteAssignmentPass;
+
+        let mut cf_analyzer = ControlFlowAnalyzer::new();
+        cf_analyzer.analyze_module(module);
+
+        let mut pass = DefiniteAssignmentPass::new();
+        let errors = pass.check_module_with_cfgs(module, &cf_analyzer.function_cfgs);
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            let diagnostics = errors.iter().map(|e| e.to_diagnostic(source)).collect();
+            Err(diagnostics)
+        }
+    }
+
+    /// Run constant propagation pass
+    fn run_constant_propagation(&self, module: &Module, source: &str) -> PassResult {
+        use crate::semantic::passes::constant_propagation::ConstantPropagationPass;
+        use crate::semantic::passes::control_flow::ControlFlowAnalyzer;
+
+        let mut cf_analyzer = ControlFlowAnalyzer::new();
+        cf_analyzer.analyze_module(module);
+
+        let mut pass = ConstantPropagationPass::new();
+        let (errors, warnings) = pass.check_module_with_cfgs(module, &cf_analyzer.function_cfgs);
+
+        let mut diagnostics = Vec::new();
+        for error in &errors {
+            diagnostics.push(error.to_diagnostic(source));
+        }
+        for warning in &warnings {
             diagnostics.push(warning.to_diagnostic(source));
         }
 

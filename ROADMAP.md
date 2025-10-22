@@ -170,20 +170,20 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Condition extraction for type narrowing
   - [x] Dataflow analysis framework with worklist algorithm
 
-- [ ] **Definite Assignment Analysis**
+- [x] **Definite Assignment Analysis**
   - [x] Track variable definitions per block (implemented in CFG)
   - [x] Dataflow analysis through CFG (framework ready)
-  - [ ] Report uninitialized variable usage
-  - [ ] Handle conditional initialization
-  - [ ] Integrate with semantic analyzer pass
+  - [x] Report uninitialized variable usage
+  - [x] Handle conditional initialization
+  - [x] Integrate with semantic analyzer pass
 
-- [ ] **Constant Propagation**
+- [x] **Constant Propagation**
   - [x] Track constant values through CFG (framework ready)
-  - [ ] Implement constant value lattice
-  - [ ] Evaluate constant conditionals
-  - [ ] Eliminate dead branches
-  - [ ] Fold constant expressions
-  - [ ] Integrate with semantic analyzer pass
+  - [x] Implement constant value lattice
+  - [x] Evaluate constant conditionals
+  - [x] Eliminate dead branches
+  - [x] Fold constant expressions
+  - [x] Integrate with semantic analyzer pass
 
 ### Semantic Module - Exhaustiveness
 

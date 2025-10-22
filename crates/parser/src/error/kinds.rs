@@ -156,6 +156,32 @@ pub enum ErrorKind {
     /// Unreachable exception handler
     UnreachableExceptionHandler { exception_type: String },
 
+    // ===== Definite Assignment Errors (E3150-E3169) =====
+    /// Variable used before being initialized
+    UninitializedVariable { var_name: String },
+
+    /// Variable may not be initialized on all paths
+    ConditionallyUninitializedVariable {
+        var_name: String,
+        missing_paths: Vec<String>,
+    },
+
+    /// Variable used in its own initialization
+    SelfReferentialInitialization { var_name: String },
+
+    // ===== Constant Propagation Warnings (E3170-E3189) =====
+    /// Constant condition always evaluates to the same value
+    ConstantCondition { value: bool, suggestion: String },
+
+    /// Dead branch due to constant condition
+    DeadBranch { branch_type: String, reason: String },
+
+    /// Expression can be simplified
+    SimplifiableExpression {
+        original: String,
+        simplified: String,
+    },
+
     // ===== Type System Errors (E4xxx) =====
     /// Type mismatch between expected and actual types
     TypeMismatch { expected: String, found: String },
