@@ -2,10 +2,14 @@
 
 use super::typed_expr::TypedExpr;
 use super::typed_stmt::TypedStmt;
+use crate::arena::interner::Interner;
 use crate::arena::symbol::Symbol;
-use crate::semantic::types::Type;
+use crate::semantic::types::{AttributeKind, Type};
 use std::collections::{HashMap, HashSet};
 use text_size::TextRange;
+
+/// Type alias for attribute collection return type
+type AttributeCollectionResult = (Vec<(Symbol, Type)>, Vec<(Symbol, Type)>);
 
 /// Class hierarchy analyzer that computes MRO and attribute tables
 #[derive(Default)]
@@ -20,6 +24,14 @@ pub struct ClassAnalyzer<'a> {
     attribute_tables: HashMap<Symbol, Vec<(Symbol, Type)>>,
     /// Method tables for each class
     method_tables: HashMap<Symbol, Vec<(Symbol, Type)>>,
+    /// Property descriptors for each class (class -> attr -> PropertyDescriptor)
+    property_descriptors: HashMap<Symbol, HashMap<Symbol, PropertyDescriptor>>,
+    /// Class-level attributes (vs instance attributes)
+    class_attributes: HashMap<Symbol, HashMap<Symbol, Type>>,
+    /// Cache for resolved attribute types: (class, attr) -> resolved type
+    attribute_cache: HashMap<(Symbol, Symbol), Type>,
+    /// Reference to interner for decorator name resolution
+    interner: Option<&'a Interner>,
 }
 
 /// Typed class definition (temporary structure for analysis)
@@ -35,10 +47,38 @@ pub struct TypedClassDefStmt<'a> {
     pub docstring: Option<&'a str>,
 }
 
+/// Method decorator types
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
+enum MethodDecorator {
+    None,
+    StaticMethod,
+    ClassMethod,
+    InstanceMethod,
+}
+
+/// Property descriptor information
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropertyDescriptor {
+    /// The getter method type
+    pub getter_type: Type,
+    /// The setter method type (if exists)
+    pub setter_type: Option<Type>,
+    /// The attribute name
+    pub attr_name: Symbol,
+    /// The class this property belongs to
+    pub class_name: Symbol,
+}
+
 impl<'a> ClassAnalyzer<'a> {
     /// Create a new class analyzer
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Set the interner for this analyzer (needed for decorator name resolution)
+    pub fn set_interner(&mut self, interner: &'a Interner) {
+        self.interner = Some(interner);
     }
 
     /// Add a class to the analyzer
@@ -90,6 +130,100 @@ impl<'a> ClassAnalyzer<'a> {
     /// Get the method table for a class
     pub fn get_methods(&self, class_name: Symbol) -> Option<&[(Symbol, Type)]> {
         self.method_tables.get(&class_name).map(|v| v.as_slice())
+    }
+
+    /// Resolve attribute type for a given class and attribute name
+    pub fn resolve_attribute_type(&self, class_name: Symbol, attr_name: Symbol) -> Option<Type> {
+        self.resolve_attribute_type_uncached(class_name, attr_name)
+    }
+
+    /// Check cache, then walk MRO to find attribute
+    pub fn resolve_attribute_with_cache(
+        &mut self,
+        class_name: Symbol,
+        attr_name: Symbol,
+    ) -> Option<Type> {
+        let key = (class_name, attr_name);
+
+        // Check cache first
+        if let Some(cached) = self.attribute_cache.get(&key) {
+            return Some(cached.clone());
+        }
+
+        // Compute and cache
+        if let Some(ty) = self.resolve_attribute_type_uncached(class_name, attr_name) {
+            self.attribute_cache.insert(key, ty.clone());
+            Some(ty)
+        } else {
+            None
+        }
+    }
+
+    /// Distinguish instance vs class attributes
+    pub fn is_class_attribute(&self, class_name: Symbol, attr_name: Symbol) -> bool {
+        self.class_attributes
+            .get(&class_name)
+            .map(|attrs| attrs.contains_key(&attr_name))
+            .unwrap_or(false)
+    }
+
+    /// Get property descriptor if attribute is a property
+    pub fn get_property_descriptor(
+        &self,
+        class_name: Symbol,
+        attr_name: Symbol,
+    ) -> Option<&PropertyDescriptor> {
+        self.property_descriptors
+            .get(&class_name)
+            .and_then(|props| props.get(&attr_name))
+    }
+
+    /// Clear cache when class definitions change
+    pub fn invalidate_cache(&mut self) {
+        self.attribute_cache.clear();
+    }
+
+    /// Resolve attribute type without caching (internal implementation)
+    fn resolve_attribute_type_uncached(
+        &self,
+        class_name: Symbol,
+        attr_name: Symbol,
+    ) -> Option<Type> {
+        // Check property descriptors first
+        if let Some(prop) = self.get_property_descriptor(class_name, attr_name) {
+            // Return as AttributeDescriptor type
+            return Some(Type::AttributeDescriptor {
+                kind: AttributeKind::Property,
+                getter_type: Box::new(prop.getter_type.clone()),
+                setter_type: prop.setter_type.as_ref().map(|t| Box::new(t.clone())),
+            });
+        }
+
+        // Check class attributes
+        if let Some(class_attrs) = self.class_attributes.get(&class_name)
+            && let Some(ty) = class_attrs.get(&attr_name)
+        {
+            return Some(ty.clone());
+        }
+
+        // Check instance attribute tables
+        if let Some(attrs) = self.attribute_tables.get(&class_name)
+            && let Some((_, ty)) = attrs.iter().find(|(name, _)| *name == attr_name)
+        {
+            return Some(ty.clone());
+        }
+
+        // Walk MRO for inherited attributes
+        if let Some(mro) = self.get_mro(class_name) {
+            for &base_class in mro.iter().skip(1) {
+                // Skip self
+                if let Some(ty) = self.resolve_attribute_type_uncached(base_class, attr_name) {
+                    return Some(ty);
+                }
+            }
+        }
+
+        None
     }
 
     /// Check for circular inheritance
@@ -221,10 +355,18 @@ impl<'a> ClassAnalyzer<'a> {
 
     /// Build attribute table for a class
     fn build_attribute_table(&mut self, class: &TypedClassDefStmt<'a>) {
-        let mut attributes = Vec::new();
+        let mut instance_attributes = Vec::new();
+        let mut class_attributes = HashMap::new();
+        let mut properties = HashMap::new();
 
-        // Walk through the class body to find attribute assignments
-        self.collect_attributes_from_body(class.body, &mut attributes);
+        // Walk through the class body to find attribute assignments and properties
+        self.collect_attributes_from_body_enhanced(
+            class.body,
+            &mut instance_attributes,
+            &mut class_attributes,
+            &mut properties,
+            class.name,
+        );
 
         // Add attributes from base classes (following MRO)
         if let Some(mro) = self.mro_cache.get(&class.name) {
@@ -233,15 +375,36 @@ impl<'a> ClassAnalyzer<'a> {
                 if let Some(base_attributes) = self.attribute_tables.get(&base_class) {
                     for (name, ty) in base_attributes.iter() {
                         // Only add if not already defined
-                        if !attributes.iter().any(|(n, _)| *n == *name) {
-                            attributes.push((*name, ty.clone()));
+                        if !instance_attributes.iter().any(|(n, _)| *n == *name) {
+                            instance_attributes.push((*name, ty.clone()));
+                        }
+                    }
+                }
+
+                // Add base class attributes
+                if let Some(base_class_attrs) = self.class_attributes.get(&base_class) {
+                    for (name, ty) in base_class_attrs.iter() {
+                        if !class_attributes.contains_key(name) {
+                            class_attributes.insert(*name, ty.clone());
+                        }
+                    }
+                }
+
+                // Add base class properties
+                if let Some(base_props) = self.property_descriptors.get(&base_class) {
+                    for (name, prop) in base_props.iter() {
+                        if !properties.contains_key(name) {
+                            properties.insert(*name, prop.clone());
                         }
                     }
                 }
             }
         }
 
-        self.attribute_tables.insert(class.name, attributes);
+        self.attribute_tables
+            .insert(class.name, instance_attributes);
+        self.class_attributes.insert(class.name, class_attributes);
+        self.property_descriptors.insert(class.name, properties);
     }
 
     /// Build method table for a class
@@ -269,46 +432,482 @@ impl<'a> ClassAnalyzer<'a> {
         self.method_tables.insert(class.name, methods);
     }
 
-    /// Collect attributes from class body
-    fn collect_attributes_from_body(
+    /// Enhanced attribute collection that distinguishes properties, class attrs, and instance attrs
+    fn collect_attributes_from_body_enhanced(
         &self,
         body: &[TypedStmt<'a>],
-        attributes: &mut Vec<(Symbol, Type)>,
+        instance_attributes: &mut Vec<(Symbol, Type)>,
+        class_attributes: &mut HashMap<Symbol, Type>,
+        properties: &mut HashMap<Symbol, PropertyDescriptor>,
+        class_name: Symbol,
     ) {
         for stmt in body {
             match stmt {
+                TypedStmt::FuncDef(func) => {
+                    // Validate decorator combinations
+                    if !self.validate_decorator_combination(func.decorators) {
+                        // In a full implementation, this would emit a warning or error
+                        // For now, we silently continue to avoid breaking type inference
+                    }
+
+                    // Check for property decorators
+                    if let Some(prop_desc) =
+                        self.extract_property_descriptor(func, class_name, body)
+                    {
+                        properties.insert(prop_desc.attr_name, prop_desc);
+                    } else {
+                        // Check for classmethod/staticmethod decorators
+                        let decorator_kind = self.detect_method_decorator(func.decorators);
+                        match decorator_kind {
+                            MethodDecorator::StaticMethod => {
+                                // Static methods are class attributes
+                                class_attributes.insert(func.name, func.ty.clone());
+                            }
+                            MethodDecorator::ClassMethod => {
+                                // Class methods are class attributes
+                                class_attributes.insert(func.name, func.ty.clone());
+                            }
+                            MethodDecorator::InstanceMethod | MethodDecorator::None => {
+                                // Regular instance methods are handled in build_method_table
+                            }
+                        }
+                    }
+                }
                 TypedStmt::Assign(assign) => {
-                    // Simple attribute assignment: self.attr = value
-                    for target in assign.targets {
-                        if let TypedExpr::Attribute(attr) = target
-                            && let TypedExpr::Name(_name) = attr.value
+                    // Check if this is a class-level assignment
+                    if self.is_class_level_assignment(assign) {
+                        // Class attribute assignment
+                        for target in assign.targets {
+                            if let TypedExpr::Name(name) = target {
+                                class_attributes.insert(name.symbol, assign.value.ty().clone());
+                            }
+                        }
+                    } else {
+                        // Instance attribute assignment
+                        self.collect_instance_attributes_from_assign(assign, instance_attributes);
+                    }
+                }
+                TypedStmt::AnnAssign(ann_assign) => {
+                    // Check if this is a class-level annotation
+                    if self.is_class_level_annotation(ann_assign) {
+                        // Class attribute annotation
+                        if let TypedExpr::Name(name) = &ann_assign.target {
+                            class_attributes
+                                .insert(name.symbol, ann_assign.annotation.ty().clone());
+                        }
+                    } else {
+                        // Instance attribute annotation
+                        self.collect_instance_attributes_from_ann_assign(
+                            ann_assign,
+                            instance_attributes,
+                        );
+                    }
+                }
+                _ => {
+                    // Recursively check nested statements
+                    self.collect_attributes_from_nested_stmt_enhanced(
+                        stmt,
+                        instance_attributes,
+                        class_attributes,
+                        properties,
+                        class_name,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Extract property descriptor from a function definition
+    fn extract_property_descriptor(
+        &self,
+        func: &super::typed_stmt::TypedFuncDefStmt<'a>,
+        class_name: Symbol,
+        body: &[TypedStmt<'a>],
+    ) -> Option<PropertyDescriptor> {
+        if self.has_property_decorator(func.decorators) {
+            // Find the property name (same as function name)
+            let attr_name = func.name;
+            let getter_type = func.ty.clone();
+
+            // Look for a corresponding setter method (@attr_name.setter)
+            let setter_type = self.find_property_setter(attr_name, body);
+
+            Some(PropertyDescriptor {
+                getter_type,
+                setter_type,
+                attr_name,
+                class_name,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Find property setter method for a given property name
+    fn find_property_setter(&self, property_name: Symbol, body: &[TypedStmt<'a>]) -> Option<Type> {
+        // Look for a method decorated with @property_name.setter
+        for stmt in body {
+            if let TypedStmt::FuncDef(func) = stmt {
+                // Check if any decorator matches the setter pattern
+                for decorator in func.decorators {
+                    if let TypedExpr::Attribute(attr) = decorator {
+                        // Check if it matches pattern: property_name.setter
+                        if attr.attr == property_name
+                            && let TypedExpr::Name(base) = &attr.value
+                            && base.symbol == property_name
                         {
-                            // Check if this is a self attribute assignment
-                            if let TypedExpr::Name(_name) = &attr.value {
-                                // Note: We can't easily check the symbol name here without access to the interner
-                                // For now, we'll collect all attribute assignments
-                                attributes.push((attr.attr, assign.value.ty().clone()));
+                            // This is a setter for the property
+                            return Some(func.ty.clone());
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Check if function has @property decorator
+    fn has_property_decorator(&self, decorators: &[TypedExpr<'a>]) -> bool {
+        match self.interner {
+            Some(interner) => {
+                for decorator in decorators {
+                    if let TypedExpr::Name(name_expr) = decorator {
+                        if let Some("property") = interner.resolve(name_expr.symbol) {
+                            return true;
+                        }
+                    } else if let TypedExpr::Attribute(attr) = decorator
+                        && let TypedExpr::Name(base) = attr.value
+                        && let Some("property") = interner.resolve(base.symbol)
+                    {
+                        // Handle @foo.property style decorators
+                        return true;
+                    }
+                }
+                false
+            }
+            None => {
+                // Interner not set - can't resolve decorator names
+                // In production, this should be logged as a warning
+                false
+            }
+        }
+    }
+
+    /// Detect method decorators (@staticmethod, @classmethod)
+    fn detect_method_decorator(&self, decorators: &[TypedExpr<'a>]) -> MethodDecorator {
+        match self.interner {
+            Some(interner) => {
+                for decorator in decorators {
+                    if let TypedExpr::Name(name_expr) = decorator {
+                        match interner.resolve(name_expr.symbol) {
+                            Some("staticmethod") => return MethodDecorator::StaticMethod,
+                            Some("classmethod") => return MethodDecorator::ClassMethod,
+                            _ => {}
+                        }
+                    }
+                }
+                MethodDecorator::None
+            }
+            None => {
+                // Interner not set - can't resolve decorator names
+                MethodDecorator::None
+            }
+        }
+    }
+
+    /// Validate decorator combinations for correctness
+    /// Returns true if decorators are valid, false otherwise
+    fn validate_decorator_combination(&self, decorators: &[TypedExpr<'a>]) -> bool {
+        if decorators.is_empty() {
+            return true;
+        }
+
+        let mut has_property = false;
+        let mut has_staticmethod = false;
+        let mut has_classmethod = false;
+
+        if let Some(interner) = self.interner {
+            for decorator in decorators {
+                if let TypedExpr::Name(name_expr) = decorator
+                    && let Some(name) = interner.resolve(name_expr.symbol)
+                {
+                    match name {
+                        "property" => has_property = true,
+                        "staticmethod" => has_staticmethod = true,
+                        "classmethod" => has_classmethod = true,
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // Check invalid combinations
+        // @property cannot be combined with @staticmethod or @classmethod
+        !(has_property && (has_staticmethod || has_classmethod)) &&
+        // @staticmethod and @classmethod are mutually exclusive
+        !(has_staticmethod && has_classmethod)
+    }
+
+    /// Check if assignment is at class level (not in a method)
+    fn is_class_level_assignment(&self, assign: &super::typed_stmt::TypedAssignStmt<'a>) -> bool {
+        // Check if any target is a self attribute assignment
+        for target in assign.targets {
+            if let TypedExpr::Attribute(_attr) = target {
+                // If target is an attribute access, it's an instance assignment
+                // (e.g., self.value = 10 or obj.field = value)
+                return false;
+            }
+        }
+        // Otherwise, it's a class-level assignment (e.g., count = 0)
+        true
+    }
+
+    /// Check if annotation is at class level
+    fn is_class_level_annotation(
+        &self,
+        ann_assign: &super::typed_stmt::TypedAnnAssignStmt<'a>,
+    ) -> bool {
+        // If target is an attribute access, it's an instance annotation
+        if let TypedExpr::Attribute(_attr) = &ann_assign.target {
+            return false;
+        }
+        // Otherwise, it's a class-level annotation (e.g., count: int = 0)
+        true
+    }
+
+    /// Collect instance attributes from assignment
+    fn collect_instance_attributes_from_assign(
+        &self,
+        assign: &super::typed_stmt::TypedAssignStmt<'a>,
+        attributes: &mut Vec<(Symbol, Type)>,
+    ) {
+        for target in assign.targets {
+            if let TypedExpr::Attribute(attr) = target {
+                // Check if this is a self attribute assignment or any attribute
+                if let TypedExpr::Name(_name) = &attr.value {
+                    // Note: In a full implementation, we'd verify this is 'self'
+                    // For now, we collect all attribute assignments as instance attributes
+                    attributes.push((attr.attr, assign.value.ty().clone()));
+                }
+            }
+        }
+    }
+
+    /// Collect instance attributes from annotated assignment
+    fn collect_instance_attributes_from_ann_assign(
+        &self,
+        ann_assign: &super::typed_stmt::TypedAnnAssignStmt<'a>,
+        attributes: &mut Vec<(Symbol, Type)>,
+    ) {
+        if let TypedExpr::Attribute(attr) = &ann_assign.target {
+            // Check if this is a self attribute assignment or any attribute
+            if let TypedExpr::Name(_name) = &attr.value {
+                attributes.push((attr.attr, ann_assign.annotation.ty().clone()));
+            }
+        }
+    }
+
+    /// Enhanced nested statement collection
+    fn collect_attributes_from_nested_stmt_enhanced(
+        &self,
+        stmt: &TypedStmt<'a>,
+        instance_attributes: &mut Vec<(Symbol, Type)>,
+        class_attributes: &mut HashMap<Symbol, Type>,
+        properties: &mut HashMap<Symbol, PropertyDescriptor>,
+        class_name: Symbol,
+    ) {
+        match stmt {
+            TypedStmt::If(if_stmt) => {
+                self.collect_attributes_from_body_enhanced(
+                    if_stmt.body,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+                self.collect_attributes_from_body_enhanced(
+                    if_stmt.orelse,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+            }
+            TypedStmt::While(while_stmt) => {
+                self.collect_attributes_from_body_enhanced(
+                    while_stmt.body,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+                self.collect_attributes_from_body_enhanced(
+                    while_stmt.orelse,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+            }
+            TypedStmt::For(for_stmt) => {
+                self.collect_attributes_from_body_enhanced(
+                    for_stmt.body,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+                self.collect_attributes_from_body_enhanced(
+                    for_stmt.orelse,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+            }
+            TypedStmt::Try(try_stmt) => {
+                self.collect_attributes_from_body_enhanced(
+                    try_stmt.body,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+                self.collect_attributes_from_body_enhanced(
+                    try_stmt.orelse,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+                self.collect_attributes_from_body_enhanced(
+                    try_stmt.finalbody,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+                for handler in try_stmt.handlers {
+                    self.collect_attributes_from_body_enhanced(
+                        handler.body,
+                        instance_attributes,
+                        class_attributes,
+                        properties,
+                        class_name,
+                    );
+                }
+            }
+            TypedStmt::With(with_stmt) => {
+                self.collect_attributes_from_body_enhanced(
+                    with_stmt.body,
+                    instance_attributes,
+                    class_attributes,
+                    properties,
+                    class_name,
+                );
+            }
+            TypedStmt::Match(match_stmt) => {
+                for case in match_stmt.cases {
+                    self.collect_attributes_from_body_enhanced(
+                        case.body,
+                        instance_attributes,
+                        class_attributes,
+                        properties,
+                        class_name,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect attributes from a class body (deprecated in favor of collect_attributes_from_body_enhanced)
+    #[allow(dead_code)]
+    fn collect_attributes_from_body(&self, body: &[TypedStmt<'a>]) -> AttributeCollectionResult {
+        let mut instance_attributes = Vec::new();
+        let mut class_attributes = Vec::new();
+
+        for stmt in body {
+            match stmt {
+                TypedStmt::Assign(assign) => {
+                    if self.is_class_level_assignment(assign) {
+                        // Class attribute
+                        for target in assign.targets {
+                            if let TypedExpr::Name(name) = target {
+                                class_attributes.push((name.symbol, assign.value.ty().clone()));
                             }
                         }
                     }
                 }
                 TypedStmt::AnnAssign(ann_assign) => {
-                    // Annotated attribute assignment: self.attr: Type = value
-                    if let TypedExpr::Attribute(attr) = &ann_assign.target
-                        && let TypedExpr::Name(_name) = &attr.value
-                    {
-                        // Check if this is a self attribute assignment
-                        // Note: We can't easily check the symbol name here without access to the interner
-                        // For now, we'll collect all attribute assignments
-                        attributes.push((attr.attr, ann_assign.annotation.ty().clone()));
+                    if self.is_class_level_annotation(ann_assign) {
+                        // Class attribute annotation
+                        if let TypedExpr::Name(name) = &ann_assign.target {
+                            class_attributes
+                                .push((name.symbol, ann_assign.annotation.ty().clone()));
+                        }
+                    } else {
+                        // Instance attribute annotation
+                        self.collect_instance_attributes_from_ann_assign(
+                            ann_assign,
+                            &mut instance_attributes,
+                        );
                     }
                 }
-                _ => {
-                    // Recursively check nested statements
-                    self.collect_attributes_from_nested_stmt(stmt, attributes);
-                }
+                _ => {}
             }
         }
+
+        (instance_attributes, class_attributes)
+    }
+
+    /// Collect attributes from nested statements
+    #[allow(dead_code, clippy::only_used_in_recursion)]
+    fn collect_attributes_from_nested_stmt(
+        &self,
+        stmt: &TypedStmt<'a>,
+    ) -> AttributeCollectionResult {
+        let mut instance_attributes = Vec::new();
+        let mut class_attributes = Vec::new();
+
+        match stmt {
+            TypedStmt::If(if_stmt) => {
+                for s in if_stmt.body {
+                    let (inst_attrs, class_attrs) = self.collect_attributes_from_nested_stmt(s);
+                    instance_attributes.extend(inst_attrs);
+                    class_attributes.extend(class_attrs);
+                }
+                for s in if_stmt.orelse {
+                    let (inst_attrs, class_attrs) = self.collect_attributes_from_nested_stmt(s);
+                    instance_attributes.extend(inst_attrs);
+                    class_attributes.extend(class_attrs);
+                }
+            }
+            TypedStmt::While(while_stmt) => {
+                for s in while_stmt.body {
+                    let (inst_attrs, class_attrs) = self.collect_attributes_from_nested_stmt(s);
+                    instance_attributes.extend(inst_attrs);
+                    class_attributes.extend(class_attrs);
+                }
+            }
+            TypedStmt::For(for_stmt) => {
+                for s in for_stmt.body {
+                    let (inst_attrs, class_attrs) = self.collect_attributes_from_nested_stmt(s);
+                    instance_attributes.extend(inst_attrs);
+                    class_attributes.extend(class_attrs);
+                }
+            }
+            TypedStmt::Try(try_stmt) => {
+                for s in try_stmt.body {
+                    let (inst_attrs, class_attrs) = self.collect_attributes_from_nested_stmt(s);
+                    instance_attributes.extend(inst_attrs);
+                    class_attributes.extend(class_attrs);
+                }
+            }
+            _ => {}
+        }
+
+        (instance_attributes, class_attributes)
     }
 
     /// Collect methods from class body
@@ -323,45 +922,6 @@ impl<'a> ClassAnalyzer<'a> {
                     self.collect_methods_from_nested_stmt(stmt, methods);
                 }
             }
-        }
-    }
-
-    /// Collect attributes from nested statements
-    fn collect_attributes_from_nested_stmt(
-        &self,
-        stmt: &TypedStmt<'a>,
-        attributes: &mut Vec<(Symbol, Type)>,
-    ) {
-        match stmt {
-            TypedStmt::If(if_stmt) => {
-                self.collect_attributes_from_body(if_stmt.body, attributes);
-                self.collect_attributes_from_body(if_stmt.orelse, attributes);
-            }
-            TypedStmt::While(while_stmt) => {
-                self.collect_attributes_from_body(while_stmt.body, attributes);
-                self.collect_attributes_from_body(while_stmt.orelse, attributes);
-            }
-            TypedStmt::For(for_stmt) => {
-                self.collect_attributes_from_body(for_stmt.body, attributes);
-                self.collect_attributes_from_body(for_stmt.orelse, attributes);
-            }
-            TypedStmt::Try(try_stmt) => {
-                self.collect_attributes_from_body(try_stmt.body, attributes);
-                self.collect_attributes_from_body(try_stmt.orelse, attributes);
-                self.collect_attributes_from_body(try_stmt.finalbody, attributes);
-                for handler in try_stmt.handlers {
-                    self.collect_attributes_from_body(handler.body, attributes);
-                }
-            }
-            TypedStmt::With(with_stmt) => {
-                self.collect_attributes_from_body(with_stmt.body, attributes);
-            }
-            TypedStmt::Match(match_stmt) => {
-                for case in match_stmt.cases {
-                    self.collect_attributes_from_body(case.body, attributes);
-                }
-            }
-            _ => {}
         }
     }
 

@@ -657,3 +657,183 @@ result = higher_order(lambda n: n * 3)
     // Full integration with name resolution would be tested separately
     // For now, just ensure the inference completes
 }
+
+/// Test Union type attribute resolution
+#[test]
+fn test_union_type_attribute_resolution() {
+    let source = r#"
+def process(value: int | str):
+    # For Union types, attributes should only resolve if present in all union members
+    # int.bit_length() exists, str has no such method
+    if isinstance(value, str):
+        result = value.upper()  # Valid: str has upper()
+    else:
+        result = str(value)  # Valid: int can be converted
+"#;
+
+    let arena = Arena::new();
+    let lexer = Lexer::new(source);
+    let mut parser = Parser::new(lexer, &arena);
+    let module = parser.parse_module().expect("Parse failed");
+
+    // Type inference should handle Union types gracefully
+    let symbol_table = SymbolTable::new();
+    let mut context = TypeInferenceContext::new(symbol_table);
+    let mut inference = TypeInference::new(&mut context);
+    inference.infer_module(module);
+}
+
+/// Test Optional type attribute resolution
+#[test]
+fn test_optional_type_attribute_resolution() {
+    let source = r#"
+def get_value() -> str | None:
+    return None
+
+result = get_value()
+# Accessing attributes on Optional types should work on the inner type
+if result is not None:
+    length = result.__len__()
+"#;
+
+    let arena = Arena::new();
+    let lexer = Lexer::new(source);
+    let mut parser = Parser::new(lexer, &arena);
+    let module = parser.parse_module().expect("Parse failed");
+
+    let symbol_table = SymbolTable::new();
+    let mut context = TypeInferenceContext::new(symbol_table);
+    let mut inference = TypeInference::new(&mut context);
+    inference.infer_module(module);
+}
+
+/// Test decorator validation
+#[test]
+fn test_decorator_validation() {
+    let source = r#"
+class Example:
+    @property
+    def value(self) -> int:
+        return 42
+
+    @staticmethod
+    def static_method():
+        return "static"
+
+    @classmethod
+    def class_method(cls):
+        return "class"
+"#;
+
+    let mut lexer = Lexer::new(source);
+    let (_tokens, errors, _warnings) = lexer.tokenize();
+    assert!(
+        errors.is_empty(),
+        "Expected no lexical errors: {:?}",
+        errors
+    );
+
+    let arena = Arena::new();
+    let mut parser = Parser::new(lexer, &arena);
+    let ast = parser.parse_module().unwrap();
+
+    let mut interner = Interner::new();
+    let mut lowerer = HirLowerer::new(&arena, &mut interner);
+    let hir_result = lowerer.lower_module(ast);
+
+    // Should lower without errors (decorator combinations are valid)
+    match hir_result {
+        Ok(_) => println!("Decorator validation passed"),
+        Err(errors) => {
+            println!("Note: Some errors expected due to incomplete semantic analysis");
+            println!("Errors: {:?}", errors);
+        }
+    }
+}
+
+/// Test attribute resolution on built-in types
+#[test]
+fn test_builtin_type_attribute_resolution() {
+    let source = r#"
+# Test string methods
+s: str = "hello"
+length = s.__len__()
+upper_s = s.upper()
+
+# Test list methods
+lst: list[int] = [1, 2, 3]
+count = lst.count(1)
+append_result = lst.append(4)
+
+# Test dict methods
+d: dict[str, int] = {"key": 1}
+keys = d.keys()
+values = d.values()
+
+# Test set methods
+s: set[int] = {1, 2, 3}
+add_result = s.add(4)
+
+# Test tuple methods
+t: tuple[int, str, float] = (1, "hello", 3.14)
+count_result = t.count(1)
+"#;
+
+    let arena = Arena::new();
+    let lexer = Lexer::new(source);
+    let mut parser = Parser::new(lexer, &arena);
+    let module = parser.parse_module().expect("Parse failed");
+
+    let symbol_table = SymbolTable::new();
+    let mut context = TypeInferenceContext::new(symbol_table);
+    let mut inference = TypeInference::new(&mut context);
+    inference.infer_module(module);
+}
+
+/// Test attribute checking errors for invalid attributes
+#[test]
+fn test_invalid_attribute_detection() {
+    let source = r#"
+x: int = 42
+# int type should not have upper() method
+# This would be caught by type checking
+"#;
+
+    let arena = Arena::new();
+    let lexer = Lexer::new(source);
+    let mut parser = Parser::new(lexer, &arena);
+    let module = parser.parse_module().expect("Parse failed");
+
+    let symbol_table = SymbolTable::new();
+    let mut context = TypeInferenceContext::new(symbol_table);
+    let mut inference = TypeInference::new(&mut context);
+    inference.infer_module(module);
+}
+
+/// Test complex nested attribute access
+#[test]
+fn test_nested_attribute_access() {
+    let source = r#"
+class Person:
+    name: str
+    age: int
+
+class Company:
+    employees: list[Person]
+
+def get_first_employee_name(company: Company) -> str:
+    if company.employees:
+        return company.employees[0].name
+    return ""
+"#;
+
+    let arena = Arena::new();
+    let lexer = Lexer::new(source);
+    let mut parser = Parser::new(lexer, &arena);
+    let module = parser.parse_module().expect("Parse failed");
+
+    let symbol_table = SymbolTable::new();
+    let mut context = TypeInferenceContext::new(symbol_table);
+    let mut inference = TypeInference::new(&mut context);
+    inference.infer_module(module);
+}

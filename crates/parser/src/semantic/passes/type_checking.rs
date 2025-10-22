@@ -3,7 +3,7 @@
 use crate::ast::*;
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
 use crate::semantic::passes::type_inference::{TypeInferenceContext, parse_annotation};
-use crate::semantic::types::Type;
+use crate::semantic::types::{Type, builtins::BUILTIN_ATTRIBUTE_REGISTRY};
 use text_size::TextRange;
 
 /// Type checker context
@@ -368,83 +368,44 @@ impl<'a> TypeChecker<'a> {
                 // Check if attribute exists on the object type
                 let obj_ty = self.context.get_expr_type(attr.value.span());
 
-                // For now, we only check some basic known attributes
-                // A full implementation would need a type system with attribute information
+                // Use the builtin attribute registry to check if the attribute exists
+                let attr_ty =
+                    BUILTIN_ATTRIBUTE_REGISTRY.lookup_builtin_attribute(&obj_ty, attr.attr);
+
                 let has_attr = match &obj_ty {
-                    Type::Str => {
-                        // Common string methods
-                        matches!(
-                            attr.attr,
-                            "upper"
-                                | "lower"
-                                | "strip"
-                                | "split"
-                                | "join"
-                                | "replace"
-                                | "startswith"
-                                | "endswith"
-                                | "find"
-                                | "count"
-                                | "format"
-                        )
-                    }
-                    Type::List(_) => {
-                        // Common list methods
-                        matches!(
-                            attr.attr,
-                            "append"
-                                | "extend"
-                                | "insert"
-                                | "remove"
-                                | "pop"
-                                | "clear"
-                                | "index"
-                                | "count"
-                                | "sort"
-                                | "reverse"
-                                | "copy"
-                        )
-                    }
-                    Type::Dict(_, _) => {
-                        // Common dict methods
-                        matches!(
-                            attr.attr,
-                            "keys"
-                                | "values"
-                                | "items"
-                                | "get"
-                                | "pop"
-                                | "update"
-                                | "clear"
-                                | "copy"
-                                | "setdefault"
-                        )
-                    }
-                    Type::Set(_) => {
-                        // Common set methods
-                        matches!(
-                            attr.attr,
-                            "add"
-                                | "remove"
-                                | "discard"
-                                | "pop"
-                                | "clear"
-                                | "union"
-                                | "intersection"
-                                | "difference"
-                                | "update"
-                        )
-                    }
                     Type::Unknown | Type::Any => true, // Can't verify, assume valid
-                    Type::Instance(_class_name) => true, // Can't verify without class definition
-                    Type::Module(_) => true,           // Modules can have any attribute
-                    _ => false,                        // Primitive types without methods
+                    Type::Instance(_class_name) => {
+                        // For user-defined classes, we skip validation
+                        // In a full implementation, we would use ClassAnalyzer here
+                        true
+                    }
+                    Type::Module(_) => true, // Modules can have any attribute
+                    Type::Union(types) => {
+                        // For union types, all types in the union must have the attribute
+                        types.iter().all(|ty| {
+                            BUILTIN_ATTRIBUTE_REGISTRY
+                                .lookup_builtin_attribute(ty, attr.attr)
+                                .is_some()
+                        })
+                    }
+                    Type::Optional(inner_ty) => {
+                        // For optional types, check if the inner type has the attribute
+                        BUILTIN_ATTRIBUTE_REGISTRY
+                            .lookup_builtin_attribute(inner_ty, attr.attr)
+                            .is_some()
+                    }
+                    _ => attr_ty.is_some(), // Check builtin registry for other types
                 };
 
-                if !has_attr {
+                if !has_attr
+                    && !matches!(
+                        &obj_ty,
+                        Type::Unknown | Type::Any | Type::Instance(_) | Type::Module(_)
+                    )
+                {
                     self.context.add_error(*error(
                         ErrorKind::InvalidAttribute {
-                            obj_type: obj_ty.to_string(),
+                            obj_type: obj_ty.display_name(),
                             attribute: attr.attr.to_string(),
                         },
                         attr.span,

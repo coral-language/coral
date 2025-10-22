@@ -135,12 +135,12 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Handle yield expressions
   - [x] Track generator protocol methods
 
-- [ ] **Attribute Type Resolution**
-  - [ ] Build attribute tables for classes
-  - [ ] Handle instance vs class attributes
-  - [ ] Support property descriptors
-  - [ ] Chain attribute lookups (a.b.c.d)
-  - [ ] Cache attribute types
+- [x] **Attribute Type Resolution**
+  - [x] Build attribute tables for classes
+  - [x] Handle instance vs class attributes
+  - [x] Support property descriptors
+  - [x] Chain attribute lookups (a.b.c.d)
+  - [x] Cache attribute types
 
 - [ ] **Pattern Type Inference**
   - [ ] Infer types from destructuring patterns

@@ -44,6 +44,7 @@ thin-vec = { version = "0.2", features = ["serde"] }
 parking_lot = "0.12"
 sha2 = "0.10"
 memmap2 = "0.9"
+once_cell = "1.19"
 # Dev dependencies
 proptest = "1.8"
 arbitrary = "1.4.2"

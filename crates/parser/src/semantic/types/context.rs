@@ -3,6 +3,23 @@
 /// Type identifier for fast equality checks
 pub type TypeId = usize;
 
+/// Kind of attribute descriptor
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AttributeKind {
+    /// Instance attribute
+    InstanceAttribute,
+    /// Class attribute
+    ClassAttribute,
+    /// Property descriptor
+    Property,
+    /// Static method
+    StaticMethod,
+    /// Class method
+    ClassMethod,
+    /// Instance method
+    InstanceMethod,
+}
+
 /// Represents a type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
@@ -82,6 +99,13 @@ pub enum Type {
 
     /// Template string type (t-strings)
     TemplateString,
+
+    /// Attribute descriptor type (property, static method, class method)
+    AttributeDescriptor {
+        kind: AttributeKind,
+        getter_type: Box<Type>,
+        setter_type: Option<Box<Type>>,
+    },
 
     /// Unknown type (for inference)
     Unknown,
@@ -310,6 +334,31 @@ impl Type {
             Type::Generator(element) => format!("generator[{}]", element.display_name()),
             Type::Slice => "slice".to_string(),
             Type::TemplateString => "tstring".to_string(),
+            Type::AttributeDescriptor {
+                kind,
+                getter_type,
+                setter_type,
+            } => {
+                let kind_str = match kind {
+                    AttributeKind::InstanceAttribute => "instance_attr",
+                    AttributeKind::ClassAttribute => "class_attr",
+                    AttributeKind::Property => "property",
+                    AttributeKind::StaticMethod => "staticmethod",
+                    AttributeKind::ClassMethod => "classmethod",
+                    AttributeKind::InstanceMethod => "method",
+                };
+                let setter_info = if setter_type.is_some() {
+                    " (rw)"
+                } else {
+                    " (ro)"
+                };
+                format!(
+                    "{} -> {}{}",
+                    kind_str,
+                    getter_type.display_name(),
+                    setter_info
+                )
+            }
             Type::Unknown => "?".to_string(),
         }
     }

@@ -94,6 +94,12 @@ impl<'a> HirLowerer<'a> {
         // First pass: collect all class definitions for MRO computation
         self.collect_classes(module);
 
+        // Set the interner on the class analyzer for decorator detection
+        // We need to be careful with the borrowing here - first get the interner reference
+        let interner_ptr = self.interner as *const _;
+        let interner_ref = unsafe { &*interner_ptr };
+        self.class_analyzer.set_interner(interner_ref);
+
         // Compute MRO for all classes
         if let Err(_e) = self.class_analyzer.analyze() {
             self.errors.push(HirLoweringError::ClassAnalysisFailed {
@@ -121,6 +127,11 @@ impl<'a> HirLowerer<'a> {
         } else {
             Err(std::mem::take(&mut self.errors))
         }
+    }
+
+    /// Get the class analyzer after lowering
+    pub fn into_class_analyzer(self) -> ClassAnalyzer<'a> {
+        self.class_analyzer
     }
 
     /// Lower a list of statements
@@ -783,26 +794,35 @@ impl<'a> HirLowerer<'a> {
     fn infer_attribute_type(
         &self,
         value: &TypedExpr<'a>,
-        _attr: &crate::arena::symbol::Symbol,
+        attr: &crate::arena::symbol::Symbol,
     ) -> Type {
-        // Basic attribute type inference based on the value type
-        match value {
-            TypedExpr::Name(name_expr) => {
-                // For names, try to infer based on common patterns
-                match name_expr.ty {
-                    Type::List(_) => Type::Unknown,    // List methods
-                    Type::Dict(_, _) => Type::Unknown, // Dict methods
-                    Type::Str => Type::Unknown,        // String methods
-                    Type::Int => Type::Unknown,        // Int methods
-                    Type::Float => Type::Unknown,      // Float methods
-                    _ => Type::Unknown,
+        use crate::semantic::types::builtins::BUILTIN_ATTRIBUTE_REGISTRY;
+
+        let base_ty = value.ty();
+
+        // Get the attribute name as a string
+        if let Some(attr_name) = self.interner.resolve(*attr) {
+            // For user-defined class instances, the ClassAnalyzer has already
+            // collected attribute types during lowering. Those are available
+            // in TypedClassDefStmt.attributes and TypedClassDefStmt.methods.
+            // For HIR types, we use the builtin registry as a fallback.
+            match base_ty {
+                Type::Instance(_class_name) => {
+                    // Class instance attributes would be resolved by consumers
+                    // using the ClassAnalyzer after lowering is complete
+                    BUILTIN_ATTRIBUTE_REGISTRY
+                        .lookup_builtin_attribute(base_ty, attr_name)
+                        .unwrap_or(Type::Unknown)
+                }
+                _ => {
+                    // Use built-in attribute registry for other types
+                    BUILTIN_ATTRIBUTE_REGISTRY
+                        .lookup_builtin_attribute(base_ty, attr_name)
+                        .unwrap_or(Type::Unknown)
                 }
             }
-            TypedExpr::Call(call_expr) => {
-                // Method call result type
-                call_expr.ty.clone()
-            }
-            _ => Type::Unknown,
+        } else {
+            Type::Unknown
         }
     }
 
