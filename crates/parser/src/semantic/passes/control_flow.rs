@@ -19,11 +19,10 @@ use text_size::{TextRange, TextSize};
 ///
 /// A basic block in the control flow graph
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BlockId(usize);
+pub struct BlockId(pub usize);
 
 impl BlockId {
-    #[allow(dead_code)]
-    fn new(id: usize) -> Self {
+    pub fn new(id: usize) -> Self {
         BlockId(id)
     }
 }
@@ -104,11 +103,43 @@ pub struct ControlFlowGraph {
     exit: Option<BlockId>,
     /// Next block ID to allocate
     next_id: usize,
+    /// Conditions associated with conditional edges (for type narrowing)
+    pub edge_conditions: HashMap<(BlockId, BlockId), ConditionInfo>,
+}
+
+/// Information about a condition that guards an edge
+#[derive(Debug, Clone)]
+pub struct ConditionInfo {
+    /// The variable being tested
+    pub variable: String,
+    /// The kind of condition
+    pub kind: ConditionKind,
+}
+
+/// Type of condition for type narrowing
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConditionKind {
+    /// isinstance(var, Type) check
+    IsInstance { check_type: String },
+    /// var is None
+    IsNone,
+    /// var is not None
+    IsNotNone,
+    /// Truthiness check (if var:)
+    Truthy,
+    /// Falsy check (if not var:)
+    Falsy,
 }
 
 impl ControlFlowGraph {
     #[allow(dead_code)]
-    fn new() -> Self {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for ControlFlowGraph {
+    fn default() -> Self {
         let entry = BlockId::new(0);
         let mut blocks = HashMap::new();
         blocks.insert(
@@ -127,9 +158,12 @@ impl ControlFlowGraph {
             entry,
             exit: None,
             next_id: 1,
+            edge_conditions: HashMap::new(),
         }
     }
+}
 
+impl ControlFlowGraph {
     #[allow(dead_code)]
     fn new_block(&mut self) -> BlockId {
         let id = BlockId::new(self.next_id);
@@ -199,6 +233,37 @@ impl ControlFlowGraph {
         }
 
         reachable
+    }
+
+    /// Add a condition to an edge (for type narrowing)
+    pub fn set_edge_condition(&mut self, from: BlockId, to: BlockId, condition: ConditionInfo) {
+        self.edge_conditions.insert((from, to), condition);
+    }
+
+    /// Get the condition associated with an edge
+    pub fn get_edge_condition(&self, from: &BlockId, to: &BlockId) -> Option<&ConditionInfo> {
+        self.edge_conditions.get(&(from.clone(), to.clone()))
+    }
+
+    /// Get all predecessors of a block
+    pub fn get_predecessors(&self, block: &BlockId) -> Vec<BlockId> {
+        let mut predecessors = Vec::new();
+        for (id, b) in &self.blocks {
+            if b.successors.iter().any(|(succ, _)| succ == block) {
+                predecessors.push(id.clone());
+            }
+        }
+        predecessors
+    }
+
+    /// Get the entry block
+    pub fn entry_block(&self) -> &BlockId {
+        &self.entry
+    }
+
+    /// Get all blocks
+    pub fn blocks(&self) -> impl Iterator<Item = &BlockId> {
+        self.blocks.keys()
     }
 }
 

@@ -274,6 +274,99 @@ impl TypoSuggester {
 
         suggestions
     }
+
+    /// Suggest a correction for a misspelled attribute
+    ///
+    /// # Arguments
+    /// * `typo` - The misspelled attribute name
+    /// * `available_attrs` - List of valid attributes for the type
+    /// * `type_name` - Name of the type for error message
+    ///
+    /// # Returns
+    /// A suggestion string if a close match is found
+    pub fn suggest_attribute(
+        &self,
+        typo: &str,
+        available_attrs: &[String],
+        type_name: &str,
+    ) -> Option<String> {
+        let mut best_match = None;
+        let mut best_distance = usize::MAX;
+
+        for attr in available_attrs {
+            let distance = Self::levenshtein_distance(typo, attr);
+            // Only suggest if distance is small (1-2 characters different)
+            if distance > 0 && distance <= 2 && distance < best_distance {
+                best_distance = distance;
+                best_match = Some(attr.clone());
+            }
+        }
+
+        best_match.map(|suggestion| {
+            format!(
+                "Type '{}' has no attribute '{}'. Did you mean '{}'?",
+                type_name, typo, suggestion
+            )
+        })
+    }
+
+    /// Suggest a correction for a misspelled module member
+    ///
+    /// # Arguments
+    /// * `typo` - The misspelled member name
+    /// * `available_members` - List of valid members in the module
+    /// * `module_name` - Name of the module for error message
+    ///
+    /// # Returns
+    /// A suggestion string if a close match is found
+    pub fn suggest_module_member(
+        &self,
+        typo: &str,
+        available_members: &[String],
+        module_name: &str,
+    ) -> Option<String> {
+        let mut best_match = None;
+        let mut best_distance = usize::MAX;
+
+        for member in available_members {
+            let distance = Self::levenshtein_distance(typo, member);
+            if distance > 0 && distance <= 2 && distance < best_distance {
+                best_distance = distance;
+                best_match = Some(member.clone());
+            }
+        }
+
+        best_match.map(|suggestion| {
+            format!(
+                "Module '{}' has no member '{}'. Did you mean '{}'?",
+                module_name, typo, suggestion
+            )
+        })
+    }
+
+    /// Suggest a correction for a misspelled type name
+    ///
+    /// # Arguments
+    /// * `typo` - The misspelled type name
+    /// * `available_types` - List of valid type names
+    ///
+    /// # Returns
+    /// A suggestion string if a close match is found
+    pub fn suggest_type_name(&self, typo: &str, available_types: &[String]) -> Option<String> {
+        let mut best_match = None;
+        let mut best_distance = usize::MAX;
+
+        for type_name in available_types {
+            let distance = Self::levenshtein_distance(typo, type_name);
+            if distance > 0 && distance <= 2 && distance < best_distance {
+                best_distance = distance;
+                best_match = Some(type_name.clone());
+            }
+        }
+
+        best_match
+            .map(|suggestion| format!("Unknown type '{}'. Did you mean '{}'?", typo, suggestion))
+    }
 }
 
 impl Default for TypoSuggester {

@@ -142,17 +142,17 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Chain attribute lookups (a.b.c.d)
   - [x] Cache attribute types
 
-- [ ] **Pattern Type Inference**
-  - [ ] Infer types from destructuring patterns
-  - [ ] Handle tuple/list/class patterns
-  - [ ] Support nested patterns recursively
+- [x] **Pattern Type Inference**
+  - [x] Infer types from destructuring patterns
+  - [x] Handle tuple/list/class patterns
+  - [x] Support nested patterns recursively
 
-- [ ] **Flow-Sensitive Type Narrowing**
-  - [ ] `isinstance()` checks narrow types
-  - [ ] `is None` / `is not None` narrowing
-  - [ ] Truthiness-based narrowing
-  - [ ] Type guards support
-  - [ ] Integration with CFG
+- [x] **Flow-Sensitive Type Narrowing**
+  - [x] `isinstance()` checks narrow types
+  - [x] `is None` / `is not None` narrowing
+  - [x] Truthiness-based narrowing
+  - [x] Type guards support
+  - [x] Integration with CFG (condition tracking complete)
 
 ### Semantic Module - Control Flow
 

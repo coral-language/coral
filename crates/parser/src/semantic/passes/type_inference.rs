@@ -495,8 +495,16 @@ impl<'a> TypeInference<'a> {
                 }
             }
             Stmt::Match(match_stmt) => {
-                let _ = self.infer_expr_val(&match_stmt.subject);
+                let subject_ty = self.infer_expr_val(&match_stmt.subject);
                 for case in match_stmt.cases {
+                    // Infer types from pattern bindings
+                    self.infer_pattern_types(&case.pattern, &subject_ty);
+
+                    // Infer guard expression if present
+                    if let Some(ref guard) = case.guard {
+                        let _ = self.infer_expr(guard);
+                    }
+
                     for stmt in case.body {
                         self.infer_stmt(stmt);
                     }
@@ -544,14 +552,74 @@ impl<'a> TypeInference<'a> {
                     for (elem, elem_ty) in tuple.elts.iter().zip(types.iter()) {
                         self.infer_target(elem, elem_ty);
                     }
+                } else {
+                    // If the type is not a tuple, try to treat it as an iterable
+                    let elem_ty = self.infer_iterable_element_type(ty.clone());
+                    for elem in tuple.elts {
+                        self.infer_target(elem, &elem_ty);
+                    }
                 }
             }
             Expr::List(list) => {
-                // All elements get the same type
+                // Handle list destructuring
                 if let Type::List(elem_ty) = ty {
-                    for elem in list.elts {
-                        self.infer_target(elem, elem_ty);
+                    // Check for starred expressions (rest patterns)
+                    let starred_count = list
+                        .elts
+                        .iter()
+                        .filter(|e| matches!(e, Expr::Starred(_)))
+                        .count();
+                    if starred_count == 0 {
+                        // Simple case: all elements get the same type
+                        for elem in list.elts {
+                            self.infer_target(elem, elem_ty);
+                        }
+                    } else if starred_count == 1 {
+                        // Rest pattern: [first, *rest, last] = items
+                        for elem in list.elts {
+                            if let Expr::Starred(starred) = elem {
+                                // Rest gets List[elem_ty]
+                                self.infer_target(starred.value, &Type::List(elem_ty.clone()));
+                            } else {
+                                // Regular elements get elem_ty
+                                self.infer_target(elem, elem_ty);
+                            }
+                        }
                     }
+                } else {
+                    // Try to extract element type from iterable
+                    let elem_ty = self.infer_iterable_element_type(ty.clone());
+                    for elem in list.elts {
+                        if let Expr::Starred(starred) = elem {
+                            self.infer_target(
+                                starred.value,
+                                &Type::List(Box::new(elem_ty.clone())),
+                            );
+                        } else {
+                            self.infer_target(elem, &elem_ty);
+                        }
+                    }
+                }
+            }
+            Expr::Dict(dict) => {
+                // Handle dictionary unpacking patterns
+                if let Type::Dict(_key_ty, val_ty) = ty {
+                    // Match keys to patterns
+                    for (_key, value) in dict.keys.iter().zip(dict.values.iter()) {
+                        // The key should be a constant or name to match
+                        // The value is the pattern to bind the dict value
+                        self.infer_target(value, val_ty);
+                    }
+                }
+            }
+            Expr::Starred(starred) => {
+                // Starred expression in destructuring context
+                // The starred variable gets a list of the element type
+                if let Type::List(elem_ty) = ty {
+                    self.infer_target(starred.value, &Type::List(elem_ty.clone()));
+                } else {
+                    let elem_ty = self.infer_iterable_element_type(ty.clone());
+                    self.infer_target(starred.value, &Type::List(Box::new(elem_ty)));
                 }
             }
             _ => {}
@@ -1127,6 +1195,105 @@ impl<'a> TypeInference<'a> {
         }
 
         Type::function(param_types, return_ty)
+    }
+
+    /// Infer types from match patterns
+    fn infer_pattern_types(&mut self, pattern: &crate::ast::patterns::Pattern, subject_ty: &Type) {
+        use crate::ast::patterns::Pattern;
+
+        match pattern {
+            Pattern::MatchAs(match_as) => {
+                // Bind the name to the subject type (or narrowed type)
+                if let Some(name) = match_as.name {
+                    self.context
+                        .symbol_table_mut()
+                        .set_symbol_type(name, subject_ty.clone());
+                }
+                // Recursively handle nested pattern
+                if let Some(ref inner_pattern) = match_as.pattern {
+                    self.infer_pattern_types(inner_pattern, subject_ty);
+                }
+            }
+            Pattern::MatchValue(_) => {
+                // Match value patterns don't bind names
+            }
+            Pattern::MatchOr(match_or) => {
+                // All alternatives should match the same type
+                for alt_pattern in match_or.patterns {
+                    self.infer_pattern_types(alt_pattern, subject_ty);
+                }
+            }
+            Pattern::MatchSequence(match_seq) => {
+                // Extract element type from sequence
+                let elem_ty = match subject_ty {
+                    Type::List(elem) => (**elem).clone(),
+                    Type::Tuple(elems) => {
+                        // For tuple patterns, try to match structurally
+                        if elems.len() == match_seq.patterns.len() {
+                            // Match each pattern to corresponding tuple element
+                            for (pat, ty) in match_seq.patterns.iter().zip(elems.iter()) {
+                                self.infer_pattern_types(pat, ty);
+                            }
+                            return;
+                        } else {
+                            // If lengths don't match, use union of all types
+                            if elems.is_empty() {
+                                Type::Unknown
+                            } else {
+                                Type::Union(elems.clone())
+                            }
+                        }
+                    }
+                    Type::Set(elem) => (**elem).clone(),
+                    _ => self.infer_iterable_element_type(subject_ty.clone()),
+                };
+
+                // Bind each pattern to the element type
+                for pat in match_seq.patterns {
+                    self.infer_pattern_types(pat, &elem_ty);
+                }
+            }
+            Pattern::MatchMapping(match_map) => {
+                // Extract value type from dict
+                let val_ty = match subject_ty {
+                    Type::Dict(_, val) => (**val).clone(),
+                    _ => Type::Unknown,
+                };
+
+                // Bind each value pattern to the dict value type
+                for pat in match_map.patterns {
+                    self.infer_pattern_types(pat, &val_ty);
+                }
+
+                // Handle rest pattern (captures remaining keys)
+                if let Some(rest_name) = match_map.rest {
+                    // Rest gets a dict of the same type
+                    self.context
+                        .symbol_table_mut()
+                        .set_symbol_type(rest_name, subject_ty.clone());
+                }
+            }
+            Pattern::MatchClass(match_class) => {
+                // For class patterns, infer types from constructor signature
+                // This is a simplified version - full implementation would need class analysis
+                let _class_name = match &match_class.cls {
+                    crate::ast::Expr::Name(name) => name.id,
+                    _ => "",
+                };
+
+                // If we can resolve the class, bind patterns to constructor parameter types
+                // For now, we'll bind to Unknown (proper implementation needs ClassAnalyzer integration)
+                for pat in match_class.patterns {
+                    self.infer_pattern_types(pat, &Type::Unknown);
+                }
+                for pat in match_class.kwd_patterns {
+                    self.infer_pattern_types(pat, &Type::Unknown);
+                }
+            }
+            Pattern::MatchSingleton(_singleton) => {
+                // Singleton patterns don't bind names
+            }
+        }
     }
 }
 
