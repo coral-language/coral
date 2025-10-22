@@ -274,6 +274,25 @@ pub enum ControlFlowWarning {
     FinallyNotGuaranteed { span: TextRange, reason: String },
 }
 
+/// Context for loop constructs (for break/continue handling)
+#[derive(Debug, Clone)]
+struct LoopContext {
+    /// Block to jump to on break
+    break_target: BlockId,
+    /// Block to jump to on continue
+    continue_target: BlockId,
+}
+
+/// Context for try constructs (for exception handling)
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct TryContext {
+    /// Exception handler blocks
+    handler_blocks: Vec<BlockId>,
+    /// Finally block (if present)
+    finally_block: Option<BlockId>,
+}
+
 /// Control flow analyzer
 pub struct ControlFlowAnalyzer {
     errors: Vec<Error>,
@@ -282,6 +301,10 @@ pub struct ControlFlowAnalyzer {
     current_function: Option<String>,
     /// Loop depth (for break/continue validation)
     loop_depth: usize,
+    /// Stack of loop contexts for break/continue resolution
+    loop_stack: Vec<LoopContext>,
+    /// Stack of try contexts for exception flow
+    try_stack: Vec<TryContext>,
 }
 
 impl Default for ControlFlowAnalyzer {
@@ -297,6 +320,8 @@ impl ControlFlowAnalyzer {
             warnings: Vec::new(),
             current_function: None,
             loop_depth: 0,
+            loop_stack: Vec::new(),
+            try_stack: Vec::new(),
         }
     }
 
@@ -462,29 +487,34 @@ impl ControlFlowAnalyzer {
         let prev_function = self.current_function.clone();
         self.current_function = Some(func.name.to_string());
 
-        // Check for unreachable code in function body
-        self.check_unreachable_in_block(func.body);
+        // Build CFG for the function
+        let mut cfg = ControlFlowGraph::new();
+        let entry = cfg.entry.clone();
+
+        // Build CFG from function body
+        let _exit = self.build_cfg_from_stmts(func.body, &mut cfg, entry);
+
+        // Analyze using the CFG
+        self.check_unreachable_code_cfg(&cfg);
 
         // Check if all paths return (if function has non-None return type)
         if let Some(ref returns) = func.returns
             && !self.is_none_type(returns)
+            && !self.check_all_paths_return_cfg(&cfg)
         {
-            let returns_on_all_paths = self.check_all_paths_return(func.body);
-            if !returns_on_all_paths {
-                // Use just the function name span - need to skip "def " (4 chars) to get to the name
-                let def_offset = TextSize::from(4u32); // "def " is 4 characters
-                let name_len = TextSize::from(func.name.len() as u32);
-                let name_start = func.span.start() + def_offset;
-                let signature_span = TextRange::new(name_start, name_start + name_len);
+            // Use just the function name span
+            let def_offset = TextSize::from(4u32);
+            let name_len = TextSize::from(func.name.len() as u32);
+            let name_start = func.span.start() + def_offset;
+            let signature_span = TextRange::new(name_start, name_start + name_len);
 
-                self.errors.push(*error(
-                    ErrorKind::MissingReturn {
-                        function: func.name.to_string(),
-                        expected_type: "int".to_string(), // TODO: get actual return type
-                    },
-                    signature_span,
-                ));
-            }
+            self.errors.push(*error(
+                ErrorKind::MissingReturn {
+                    function: func.name.to_string(),
+                    expected_type: "int".to_string(), // TODO: get actual return type
+                },
+                signature_span,
+            ));
         }
 
         self.current_function = prev_function;
@@ -495,7 +525,456 @@ impl ControlFlowAnalyzer {
         matches!(expr, Expr::Name(name) if name.id == "None")
     }
 
+    // ===== CFG Builder Methods =====
+
+    /// Build CFG from a sequence of statements
+    /// Returns the exit block (last block that doesn't terminate)
+    fn build_cfg_from_stmts(
+        &mut self,
+        stmts: &[Stmt],
+        cfg: &mut ControlFlowGraph,
+        mut current: BlockId,
+    ) -> BlockId {
+        for stmt in stmts {
+            // If current block already terminates, any further statements are unreachable
+            if let Some(block) = cfg.blocks.get(&current)
+                && block.terminates
+            {
+                break;
+            }
+
+            current = self.build_cfg_from_stmt(stmt, cfg, current);
+        }
+        current
+    }
+
+    /// Build CFG from a single statement
+    /// Returns the next block to continue from
+    fn build_cfg_from_stmt(
+        &mut self,
+        stmt: &Stmt,
+        cfg: &mut ControlFlowGraph,
+        current: BlockId,
+    ) -> BlockId {
+        match stmt {
+            // Sequential statements - just add to current block
+            Stmt::Expr(_)
+            | Stmt::Assign(_)
+            | Stmt::AnnAssign(_)
+            | Stmt::AugAssign(_)
+            | Stmt::Pass(_)
+            | Stmt::Import(_)
+            | Stmt::From(_)
+            | Stmt::Export(_)
+            | Stmt::Delete(_)
+            | Stmt::Global(_)
+            | Stmt::Nonlocal(_)
+            | Stmt::Assert(_)
+            | Stmt::TypeAlias(_)
+            | Stmt::Yield(_) => {
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal);
+                current
+            }
+
+            // Terminating statements
+            Stmt::Return(_) => {
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Return);
+                current
+            }
+
+            Stmt::Raise(_) => {
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Raise);
+                current
+            }
+
+            Stmt::Break(_) => {
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Break);
+                // Connect to loop's break target if in a loop
+                if let Some(loop_ctx) = self.loop_stack.last() {
+                    cfg.add_edge(
+                        current.clone(),
+                        loop_ctx.break_target.clone(),
+                        EdgeType::Normal,
+                    );
+                }
+                current
+            }
+
+            Stmt::Continue(_) => {
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Continue);
+                // Connect to loop's continue target if in a loop
+                if let Some(loop_ctx) = self.loop_stack.last() {
+                    cfg.add_edge(
+                        current.clone(),
+                        loop_ctx.continue_target.clone(),
+                        EdgeType::Loop,
+                    );
+                }
+                current
+            }
+
+            // Control flow statements
+            Stmt::If(if_stmt) => self.build_cfg_if(if_stmt, cfg, current),
+            Stmt::While(while_stmt) => self.build_cfg_while(while_stmt, cfg, current),
+            Stmt::For(for_stmt) => self.build_cfg_for(for_stmt, cfg, current),
+            Stmt::Try(try_stmt) => self.build_cfg_try(try_stmt, cfg, current),
+            Stmt::With(with_stmt) => self.build_cfg_with(with_stmt, cfg, current),
+            Stmt::Match(match_stmt) => self.build_cfg_match(match_stmt, cfg, current),
+
+            // Nested function/class definitions don't affect control flow
+            Stmt::FuncDef(_) | Stmt::ClassDef(_) => {
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal);
+                current
+            }
+        }
+    }
+
+    /// Build CFG for if statement
+    fn build_cfg_if(
+        &mut self,
+        if_stmt: &crate::ast::nodes::IfStmt,
+        cfg: &mut ControlFlowGraph,
+        current: BlockId,
+    ) -> BlockId {
+        // Create blocks for then, else, and merge
+        let then_block = cfg.new_block();
+        let else_block = cfg.new_block();
+        let merge_block = cfg.new_block();
+
+        // Add conditional edges
+        cfg.add_edge(current.clone(), then_block.clone(), EdgeType::True);
+        cfg.add_edge(current, else_block.clone(), EdgeType::False);
+
+        // TODO: Track condition info for type narrowing
+        // self.extract_condition_info(&if_stmt.test, cfg, ...);
+
+        // Build then branch
+        let then_exit = self.build_cfg_from_stmts(if_stmt.body, cfg, then_block);
+
+        // Only connect to merge if the block doesn't terminate
+        if let Some(block) = cfg.blocks.get(&then_exit)
+            && !block.terminates
+        {
+            cfg.add_edge(then_exit, merge_block.clone(), EdgeType::Normal);
+        }
+
+        // Build else branch
+        let else_exit = if !if_stmt.orelse.is_empty() {
+            self.build_cfg_from_stmts(if_stmt.orelse, cfg, else_block)
+        } else {
+            else_block
+        };
+
+        // Only connect to merge if the block doesn't terminate
+        if let Some(block) = cfg.blocks.get(&else_exit)
+            && !block.terminates
+        {
+            cfg.add_edge(else_exit, merge_block.clone(), EdgeType::Normal);
+        }
+
+        merge_block
+    }
+
+    /// Build CFG for while loop
+    fn build_cfg_while(
+        &mut self,
+        while_stmt: &crate::ast::nodes::WhileStmt,
+        cfg: &mut ControlFlowGraph,
+        current: BlockId,
+    ) -> BlockId {
+        // Create blocks for loop header, body, else, and exit
+        let header_block = cfg.new_block();
+        let body_block = cfg.new_block();
+        let exit_block = cfg.new_block();
+
+        // Connect current to header
+        cfg.add_edge(current, header_block.clone(), EdgeType::Normal);
+
+        // Conditional edges from header
+        cfg.add_edge(header_block.clone(), body_block.clone(), EdgeType::True);
+        cfg.add_edge(header_block.clone(), exit_block.clone(), EdgeType::False);
+
+        // Push loop context
+        self.loop_stack.push(LoopContext {
+            break_target: exit_block.clone(),
+            continue_target: header_block.clone(),
+        });
+        self.loop_depth += 1;
+
+        // Build body
+        let body_exit = self.build_cfg_from_stmts(while_stmt.body, cfg, body_block);
+
+        // Loop back edge (only if body doesn't terminate)
+        if let Some(block) = cfg.blocks.get(&body_exit)
+            && !block.terminates
+        {
+            cfg.add_edge(body_exit, header_block, EdgeType::Loop);
+        }
+
+        // Pop loop context
+        self.loop_depth -= 1;
+        self.loop_stack.pop();
+
+        // Handle else clause (executes when loop condition is false)
+        if !while_stmt.orelse.is_empty() {
+            self.build_cfg_from_stmts(while_stmt.orelse, cfg, exit_block.clone())
+        } else {
+            exit_block
+        }
+    }
+
+    /// Build CFG for for loop
+    fn build_cfg_for(
+        &mut self,
+        for_stmt: &crate::ast::nodes::ForStmt,
+        cfg: &mut ControlFlowGraph,
+        current: BlockId,
+    ) -> BlockId {
+        // Similar to while loop
+        let header_block = cfg.new_block();
+        let body_block = cfg.new_block();
+        let exit_block = cfg.new_block();
+
+        // Connect current to header
+        cfg.add_edge(current, header_block.clone(), EdgeType::Normal);
+
+        // Conditional edges from header
+        cfg.add_edge(header_block.clone(), body_block.clone(), EdgeType::True);
+        cfg.add_edge(header_block.clone(), exit_block.clone(), EdgeType::False);
+
+        // Push loop context
+        self.loop_stack.push(LoopContext {
+            break_target: exit_block.clone(),
+            continue_target: header_block.clone(),
+        });
+        self.loop_depth += 1;
+
+        // Build body
+        let body_exit = self.build_cfg_from_stmts(for_stmt.body, cfg, body_block);
+
+        // Loop back edge
+        if let Some(block) = cfg.blocks.get(&body_exit)
+            && !block.terminates
+        {
+            cfg.add_edge(body_exit, header_block, EdgeType::Loop);
+        }
+
+        // Pop loop context
+        self.loop_depth -= 1;
+        self.loop_stack.pop();
+
+        // Handle else clause
+        if !for_stmt.orelse.is_empty() {
+            self.build_cfg_from_stmts(for_stmt.orelse, cfg, exit_block.clone())
+        } else {
+            exit_block
+        }
+    }
+
+    /// Build CFG for try/except/finally
+    fn build_cfg_try(
+        &mut self,
+        try_stmt: &crate::ast::nodes::TryStmt,
+        cfg: &mut ControlFlowGraph,
+        current: BlockId,
+    ) -> BlockId {
+        // Create blocks for try, handlers, else, finally, and exit
+        let try_block = cfg.new_block();
+        let mut handler_blocks = Vec::new();
+        let finally_block = if !try_stmt.finalbody.is_empty() {
+            Some(cfg.new_block())
+        } else {
+            None
+        };
+        let exit_block = cfg.new_block();
+
+        // Connect current to try block
+        cfg.add_edge(current, try_block.clone(), EdgeType::Normal);
+
+        // Create handler blocks
+        for _ in try_stmt.handlers {
+            handler_blocks.push(cfg.new_block());
+        }
+
+        // Push try context
+        self.try_stack.push(TryContext {
+            handler_blocks: handler_blocks.clone(),
+            finally_block: finally_block.clone(),
+        });
+
+        // Build try body
+        let try_exit = self.build_cfg_from_stmts(try_stmt.body, cfg, try_block.clone());
+
+        // Add exception edges from try block to handlers
+        for handler_block in &handler_blocks {
+            cfg.add_edge(
+                try_block.clone(),
+                handler_block.clone(),
+                EdgeType::Exception,
+            );
+        }
+
+        // Build handler blocks
+        let mut handler_exits = Vec::new();
+        for (i, handler) in try_stmt.handlers.iter().enumerate() {
+            let handler_exit =
+                self.build_cfg_from_stmts(handler.body, cfg, handler_blocks[i].clone());
+            handler_exits.push(handler_exit);
+        }
+
+        // Build else clause (only if no exception)
+        let else_exit = if !try_stmt.orelse.is_empty() {
+            self.build_cfg_from_stmts(try_stmt.orelse, cfg, try_exit.clone())
+        } else {
+            try_exit.clone()
+        };
+
+        // Pop try context
+        self.try_stack.pop();
+
+        // Build finally block if present
+        if let Some(finally) = finally_block {
+            // Connect try exit and all handler exits to finally
+            if let Some(block) = cfg.blocks.get(&else_exit)
+                && !block.terminates
+            {
+                cfg.add_edge(else_exit, finally.clone(), EdgeType::Finally);
+            }
+
+            for handler_exit in handler_exits {
+                if let Some(block) = cfg.blocks.get(&handler_exit)
+                    && !block.terminates
+                {
+                    cfg.add_edge(handler_exit, finally.clone(), EdgeType::Finally);
+                }
+            }
+
+            // Build finally body
+            let finally_exit = self.build_cfg_from_stmts(try_stmt.finalbody, cfg, finally);
+
+            // Connect finally to exit
+            if let Some(block) = cfg.blocks.get(&finally_exit)
+                && !block.terminates
+            {
+                cfg.add_edge(finally_exit, exit_block.clone(), EdgeType::Normal);
+            }
+        } else {
+            // No finally - connect try and handler exits directly to exit
+            if let Some(block) = cfg.blocks.get(&else_exit)
+                && !block.terminates
+            {
+                cfg.add_edge(else_exit, exit_block.clone(), EdgeType::Normal);
+            }
+
+            for handler_exit in handler_exits {
+                if let Some(block) = cfg.blocks.get(&handler_exit)
+                    && !block.terminates
+                {
+                    cfg.add_edge(handler_exit, exit_block.clone(), EdgeType::Normal);
+                }
+            }
+        }
+
+        exit_block
+    }
+
+    /// Build CFG for with statement
+    fn build_cfg_with(
+        &mut self,
+        with_stmt: &crate::ast::nodes::WithStmt,
+        cfg: &mut ControlFlowGraph,
+        current: BlockId,
+    ) -> BlockId {
+        // With statement is like try/finally - the context manager's __exit__ always runs
+        let body_block = cfg.new_block();
+        let exit_block = cfg.new_block();
+
+        cfg.add_edge(current, body_block.clone(), EdgeType::Normal);
+
+        let body_exit = self.build_cfg_from_stmts(with_stmt.body, cfg, body_block);
+
+        // Always connect to exit (cleanup always runs)
+        if let Some(block) = cfg.blocks.get(&body_exit)
+            && !block.terminates
+        {
+            cfg.add_edge(body_exit, exit_block.clone(), EdgeType::Normal);
+        }
+
+        exit_block
+    }
+
+    /// Build CFG for match statement
+    fn build_cfg_match(
+        &mut self,
+        match_stmt: &crate::ast::patterns::MatchStmt,
+        cfg: &mut ControlFlowGraph,
+        current: BlockId,
+    ) -> BlockId {
+        // Create blocks for each case and merge
+        let merge_block = cfg.new_block();
+
+        for case in match_stmt.cases {
+            let case_block = cfg.new_block();
+            cfg.add_edge(current.clone(), case_block.clone(), EdgeType::Normal);
+
+            let case_exit = self.build_cfg_from_stmts(case.body, cfg, case_block);
+
+            if let Some(block) = cfg.blocks.get(&case_exit)
+                && !block.terminates
+            {
+                cfg.add_edge(case_exit, merge_block.clone(), EdgeType::Normal);
+            }
+        }
+
+        merge_block
+    }
+
+    // ===== CFG-Based Analysis Methods =====
+
+    /// Check for unreachable code using CFG
+    fn check_unreachable_code_cfg(&mut self, cfg: &ControlFlowGraph) {
+        let reachable = cfg.reachable_blocks();
+
+        // Find unreachable blocks
+        for (block_id, block) in &cfg.blocks {
+            if !reachable.contains(block_id) {
+                // Report each statement in the unreachable block
+                for stmt_info in &block.statements {
+                    self.errors.push(*error(
+                        ErrorKind::UnreachableCode {
+                            reason: "unreachable block".to_string(),
+                        },
+                        stmt_info.span,
+                    ));
+                }
+            }
+        }
+    }
+
+    /// Check if all paths return using CFG
+    fn check_all_paths_return_cfg(&self, cfg: &ControlFlowGraph) -> bool {
+        // Find all blocks that have no successors (potential exit blocks)
+        let mut has_return_on_all_paths = true;
+
+        for (block_id, block) in &cfg.blocks {
+            // Skip unreachable blocks
+            let reachable = cfg.reachable_blocks();
+            if !reachable.contains(block_id) {
+                continue;
+            }
+
+            // If a block has no successors and doesn't terminate with return, it's a problem
+            if block.successors.is_empty() && block.terminator != Some(Terminator::Return) {
+                has_return_on_all_paths = false;
+                break;
+            }
+        }
+
+        has_return_on_all_paths
+    }
+
     /// Check for unreachable code in a block of statements
+    #[allow(dead_code)]
     fn check_unreachable_in_block(&mut self, stmts: &[Stmt]) {
         let mut found_terminator = false;
         let mut terminator_reason = String::new();
@@ -540,6 +1019,7 @@ impl ControlFlowAnalyzer {
     }
 
     /// Check if all paths through a block return a value
+    #[allow(dead_code)]
     fn check_all_paths_return(&mut self, stmts: &[Stmt]) -> bool {
         if stmts.is_empty() {
             return false;

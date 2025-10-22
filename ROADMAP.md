@@ -156,15 +156,15 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 
 ### Semantic Module - Control Flow
 
-- [ ] **Control Flow Graph Implementation**
-  - [ ] Build CFG in `analyze_function()`
-  - [ ] Create basic blocks for statement sequences
-  - [ ] Add control flow edges (sequential, branch, loop, exception)
-  - [ ] Mark terminator blocks
-  - [ ] Reachability analysis via BFS/DFS on CFG
-  - [ ] Unreachable code detection
-  - [ ] Exception flow tracking
-  - [ ] Finally block validation
+- [x] **Control Flow Graph Implementation**
+  - [x] Build CFG in `analyze_function()`
+  - [x] Create basic blocks for statement sequences
+  - [x] Add control flow edges (sequential, branch, loop, exception)
+  - [x] Mark terminator blocks
+  - [x] Reachability analysis via BFS/DFS on CFG
+  - [x] Unreachable code detection
+  - [x] Exception flow tracking
+  - [x] Finally block validation
 
 - [ ] **Definite Assignment Analysis**
   - [ ] Track variable definitions per block
@@ -209,20 +209,20 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 ### Semantic Module - Module System
 
 - [ ] **Cross-Module Validation**
-  - [ ] Load and parse imported modules
-  - [ ] Build module dependency graph
+  - [x] Load and parse imported modules
+  - [x] Build module dependency graph
   - [ ] Validate re-export chains (`export X from Y`)
-  - [ ] Detect circular re-exports
-  - [ ] Cache parsed modules
+  - [x] Detect circular re-exports
+  - [x] Cache parsed modules
 
 ### Semantic Module - Decorators
 
 - [ ] **Decorator Validation**
-  - [ ] Validate decorator signatures match target type
-  - [ ] Function decorators: `Callable[[F], F]`
-  - [ ] Class decorators: `Callable[[Type[T]], Type[T]]`
+  - [x] Validate decorator signatures match target type
+  - [x] Function decorators: `Callable[[F], F]`
+  - [x] Class decorators: `Callable[[Type[T]], Type[T]]`
   - [ ] Decorator factories with arguments
-  - [ ] Stacked decorator validation
+  - [x] Stacked decorator validation
 
 ### Semantic Module - Protocols
 
