@@ -149,6 +149,8 @@ pub struct TypeInferenceContext {
     symbol_table: SymbolTable,
     /// Expected type context stack for bidirectional type checking
     expected_type_stack: Vec<Option<Type>>,
+    /// Track yielded types for generator functions (function name -> yielded types)
+    generator_yields: HashMap<String, Vec<Type>>,
 }
 
 impl TypeInferenceContext {
@@ -157,6 +159,7 @@ impl TypeInferenceContext {
             expr_types: HashMap::new(),
             symbol_table,
             expected_type_stack: vec![None], // Start with no expectation
+            generator_yields: HashMap::new(),
         }
     }
 
@@ -193,6 +196,35 @@ impl TypeInferenceContext {
     /// Get current expected type
     pub fn expected_type(&self) -> Option<&Type> {
         self.expected_type_stack.last().and_then(|opt| opt.as_ref())
+    }
+
+    /// Mark that the current function contains a yield expression
+    pub fn mark_current_function_as_generator(&mut self, yield_ty: Type) {
+        let current_scope = self.symbol_table.current_scope();
+        if current_scope.scope_type == crate::semantic::symbol::ScopeType::Function {
+            self.generator_yields
+                .entry(current_scope.name.clone())
+                .or_default()
+                .push(yield_ty);
+        }
+    }
+
+    /// Check if a function is a generator function
+    pub fn is_generator_function(&self, name: &str) -> bool {
+        self.generator_yields.contains_key(name)
+    }
+
+    /// Get the yield type for a generator function
+    pub fn get_generator_yield_type(&self, name: &str) -> Option<Type> {
+        self.generator_yields.get(name).map(|types| {
+            if types.is_empty() {
+                Type::None
+            } else if types.iter().all(|t| t == &types[0]) {
+                types[0].clone()
+            } else {
+                Type::Union(types.clone())
+            }
+        })
     }
 }
 
@@ -290,6 +322,23 @@ impl<'a> TypeInference<'a> {
                     self.infer_stmt(stmt);
                 }
 
+                // Check if function is a generator
+                if self.context.is_generator_function(func.name) {
+                    let yield_ty = self
+                        .context
+                        .get_generator_yield_type(func.name)
+                        .unwrap_or(Type::Unknown);
+
+                    // Function's return type is Generator[YieldType]
+                    let generator_ty = Type::generator(yield_ty);
+
+                    // Update function type to return Generator instead of declared return type
+                    let func_ty = self.build_function_type_from_args(&func.args, generator_ty);
+                    self.context
+                        .symbol_table_mut()
+                        .set_symbol_type(func.name, func_ty);
+                }
+
                 // Exit function scope
                 self.context.symbol_table_mut().pop_scope();
             }
@@ -373,6 +422,29 @@ impl<'a> TypeInference<'a> {
                     for stmt in case.body {
                         self.infer_stmt(stmt);
                     }
+                }
+            }
+            Stmt::Yield(yield_stmt) => {
+                if let Some(ref value) = yield_stmt.value {
+                    // The value might be a YieldFrom expression, which needs special handling
+                    match value {
+                        Expr::YieldFrom(yield_from) => {
+                            // Handle yield from
+                            let iter_ty = self.infer_expr(yield_from.value);
+                            let elem_ty = self.infer_iterable_element_type(iter_ty);
+                            self.context
+                                .mark_current_function_as_generator(elem_ty.clone());
+                        }
+                        _ => {
+                            // Regular yield
+                            let value_ty = self.infer_expr(value);
+                            self.context
+                                .mark_current_function_as_generator(value_ty.clone());
+                        }
+                    }
+                } else {
+                    // yield without value
+                    self.context.mark_current_function_as_generator(Type::None);
                 }
             }
             _ => {}
@@ -801,6 +873,29 @@ impl<'a> TypeInference<'a> {
                 } else {
                     Type::union(vec![body_ty, else_ty])
                 }
+            }
+
+            Expr::Yield(yield_expr) => {
+                if let Some(value) = yield_expr.value {
+                    let value_ty = self.infer_expr(value);
+                    // Mark that we're in a generator context
+                    self.context
+                        .mark_current_function_as_generator(value_ty.clone());
+                    Type::generator(value_ty)
+                } else {
+                    // yield without value yields None
+                    self.context.mark_current_function_as_generator(Type::None);
+                    Type::generator(Type::None)
+                }
+            }
+
+            Expr::YieldFrom(yield_from) => {
+                let iter_ty = self.infer_expr(yield_from.value);
+                // Extract element type from the iterable
+                let elem_ty = self.infer_iterable_element_type(iter_ty);
+                self.context
+                    .mark_current_function_as_generator(elem_ty.clone());
+                Type::generator(elem_ty)
             }
 
             _ => Type::Unknown,

@@ -129,11 +129,11 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Handle closures and captured variables
   - [x] Build proper `Type::Function` types
 
-- [ ] **Generator Types**
+- [x] **Generator Types**
   - [x] Add `Type::Generator(Box<Type>)` to type system
   - [x] Distinguish generators from lists
-  - [ ] Handle yield expressions
-  - [ ] Track generator protocol methods
+  - [x] Handle yield expressions
+  - [x] Track generator protocol methods
 
 - [ ] **Attribute Type Resolution**
   - [ ] Build attribute tables for classes

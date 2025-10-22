@@ -313,6 +313,37 @@ impl Type {
             Type::Unknown => "?".to_string(),
         }
     }
+
+    /// Check if this type implements the iterator protocol
+    pub fn is_iterable(&self) -> bool {
+        matches!(
+            self,
+            Type::List(_)
+                | Type::Tuple(_)
+                | Type::Set(_)
+                | Type::Dict(_, _)
+                | Type::Str
+                | Type::Bytes
+                | Type::Generator(_)
+        )
+    }
+
+    /// Check if this is a generator type
+    pub fn is_generator(&self) -> bool {
+        matches!(self, Type::Generator(_))
+    }
+
+    /// Get the element type from an iterable/generator
+    pub fn get_element_type(&self) -> Option<Type> {
+        match self {
+            Type::List(elem) | Type::Set(elem) | Type::Generator(elem) => Some((**elem).clone()),
+            Type::Tuple(elems) if !elems.is_empty() => Some(elems[0].clone()),
+            Type::Dict(key, _) => Some((**key).clone()),
+            Type::Str => Some(Type::Str),
+            Type::Bytes => Some(Type::Int),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

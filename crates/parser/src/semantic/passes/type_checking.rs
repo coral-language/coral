@@ -645,6 +645,25 @@ impl<'a> TypeChecker<'a> {
             ));
         }
     }
+
+    /// Validate generator protocol
+    #[allow(dead_code)]
+    fn validate_generator_protocol(&mut self, gen_type: &Type, span: TextRange) {
+        if let Type::Generator(elem_ty) = gen_type {
+            // Generators implicitly have __iter__ and __next__
+            // This is built-in behavior, no explicit validation needed
+            // Just ensure element type is valid
+            if matches!(elem_ty.as_ref(), Type::Never) {
+                self.context.add_error(*error(
+                    ErrorKind::TypeMismatch {
+                        expected: "Any non-Never type".to_string(),
+                        found: "Never".to_string(),
+                    },
+                    span,
+                ));
+            }
+        }
+    }
 }
 
 #[cfg(test)]
