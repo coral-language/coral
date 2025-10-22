@@ -1,4 +1,8 @@
 #![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::needless_borrow)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::borrow_deref_ref)]
+#![allow(clippy::if_same_then_else)]
 
 use crate::ast::expr::Expr;
 use crate::ast::nodes::{Module, Stmt};
@@ -46,31 +50,36 @@ pub enum EdgeType {
 
 /// A basic block in the control flow graph
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct BasicBlock {
     /// Unique identifier
-    id: BlockId,
+    pub id: BlockId,
     /// Statements in this block
-    statements: Vec<StmtInfo>,
+    pub statements: Vec<StmtInfo>,
     /// Successor blocks
-    successors: Vec<(BlockId, EdgeType)>,
+    pub successors: Vec<(BlockId, EdgeType)>,
     /// Whether this block terminates (return, raise, break, continue)
-    terminates: bool,
+    pub terminates: bool,
     /// Type of termination (if any)
-    terminator: Option<Terminator>,
+    pub terminator: Option<Terminator>,
+    /// All variables defined in this block (union of all statement defs)
+    pub defs: HashSet<String>,
+    /// All variables used in this block (union of all statement uses)
+    pub uses: HashSet<String>,
 }
 
 /// Statement information for CFG
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct StmtInfo {
-    span: TextRange,
-    kind: StmtKind,
+pub struct StmtInfo {
+    pub span: TextRange,
+    pub kind: StmtKind,
+    /// Variables defined (written) by this statement
+    pub defs: Vec<String>,
+    /// Variables used (read) by this statement
+    pub uses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-enum StmtKind {
+pub enum StmtKind {
     Normal,
     Return,
     Raise,
@@ -81,8 +90,7 @@ enum StmtKind {
 
 /// How a block terminates
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-enum Terminator {
+pub enum Terminator {
     Return,
     Raise,
     Break,
@@ -93,14 +101,13 @@ enum Terminator {
 
 /// Control flow graph
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct ControlFlowGraph {
     /// All basic blocks
-    blocks: HashMap<BlockId, BasicBlock>,
+    pub blocks: HashMap<BlockId, BasicBlock>,
     /// Entry block (function start)
-    entry: BlockId,
+    pub entry: BlockId,
     /// Exit block (function end)
-    exit: Option<BlockId>,
+    pub exit: Option<BlockId>,
     /// Next block ID to allocate
     next_id: usize,
     /// Conditions associated with conditional edges (for type narrowing)
@@ -150,6 +157,8 @@ impl Default for ControlFlowGraph {
                 successors: Vec::new(),
                 terminates: false,
                 terminator: None,
+                defs: HashSet::new(),
+                uses: HashSet::new(),
             },
         );
 
@@ -164,7 +173,6 @@ impl Default for ControlFlowGraph {
 }
 
 impl ControlFlowGraph {
-    #[allow(dead_code)]
     fn new_block(&mut self) -> BlockId {
         let id = BlockId::new(self.next_id);
         self.next_id += 1;
@@ -177,13 +185,14 @@ impl ControlFlowGraph {
                 successors: Vec::new(),
                 terminates: false,
                 terminator: None,
+                defs: HashSet::new(),
+                uses: HashSet::new(),
             },
         );
 
         id
     }
 
-    #[allow(dead_code)]
     fn add_edge(&mut self, from: BlockId, to: BlockId, edge_type: EdgeType) {
         if let Some(block) = self.blocks.get_mut(&from)
             && !block.successors.iter().any(|(id, _)| id == &to)
@@ -192,10 +201,29 @@ impl ControlFlowGraph {
         }
     }
 
-    #[allow(dead_code)]
-    fn add_statement(&mut self, block: BlockId, span: TextRange, kind: StmtKind) {
+    fn add_statement(
+        &mut self,
+        block: BlockId,
+        span: TextRange,
+        kind: StmtKind,
+        defs: Vec<String>,
+        uses: Vec<String>,
+    ) {
         if let Some(b) = self.blocks.get_mut(&block) {
-            b.statements.push(StmtInfo { span, kind });
+            // Add to block's def/use sets
+            for def in &defs {
+                b.defs.insert(def.clone());
+            }
+            for use_var in &uses {
+                b.uses.insert(use_var.clone());
+            }
+
+            b.statements.push(StmtInfo {
+                span,
+                kind,
+                defs,
+                uses,
+            });
 
             // Mark block as terminating if statement is a terminator
             if matches!(
@@ -305,6 +333,8 @@ pub struct ControlFlowAnalyzer {
     loop_stack: Vec<LoopContext>,
     /// Stack of try contexts for exception flow
     try_stack: Vec<TryContext>,
+    /// CFGs stored per function name for dataflow analysis
+    pub function_cfgs: HashMap<String, ControlFlowGraph>,
 }
 
 impl Default for ControlFlowAnalyzer {
@@ -322,6 +352,369 @@ impl ControlFlowAnalyzer {
             loop_depth: 0,
             loop_stack: Vec::new(),
             try_stack: Vec::new(),
+            function_cfgs: HashMap::new(),
+        }
+    }
+
+    /// Get the CFG for a specific function
+    pub fn get_function_cfg(&self, function_name: &str) -> Option<&ControlFlowGraph> {
+        self.function_cfgs.get(function_name)
+    }
+
+    // ===== Variable Extraction Methods =====
+
+    /// Extract variables defined and used by a statement
+    fn extract_defs_uses(&self, stmt: &Stmt) -> (Vec<String>, Vec<String>) {
+        match stmt {
+            Stmt::Assign(assign) => {
+                let defs = self.extract_targets(&assign.targets);
+                let uses = self.extract_expr_vars(&assign.value);
+                (defs, uses)
+            }
+            Stmt::AnnAssign(ann_assign) => {
+                let defs = self.extract_expr_vars_as_names(&ann_assign.target);
+                let mut uses = self.extract_expr_vars(&ann_assign.annotation);
+                if let Some(ref value) = ann_assign.value {
+                    uses.extend(self.extract_expr_vars(value));
+                }
+                (defs, uses)
+            }
+            Stmt::AugAssign(aug_assign) => {
+                let target_vars = self.extract_expr_vars_as_names(&aug_assign.target);
+                let mut uses = target_vars.clone(); // Augmented assignment reads the target
+                uses.extend(self.extract_expr_vars(&aug_assign.value));
+                (target_vars, uses)
+            }
+            Stmt::For(for_stmt) => {
+                let defs = self.extract_expr_vars_as_names(&for_stmt.target);
+                let uses = self.extract_expr_vars(&for_stmt.iter);
+                (defs, uses)
+            }
+            Stmt::Return(ret) => {
+                let uses = if let Some(ref value) = ret.value {
+                    self.extract_expr_vars(value)
+                } else {
+                    Vec::new()
+                };
+                (Vec::new(), uses)
+            }
+            Stmt::Raise(raise) => {
+                let mut uses = Vec::new();
+                if let Some(ref exc) = raise.exc {
+                    uses.extend(self.extract_expr_vars(exc));
+                }
+                if let Some(ref cause) = raise.cause {
+                    uses.extend(self.extract_expr_vars(cause));
+                }
+                (Vec::new(), uses)
+            }
+            Stmt::Assert(assert_stmt) => {
+                let mut uses = self.extract_expr_vars(&assert_stmt.test);
+                if let Some(ref msg) = assert_stmt.msg {
+                    uses.extend(self.extract_expr_vars(msg));
+                }
+                (Vec::new(), uses)
+            }
+            Stmt::Expr(expr_stmt) => {
+                let uses = self.extract_expr_vars(&expr_stmt.value);
+                (Vec::new(), uses)
+            }
+            Stmt::Delete(delete) => {
+                // Delete uses the targets
+                let uses = delete
+                    .targets
+                    .iter()
+                    .flat_map(|t| self.extract_expr_vars(t))
+                    .collect();
+                (Vec::new(), uses)
+            }
+            Stmt::Global(global) => {
+                // Global declarations are definitions
+                (
+                    global.names.iter().map(|n| n.to_string()).collect(),
+                    Vec::new(),
+                )
+            }
+            Stmt::Nonlocal(nonlocal) => {
+                // Nonlocal declarations are definitions
+                (
+                    nonlocal.names.iter().map(|n| n.to_string()).collect(),
+                    Vec::new(),
+                )
+            }
+            // Other statements don't define or use variables directly
+            _ => (Vec::new(), Vec::new()),
+        }
+    }
+
+    /// Extract variable names from assignment targets
+    fn extract_targets(&self, targets: &[Expr]) -> Vec<String> {
+        targets
+            .iter()
+            .flat_map(|t| self.extract_expr_vars_as_names(t))
+            .collect()
+    }
+
+    /// Extract variable names from an expression (as lvalues)
+    fn extract_expr_vars_as_names(&self, expr: &Expr) -> Vec<String> {
+        match expr {
+            Expr::Name(name) => vec![name.id.to_string()],
+            Expr::Tuple(tuple) => tuple
+                .elts
+                .iter()
+                .flat_map(|e| self.extract_expr_vars_as_names(e))
+                .collect(),
+            Expr::List(list) => list
+                .elts
+                .iter()
+                .flat_map(|e| self.extract_expr_vars_as_names(e))
+                .collect(),
+            Expr::Subscript(sub) => {
+                // Subscript assignment: the base is modified, subscript is used
+                self.extract_expr_vars_as_names(&sub.value)
+            }
+            Expr::Attribute(attr) => {
+                // Attribute assignment: the base is modified
+                self.extract_expr_vars_as_names(&attr.value)
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Extract variables used (read) in an expression
+    fn extract_expr_vars(&self, expr: &Expr) -> Vec<String> {
+        match expr {
+            Expr::Name(name) => vec![name.id.to_string()],
+            Expr::BinOp(binop) => {
+                let mut vars = self.extract_expr_vars(&binop.left);
+                vars.extend(self.extract_expr_vars(&binop.right));
+                vars
+            }
+            Expr::UnaryOp(unary) => self.extract_expr_vars(&unary.operand),
+            Expr::Lambda(lambda) => {
+                // Lambda body uses variables
+                self.extract_expr_vars(&lambda.body)
+            }
+            Expr::IfExp(if_exp) => {
+                let mut vars = self.extract_expr_vars(&if_exp.test);
+                vars.extend(self.extract_expr_vars(&if_exp.body));
+                vars.extend(self.extract_expr_vars(&if_exp.orelse));
+                vars
+            }
+            Expr::Dict(dict) => {
+                let mut vars = Vec::new();
+                for key in dict.keys.iter().flatten() {
+                    vars.extend(self.extract_expr_vars(key));
+                }
+                for value in dict.values {
+                    vars.extend(self.extract_expr_vars(value));
+                }
+                vars
+            }
+            Expr::Set(set) => set
+                .elts
+                .iter()
+                .flat_map(|e| self.extract_expr_vars(e))
+                .collect(),
+            Expr::ListComp(comp) => {
+                let mut vars = self.extract_expr_vars(&comp.elt);
+                for generator in comp.generators {
+                    vars.extend(self.extract_expr_vars(&generator.iter));
+                    for if_clause in generator.ifs {
+                        vars.extend(self.extract_expr_vars(if_clause));
+                    }
+                }
+                vars
+            }
+            Expr::SetComp(comp) => {
+                let mut vars = self.extract_expr_vars(&comp.elt);
+                for generator in comp.generators {
+                    vars.extend(self.extract_expr_vars(&generator.iter));
+                    for if_clause in generator.ifs {
+                        vars.extend(self.extract_expr_vars(if_clause));
+                    }
+                }
+                vars
+            }
+            Expr::DictComp(comp) => {
+                let mut vars = self.extract_expr_vars(&comp.key);
+                vars.extend(self.extract_expr_vars(&comp.value));
+                for generator in comp.generators {
+                    vars.extend(self.extract_expr_vars(&generator.iter));
+                    for if_clause in generator.ifs {
+                        vars.extend(self.extract_expr_vars(if_clause));
+                    }
+                }
+                vars
+            }
+            Expr::GeneratorExp(genexp) => {
+                let mut vars = self.extract_expr_vars(&genexp.elt);
+                for generator in genexp.generators {
+                    vars.extend(self.extract_expr_vars(&generator.iter));
+                    for if_clause in generator.ifs {
+                        vars.extend(self.extract_expr_vars(if_clause));
+                    }
+                }
+                vars
+            }
+            Expr::Await(await_expr) => self.extract_expr_vars(&await_expr.value),
+            Expr::Yield(yield_expr) => {
+                if let Some(ref value) = yield_expr.value {
+                    self.extract_expr_vars(value)
+                } else {
+                    Vec::new()
+                }
+            }
+            Expr::YieldFrom(yield_from) => self.extract_expr_vars(&yield_from.value),
+            Expr::Compare(compare) => {
+                let mut vars = self.extract_expr_vars(&compare.left);
+                for comparator in compare.comparators {
+                    vars.extend(self.extract_expr_vars(comparator));
+                }
+                vars
+            }
+            Expr::Call(call) => {
+                let mut vars = self.extract_expr_vars(&call.func);
+                for arg in call.args {
+                    vars.extend(self.extract_expr_vars(arg));
+                }
+                for keyword in call.keywords {
+                    vars.extend(self.extract_expr_vars(&keyword.value));
+                }
+                vars
+            }
+            Expr::FormattedValue(fval) => self.extract_expr_vars(&fval.value),
+            Expr::JoinedStr(joined) => joined
+                .values
+                .iter()
+                .flat_map(|v| self.extract_expr_vars(v))
+                .collect(),
+            Expr::Attribute(attr) => self.extract_expr_vars(&attr.value),
+            Expr::Subscript(sub) => {
+                let mut vars = self.extract_expr_vars(&sub.value);
+                vars.extend(self.extract_expr_vars(&sub.slice));
+                vars
+            }
+            Expr::Starred(starred) => self.extract_expr_vars(&starred.value),
+            Expr::List(list) => list
+                .elts
+                .iter()
+                .flat_map(|e| self.extract_expr_vars(e))
+                .collect(),
+            Expr::Tuple(tuple) => tuple
+                .elts
+                .iter()
+                .flat_map(|e| self.extract_expr_vars(e))
+                .collect(),
+            Expr::Slice(slice) => {
+                let mut vars = Vec::new();
+                if let Some(ref lower) = slice.lower {
+                    vars.extend(self.extract_expr_vars(lower));
+                }
+                if let Some(ref upper) = slice.upper {
+                    vars.extend(self.extract_expr_vars(upper));
+                }
+                if let Some(ref step) = slice.step {
+                    vars.extend(self.extract_expr_vars(step));
+                }
+                vars
+            }
+            // Literals don't use variables
+            Expr::Constant(_) | Expr::TString(_) | Expr::Complex(_) | Expr::Bytes(_) => Vec::new(),
+            // Named expressions define and use
+            Expr::NamedExpr(named) => {
+                // The target is defined, the value is used
+                self.extract_expr_vars(&named.value)
+            }
+            // Boolean operations
+            Expr::BoolOp(boolop) => boolop
+                .values
+                .iter()
+                .flat_map(|v| self.extract_expr_vars(v))
+                .collect(),
+            // Module introspection doesn't use variables directly
+            Expr::ModuleIntrospection(_) => Vec::new(),
+        }
+    }
+
+    /// Extract condition information from an expression for type narrowing
+    fn extract_condition_info(&self, expr: &Expr, var_name: &str) -> Option<ConditionInfo> {
+        match expr {
+            // isinstance(var, Type) check
+            Expr::Call(call) => {
+                if let Expr::Name(func_name) = &*call.func {
+                    if func_name.id == "isinstance" && call.args.len() >= 2 {
+                        if let Expr::Name(arg_name) = &call.args[0] {
+                            if arg_name.id == var_name {
+                                // Extract type name from second argument
+                                let type_name = if let Expr::Name(type_name) = &call.args[1] {
+                                    type_name.id.to_string()
+                                } else {
+                                    "Unknown".to_string()
+                                };
+                                return Some(ConditionInfo {
+                                    variable: var_name.to_string(),
+                                    kind: ConditionKind::IsInstance {
+                                        check_type: type_name,
+                                    },
+                                });
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            // var is None / var is not None
+            Expr::Compare(compare) => {
+                if let Expr::Name(left_name) = &*compare.left {
+                    if left_name.id == var_name {
+                        if compare.ops.len() == 1 {
+                            if let Some(Expr::Constant(c)) = compare.comparators.first() {
+                                // Check if it's None comparison
+                                if format!("{:?}", c.value).contains("None") {
+                                    return Some(ConditionInfo {
+                                        variable: var_name.to_string(),
+                                        kind: if compare.ops[0] == "is" {
+                                            ConditionKind::IsNone
+                                        } else if compare.ops[0] == "is not" {
+                                            ConditionKind::IsNotNone
+                                        } else {
+                                            return None;
+                                        },
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            // not var (falsy check)
+            Expr::UnaryOp(unary) => {
+                if unary.op == "not" {
+                    if let Expr::Name(name) = &*unary.operand {
+                        if name.id == var_name {
+                            return Some(ConditionInfo {
+                                variable: var_name.to_string(),
+                                kind: ConditionKind::Falsy,
+                            });
+                        }
+                    }
+                }
+                None
+            }
+            // var (truthy check)
+            Expr::Name(name) => {
+                if name.id == var_name {
+                    Some(ConditionInfo {
+                        variable: var_name.to_string(),
+                        kind: ConditionKind::Truthy,
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None,
         }
     }
 
@@ -485,7 +878,8 @@ impl ControlFlowAnalyzer {
     /// Analyze a function for control flow issues
     fn analyze_function(&mut self, func: &crate::ast::nodes::FuncDefStmt) {
         let prev_function = self.current_function.clone();
-        self.current_function = Some(func.name.to_string());
+        let function_name = func.name.to_string();
+        self.current_function = Some(function_name.clone());
 
         // Build CFG for the function
         let mut cfg = ControlFlowGraph::new();
@@ -516,6 +910,9 @@ impl ControlFlowAnalyzer {
                 signature_span,
             ));
         }
+
+        // Store CFG for dataflow analysis
+        self.function_cfgs.insert(function_name, cfg);
 
         self.current_function = prev_function;
     }
@@ -556,6 +953,9 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
+        // Extract def/use information for this statement
+        let (defs, uses) = self.extract_defs_uses(stmt);
+
         match stmt {
             // Sequential statements - just add to current block
             Stmt::Expr(_)
@@ -572,23 +972,23 @@ impl ControlFlowAnalyzer {
             | Stmt::Assert(_)
             | Stmt::TypeAlias(_)
             | Stmt::Yield(_) => {
-                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal);
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal, defs, uses);
                 current
             }
 
             // Terminating statements
             Stmt::Return(_) => {
-                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Return);
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Return, defs, uses);
                 current
             }
 
             Stmt::Raise(_) => {
-                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Raise);
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Raise, defs, uses);
                 current
             }
 
             Stmt::Break(_) => {
-                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Break);
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Break, defs, uses);
                 // Connect to loop's break target if in a loop
                 if let Some(loop_ctx) = self.loop_stack.last() {
                     cfg.add_edge(
@@ -601,7 +1001,7 @@ impl ControlFlowAnalyzer {
             }
 
             Stmt::Continue(_) => {
-                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Continue);
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Continue, defs, uses);
                 // Connect to loop's continue target if in a loop
                 if let Some(loop_ctx) = self.loop_stack.last() {
                     cfg.add_edge(
@@ -623,7 +1023,7 @@ impl ControlFlowAnalyzer {
 
             // Nested function/class definitions don't affect control flow
             Stmt::FuncDef(_) | Stmt::ClassDef(_) => {
-                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal);
+                cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal, defs, uses);
                 current
             }
         }
@@ -643,10 +1043,35 @@ impl ControlFlowAnalyzer {
 
         // Add conditional edges
         cfg.add_edge(current.clone(), then_block.clone(), EdgeType::True);
-        cfg.add_edge(current, else_block.clone(), EdgeType::False);
+        cfg.add_edge(current.clone(), else_block.clone(), EdgeType::False);
 
-        // TODO: Track condition info for type narrowing
-        // self.extract_condition_info(&if_stmt.test, cfg, ...);
+        // Extract condition info for type narrowing
+        // Try to extract variable name from simple conditions
+        if let Some(var_name) = self.extract_simple_var_name(&if_stmt.test) {
+            if let Some(condition_info) = self.extract_condition_info(&if_stmt.test, &var_name) {
+                // Set condition for true branch
+                cfg.set_edge_condition(current.clone(), then_block.clone(), condition_info.clone());
+
+                // Set negated condition for false branch (if applicable)
+                let negated_kind = match condition_info.kind {
+                    ConditionKind::IsNone => Some(ConditionKind::IsNotNone),
+                    ConditionKind::IsNotNone => Some(ConditionKind::IsNone),
+                    ConditionKind::Truthy => Some(ConditionKind::Falsy),
+                    ConditionKind::Falsy => Some(ConditionKind::Truthy),
+                    _ => None,
+                };
+                if let Some(kind) = negated_kind {
+                    cfg.set_edge_condition(
+                        current,
+                        else_block.clone(),
+                        ConditionInfo {
+                            variable: var_name,
+                            kind,
+                        },
+                    );
+                }
+            }
+        }
 
         // Build then branch
         let then_exit = self.build_cfg_from_stmts(if_stmt.body, cfg, then_block);
@@ -673,6 +1098,39 @@ impl ControlFlowAnalyzer {
         }
 
         merge_block
+    }
+
+    /// Extract a simple variable name from an expression (for condition tracking)
+    fn extract_simple_var_name(&self, expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Name(name) => Some(name.id.to_string()),
+            Expr::Compare(compare) => {
+                if let Expr::Name(name) = &*compare.left {
+                    Some(name.id.to_string())
+                } else {
+                    None
+                }
+            }
+            Expr::Call(call) => {
+                // For isinstance(var, Type), extract var
+                if call.args.is_empty() {
+                    return None;
+                }
+                if let Expr::Name(name) = &call.args.first()? {
+                    Some(name.id.to_string())
+                } else {
+                    None
+                }
+            }
+            Expr::UnaryOp(unary) => {
+                if let Expr::Name(name) = &*unary.operand {
+                    Some(name.id.to_string())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     /// Build CFG for while loop
@@ -1159,6 +1617,206 @@ impl ControlFlowWarning {
             )
             .with_error_type("ControlFlowWarning".to_string()),
         }
+    }
+}
+
+// ===== Dataflow Analysis Framework =====
+
+/// Trait for dataflow analyses
+///
+/// This trait provides a generic framework for implementing dataflow analyses
+/// such as definite assignment analysis, constant propagation, etc.
+pub trait DataflowAnalysis: Clone {
+    /// The type of values computed by this analysis
+    type Value: Clone + PartialEq + std::fmt::Debug;
+
+    /// Get the initial value for the entry block
+    fn initial_value(&self) -> Self::Value;
+
+    /// Transfer function: compute output value given input value and block
+    fn transfer(&self, block: &BasicBlock, input: Self::Value) -> Self::Value;
+
+    /// Meet/Join operation: combine values from multiple predecessors
+    fn meet(&self, values: Vec<Self::Value>) -> Self::Value;
+
+    /// Direction of the analysis (true for forward, false for backward)
+    fn is_forward(&self) -> bool {
+        true
+    }
+}
+
+/// Result of a dataflow analysis: IN and OUT sets for each block
+#[derive(Debug, Clone)]
+pub struct DataflowResult<V> {
+    /// Input values for each block
+    pub in_values: HashMap<BlockId, V>,
+    /// Output values for each block
+    pub out_values: HashMap<BlockId, V>,
+}
+
+/// Solve a dataflow problem using the worklist algorithm
+///
+/// This is a generic implementation that works for any dataflow analysis
+/// that implements the DataflowAnalysis trait.
+pub fn solve_dataflow<A: DataflowAnalysis>(
+    cfg: &ControlFlowGraph,
+    analysis: &A,
+) -> DataflowResult<A::Value> {
+    let mut in_values: HashMap<BlockId, A::Value> = HashMap::new();
+    let mut out_values: HashMap<BlockId, A::Value> = HashMap::new();
+
+    // Initialize all blocks with initial value
+    for block_id in cfg.blocks.keys() {
+        in_values.insert(block_id.clone(), analysis.initial_value());
+        out_values.insert(block_id.clone(), analysis.initial_value());
+    }
+
+    // Set entry block's IN to initial value
+    in_values.insert(cfg.entry.clone(), analysis.initial_value());
+
+    // Worklist algorithm
+    let mut worklist: VecDeque<BlockId> = cfg.blocks.keys().cloned().collect();
+    let mut iteration = 0;
+    const MAX_ITERATIONS: usize = 1000; // Prevent infinite loops
+
+    while let Some(block_id) = worklist.pop_front() {
+        iteration += 1;
+        if iteration > MAX_ITERATIONS {
+            eprintln!("Warning: Dataflow analysis exceeded maximum iterations");
+            break;
+        }
+
+        let block = cfg.blocks.get(&block_id).unwrap();
+
+        // Compute IN[block] = meet of OUT[pred] for all predecessors
+        let predecessors = cfg.get_predecessors(&block_id);
+        let pred_values: Vec<A::Value> = predecessors
+            .iter()
+            .filter_map(|pred| out_values.get(pred).cloned())
+            .collect();
+
+        let new_in = if pred_values.is_empty() {
+            // Entry block or unreachable block
+            if block_id == cfg.entry {
+                analysis.initial_value()
+            } else {
+                analysis.initial_value()
+            }
+        } else {
+            analysis.meet(pred_values)
+        };
+
+        // Compute OUT[block] = transfer(IN[block], block)
+        let new_out = analysis.transfer(block, new_in.clone());
+
+        // Check if anything changed
+        let in_changed = in_values.get(&block_id) != Some(&new_in);
+        let out_changed = out_values.get(&block_id) != Some(&new_out);
+
+        if in_changed || out_changed {
+            in_values.insert(block_id.clone(), new_in);
+            out_values.insert(block_id.clone(), new_out);
+
+            // Add successors to worklist
+            for (succ, _) in &block.successors {
+                if !worklist.contains(succ) {
+                    worklist.push_back(succ.clone());
+                }
+            }
+        }
+    }
+
+    DataflowResult {
+        in_values,
+        out_values,
+    }
+}
+
+/// Example: Definite Assignment Analysis
+///
+/// Tracks which variables are definitely assigned on all paths
+#[derive(Clone)]
+pub struct DefiniteAssignmentAnalysis;
+
+impl DataflowAnalysis for DefiniteAssignmentAnalysis {
+    type Value = HashSet<String>;
+
+    fn initial_value(&self) -> Self::Value {
+        HashSet::new()
+    }
+
+    fn transfer(&self, block: &BasicBlock, mut input: Self::Value) -> Self::Value {
+        // Add all variables defined in this block
+        for def in &block.defs {
+            input.insert(def.clone());
+        }
+        input
+    }
+
+    fn meet(&self, values: Vec<Self::Value>) -> Self::Value {
+        if values.is_empty() {
+            return HashSet::new();
+        }
+
+        // Intersection: a variable is definitely assigned only if assigned on ALL paths
+        let mut result = values[0].clone();
+        for value in values.iter().skip(1) {
+            result = result.intersection(value).cloned().collect();
+        }
+        result
+    }
+
+    fn is_forward(&self) -> bool {
+        true
+    }
+}
+
+/// Example: Available Expressions Analysis (for constant propagation)
+///
+/// This is a simplified version - real constant propagation would need
+/// to track actual values, not just variable names
+#[derive(Clone)]
+pub struct AvailableExpressionsAnalysis;
+
+impl DataflowAnalysis for AvailableExpressionsAnalysis {
+    /// Set of variables with known values
+    type Value = HashSet<String>;
+
+    fn initial_value(&self) -> Self::Value {
+        HashSet::new()
+    }
+
+    fn transfer(&self, block: &BasicBlock, mut input: Self::Value) -> Self::Value {
+        // Kill: remove variables that are redefined
+        for def in &block.defs {
+            input.remove(def);
+        }
+
+        // Gen: add variables that get constant values (simplified - would need actual values)
+        // In a real implementation, we'd track which assignments are to constants
+        for def in &block.defs {
+            // For now, just add all defs (in reality, check if RHS is constant)
+            input.insert(def.clone());
+        }
+
+        input
+    }
+
+    fn meet(&self, values: Vec<Self::Value>) -> Self::Value {
+        if values.is_empty() {
+            return HashSet::new();
+        }
+
+        // Intersection: an expression is available only if available on ALL paths
+        let mut result = values[0].clone();
+        for value in values.iter().skip(1) {
+            result = result.intersection(value).cloned().collect();
+        }
+        result
+    }
+
+    fn is_forward(&self) -> bool {
+        true
     }
 }
 
