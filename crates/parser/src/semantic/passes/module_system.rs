@@ -273,7 +273,7 @@ impl<'a> ModuleSystemChecker<'a> {
             if self
                 .symbol_table
                 .module_scope()
-                .lookup_local(name)
+                .lookup_local(name, |_| ())
                 .is_none()
             {
                 self.errors.push(*error(

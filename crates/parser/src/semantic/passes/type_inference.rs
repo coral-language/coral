@@ -438,7 +438,6 @@ impl<'a> TypeInference<'a> {
                 self.context
                     .symbol_table()
                     .get_symbol_type(name.id)
-                    .cloned()
                     .unwrap_or(Type::Unknown)
             }
 

@@ -2,6 +2,7 @@
 
 use crate::semantic::types::Type;
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use text_size::TextRange;
 
 /// The type of scope in the LEGB scope hierarchy (Local, Enclosing, Global, Builtin)
@@ -121,8 +122,8 @@ pub struct Scope {
     pub scope_type: ScopeType,
     /// The name of this scope (function/class name, or "<module>" for module)
     pub name: String,
-    /// Symbols defined in this scope
-    pub symbols: HashMap<String, Symbol>,
+    /// Symbols defined in this scope (protected by read-write lock for thread safety)
+    pub symbols: Arc<RwLock<HashMap<String, Symbol>>>,
     /// Parent scope ID (None for module scope)
     pub parent_id: Option<usize>,
     /// Child scope IDs
@@ -138,7 +139,7 @@ impl Scope {
         Self {
             scope_type,
             name,
-            symbols: HashMap::new(),
+            symbols: Arc::new(RwLock::new(HashMap::new())),
             parent_id,
             children: Vec::new(),
             global_names: Vec::new(),
@@ -151,22 +152,43 @@ impl Scope {
         let name = symbol.name.clone();
 
         // Check for duplicate definition in same scope
-        if self.symbols.contains_key(&name) {
+        if self.symbols.read().unwrap().contains_key(&name) {
             return Err(format!("Name '{}' is already defined in this scope", name));
         }
 
-        self.symbols.insert(name, symbol);
+        self.symbols.write().unwrap().insert(name, symbol);
         Ok(())
     }
 
     /// Look up a symbol in this scope (doesn't search parent scopes)
-    pub fn lookup_local(&self, name: &str) -> Option<&Symbol> {
-        self.symbols.get(name)
+    pub fn lookup_local<F, R>(&self, name: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(&Symbol) -> R,
+    {
+        let symbols = self.symbols.read().unwrap();
+        symbols.get(name).map(f)
     }
 
-    /// Look up a symbol in this scope (mutable)
-    pub fn lookup_local_mut(&mut self, name: &str) -> Option<&mut Symbol> {
-        self.symbols.get_mut(name)
+    /// Look up a symbol in this scope with mutable access
+    pub fn lookup_local_mut<F, R>(&self, name: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut Symbol) -> R,
+    {
+        let mut symbols = self.symbols.write().unwrap();
+        symbols.get_mut(name).map(f)
+    }
+
+    /// Create an atomic snapshot of this scope's symbols (lock-free read)
+    pub fn snapshot(&self) -> HashMap<String, Symbol> {
+        self.symbols.read().unwrap().clone()
+    }
+
+    /// Look up a symbol in a snapshot (lock-free)
+    pub fn lookup_in_snapshot<'a>(
+        snapshot: &'a HashMap<String, Symbol>,
+        name: &str,
+    ) -> Option<&'a Symbol> {
+        snapshot.get(name)
     }
 
     /// Mark a name as global

@@ -110,16 +110,16 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 
 ### Semantic Module - Parallel Analysis
 
-- [ ] **Parallel Analysis Infrastructure**
-  - [ ] `SyncSymbolTable` with `RwLock<SymbolTable>`
-  - [ ] Per-scope locking for fine-grained concurrency
-  - [ ] Lock-free reads where possible
-  - [ ] Atomic snapshots for consistent views
-  - [ ] Module dependency graph construction
-  - [ ] Topological sort for analysis order
-  - [ ] Parallel analysis of independent modules
-  - [ ] Error aggregation across threads
-  - [ ] Integration with `PassManager`
+- [x] **Parallel Analysis Infrastructure**
+  - [x] `SyncSymbolTable` with `RwLock<SymbolTable>`
+  - [x] Per-scope locking for fine-grained concurrency
+  - [x] Lock-free reads where possible
+  - [x] Atomic snapshots for consistent views
+  - [x] Module dependency graph construction
+  - [x] Topological sort for analysis order
+  - [x] Parallel analysis of independent modules
+  - [x] Error aggregation across threads
+  - [x] Integration with `PassManager`
 
 ### Semantic Module - Type Inference
 

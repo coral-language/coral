@@ -3,6 +3,7 @@
 use crate::ast::nodes::Module;
 use crate::error::codes::Severity;
 use crate::error::diagnostic::Diagnostic;
+use crate::semantic::module::ModuleGraph;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -123,6 +124,10 @@ pub struct PassManager {
     diagnostics: Vec<Diagnostic>,
     /// Root directory for the project
     root_dir: PathBuf,
+    /// Module dependency graph for parallel analysis
+    module_graph: Option<ModuleGraph>,
+    /// Cache for module analysis results (module_name -> (success, diagnostics))
+    module_cache: HashMap<String, (bool, Vec<Diagnostic>)>,
 }
 
 impl PassManager {
@@ -135,6 +140,8 @@ impl PassManager {
             statistics: HashMap::new(),
             diagnostics: Vec::new(),
             root_dir,
+            module_graph: None,
+            module_cache: HashMap::new(),
         };
 
         // Register all available passes
@@ -155,6 +162,8 @@ impl PassManager {
             statistics: HashMap::new(),
             diagnostics: Vec::new(),
             root_dir,
+            module_graph: None,
+            module_cache: HashMap::new(),
         };
 
         manager.register_default_passes();
@@ -213,7 +222,7 @@ impl PassManager {
             description: "Infers types for expressions and variables",
             priority: PassPriority::High,
             dependencies: vec!["hir_lowering"],
-            parallelizable: false,
+            parallelizable: true,
             enabled_by_default: true,
         });
 
@@ -224,7 +233,7 @@ impl PassManager {
             description: "Validates type correctness and compatibility",
             priority: PassPriority::Medium,
             dependencies: vec!["hir_lowering", "type_inference"],
-            parallelizable: false,
+            parallelizable: true,
             enabled_by_default: true,
         });
 
@@ -807,6 +816,249 @@ impl PassManager {
             }
         }
         println!("{}", "=".repeat(80));
+    }
+
+    // Parallel Analysis Methods
+
+    /// Initialize module graph for parallel analysis
+    pub fn init_module_graph(&mut self) -> &mut ModuleGraph {
+        self.module_graph.get_or_insert_with(ModuleGraph::new)
+    }
+
+    /// Get reference to module graph
+    pub fn module_graph(&self) -> Option<&ModuleGraph> {
+        self.module_graph.as_ref()
+    }
+
+    /// Get mutable reference to module graph
+    pub fn module_graph_mut(&mut self) -> Option<&mut ModuleGraph> {
+        self.module_graph.as_mut()
+    }
+
+    /// Run parallel analysis on multiple modules
+    pub fn run_parallel_analysis(
+        &mut self,
+        modules: &HashMap<String, (Module, String)>,
+    ) -> Result<(), Vec<Diagnostic>> {
+        if !self.config.parallel_execution {
+            // Fall back to sequential analysis
+            return self.run_sequential_analysis(modules);
+        }
+
+        // Initialize and build module dependency graph
+        self.build_module_dependency_graph(modules)?;
+
+        // Perform topological sort to determine analysis order
+        let analysis_order = match self.module_graph().unwrap().topological_sort() {
+            Ok(order) => order,
+            Err(e) => {
+                return Err(vec![Diagnostic::error(format!(
+                    "Module dependency error: {}",
+                    e
+                ))]);
+            }
+        };
+
+        // Run analysis in parallel using rayon
+        use rayon::prelude::*;
+
+        let results: Vec<_> = analysis_order
+            .par_iter()
+            .map(|module_name| {
+                // Check cache first (note: cache access in parallel is safe for reads)
+                if let Some((success, cached_diagnostics)) = self.module_cache.get(module_name) {
+                    return (
+                        module_name.clone(),
+                        if *success {
+                            Ok(())
+                        } else {
+                            Err(cached_diagnostics.clone())
+                        },
+                    );
+                }
+
+                if let Some((module, source)) = modules.get(module_name) {
+                    // Create a temporary pass manager for this module
+                    let mut temp_manager =
+                        PassManager::with_config(self.root_dir.clone(), self.config.clone());
+                    let result = temp_manager.run_all_passes(module, source);
+                    (module_name.clone(), result)
+                } else {
+                    (
+                        module_name.clone(),
+                        Err(vec![Diagnostic::error(format!(
+                            "Module '{}' not found",
+                            module_name
+                        ))]),
+                    )
+                }
+            })
+            .collect();
+
+        // Update cache after parallel operations complete
+        for (module_name, result) in &results {
+            match result {
+                Ok(()) => {
+                    self.module_cache
+                        .insert(module_name.clone(), (true, Vec::new()));
+                }
+                Err(diagnostics) => {
+                    self.module_cache
+                        .insert(module_name.clone(), (false, diagnostics.clone()));
+                }
+            }
+        }
+
+        // Collect all diagnostics
+        let mut all_diagnostics = Vec::new();
+        for (module_name, result) in results {
+            match result {
+                Ok(()) => {
+                    if let Some(graph) = self.module_graph_mut() {
+                        graph.set_module_state(
+                            &module_name,
+                            crate::semantic::module::ModuleState::Analyzed,
+                        );
+                        graph.set_module_result(&module_name, Ok(()));
+                    }
+                }
+                Err(diagnostics) => {
+                    all_diagnostics.extend(diagnostics);
+                    if let Some(graph) = self.module_graph_mut() {
+                        let errors: Vec<String> = all_diagnostics
+                            .iter()
+                            .filter(|d| {
+                                d.severity == Severity::Error || d.severity == Severity::Fatal
+                            })
+                            .map(|d| d.message.clone())
+                            .collect();
+                        graph.set_module_result(&module_name, Err(errors));
+                    }
+                }
+            }
+        }
+
+        if all_diagnostics.is_empty() {
+            Ok(())
+        } else {
+            Err(all_diagnostics)
+        }
+    }
+
+    /// Build complete module dependency graph
+    fn build_module_dependency_graph(
+        &mut self,
+        modules: &HashMap<String, (Module, String)>,
+    ) -> Result<(), Vec<Diagnostic>> {
+        // First, extract all import information without borrowing self
+        let mut module_imports = HashMap::new();
+        for (module_name, (module, _source)) in modules {
+            let mut imports = Vec::new();
+            self.extract_imports_from_module(module, &mut imports);
+            module_imports.insert(module_name.clone(), imports);
+        }
+
+        // Initialize module graph
+        let module_graph = self.init_module_graph();
+
+        // Add all modules to the graph
+        for name in module_imports.keys() {
+            module_graph.add_module(name.clone(), text_size::TextRange::default());
+        }
+
+        // Register dependencies in the graph (filter out builtins)
+        for (module_name, imports) in module_imports {
+            for import_name in imports {
+                // Skip builtin imports and relative imports for now
+                if !import_name.starts_with('.') && !Self::is_builtin_module_static(&import_name) {
+                    module_graph.add_dependency(&module_name, &import_name);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Clear the module analysis cache
+    pub fn clear_module_cache(&mut self) {
+        self.module_cache.clear();
+    }
+
+    /// Get cache statistics
+    pub fn cache_stats(&self) -> (usize, usize) {
+        let total_cached = self.module_cache.len();
+        let successful_cached = self
+            .module_cache
+            .values()
+            .filter(|(success, _)| *success)
+            .count();
+        (total_cached, successful_cached)
+    }
+
+    /// Extract import statements from a module
+    fn extract_imports_from_module(&self, module: &Module, imports: &mut Vec<String>) {
+        use crate::ast::nodes::Stmt;
+
+        for stmt in module.body {
+            match stmt {
+                Stmt::Import(import_stmt) => {
+                    // Handle "import module" statements
+                    for (module_name, _alias) in import_stmt.names {
+                        imports.push(module_name.to_string());
+                    }
+                }
+                Stmt::From(from_stmt) => {
+                    // Handle "from module import ..." statements
+                    if let Some(module_name) = from_stmt.module {
+                        imports.push(module_name.to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Check if a module name refers to a builtin module
+    fn is_builtin_module_static(name: &str) -> bool {
+        // Basic check for common builtin modules
+        matches!(
+            name,
+            "sys" | "os" | "math" | "json" | "re" | "datetime" | "collections" | "itertools"
+        )
+    }
+
+    /// Run sequential analysis on multiple modules (fallback)
+    fn run_sequential_analysis(
+        &mut self,
+        modules: &HashMap<String, (Module, String)>,
+    ) -> Result<(), Vec<Diagnostic>> {
+        let mut all_diagnostics = Vec::new();
+
+        for (module_name, (module, source)) in modules {
+            match self.run_all_passes(module, source) {
+                Ok(()) => {
+                    if let Some(graph) = self.module_graph_mut() {
+                        graph.set_module_state(
+                            module_name,
+                            crate::semantic::module::ModuleState::Analyzed,
+                        );
+                        graph.set_module_result(module_name, Ok(()));
+                    }
+                }
+                Err(diagnostics) => {
+                    all_diagnostics.extend(diagnostics);
+                    if !self.config.continue_on_error {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if all_diagnostics.is_empty() {
+            Ok(())
+        } else {
+            Err(all_diagnostics)
+        }
     }
 }
 

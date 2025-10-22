@@ -94,12 +94,12 @@ impl<'a> HirContext<'a> {
     }
 
     /// Look up a symbol by name
-    pub fn lookup_symbol(&self, name: &str) -> Option<(&crate::semantic::symbol::Symbol, usize)> {
+    pub fn lookup_symbol(&self, name: &str) -> Option<(crate::semantic::symbol::Symbol, usize)> {
         self.symbol_table.lookup(name)
     }
 
     /// Get the type of a symbol
-    pub fn get_symbol_type(&self, name: &str) -> Option<&Type> {
+    pub fn get_symbol_type(&self, name: &str) -> Option<Type> {
         self.symbol_table.get_symbol_type(name)
     }
 

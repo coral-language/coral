@@ -4,6 +4,7 @@
 // and advanced static analysis.
 
 pub mod hir;
+pub mod module;
 pub mod parallel;
 pub mod passes;
 pub mod symbol;
