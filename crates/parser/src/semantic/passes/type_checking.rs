@@ -319,7 +319,12 @@ impl<'a> TypeChecker<'a> {
 
                 // Check function call argument types if we know the function type
                 let func_ty = self.context.get_expr_type(call.func.span());
-                if let Type::Function { params, returns: _ } = func_ty {
+                if let Type::Function {
+                    params,
+                    returns: _,
+                    captures: _,
+                } = func_ty
+                {
                     // Check argument count
                     if call.args.len() != params.len() {
                         self.context.add_error(*error(

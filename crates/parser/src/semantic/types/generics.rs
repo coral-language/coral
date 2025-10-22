@@ -53,7 +53,11 @@ impl GenericContext {
                 let new_types: Vec<Type> = types.iter().map(|t| self.apply(t)).collect();
                 Type::union(new_types)
             }
-            Type::Function { params, returns } => {
+            Type::Function {
+                params,
+                returns,
+                captures: _,
+            } => {
                 let new_params: Vec<Type> = params.iter().map(|t| self.apply(t)).collect();
                 let new_returns = self.apply(returns);
                 Type::function(new_params, new_returns)

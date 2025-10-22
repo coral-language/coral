@@ -78,10 +78,12 @@ fn unify_with_context(ty1: &Type, ty2: &Type, ctx: &mut GenericContext) -> bool 
             Type::Function {
                 params: p1,
                 returns: r1,
+                captures: _,
             },
             Type::Function {
                 params: p2,
                 returns: r2,
+                captures: _,
             },
         ) => {
             if p1.len() != p2.len() {
@@ -108,9 +110,11 @@ fn occurs_check(var_name: &str, ty: &Type) -> bool {
         Type::List(t) | Type::Set(t) | Type::Optional(t) => occurs_check(var_name, t),
         Type::Dict(k, v) => occurs_check(var_name, k) || occurs_check(var_name, v),
         Type::Tuple(types) | Type::Union(types) => types.iter().any(|t| occurs_check(var_name, t)),
-        Type::Function { params, returns } => {
-            params.iter().any(|t| occurs_check(var_name, t)) || occurs_check(var_name, returns)
-        }
+        Type::Function {
+            params,
+            returns,
+            captures: _,
+        } => params.iter().any(|t| occurs_check(var_name, t)) || occurs_check(var_name, returns),
         Type::Generic { base, params } => {
             occurs_check(var_name, base) || params.iter().any(|t| occurs_check(var_name, t))
         }

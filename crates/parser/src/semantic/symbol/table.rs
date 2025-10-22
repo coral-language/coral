@@ -267,50 +267,81 @@ impl SymbolTable {
 
     /// Analyze closure captures - mark symbols that are captured by nested functions
     pub fn analyze_closures(&mut self) {
-        // For each function scope, check if it references variables from enclosing scopes
+        // For each scope, check if any symbols are used from parent scopes
         for scope_id in 0..self.scopes.len() {
-            if let Some(scope) = self.scopes.get(scope_id)
-                && scope.scope_type == ScopeType::Function
-            {
-                // Get list of symbols referenced in this scope
-                let referenced_names: Vec<String> = {
-                    let symbols = scope.symbols.read().unwrap();
-                    symbols
-                        .values()
-                        .filter(|s| s.is_free_var)
-                        .map(|s| s.name.clone())
-                        .collect()
-                };
+            self.analyze_scope_captures(scope_id);
+        }
+    }
 
-                // Mark these symbols as captured in their defining scopes
-                for name in &referenced_names {
-                    self.mark_symbol_captured(name, scope_id);
+    /// Analyze captures for a specific scope
+    fn analyze_scope_captures(&mut self, scope_id: usize) {
+        let scope = &self.scopes[scope_id];
+
+        // Only function scopes can capture variables
+        if !matches!(scope.scope_type, ScopeType::Function) {
+            return;
+        }
+
+        let symbols_snapshot: Vec<(String, Vec<TextRange>)> = {
+            let symbols = scope.symbols.read().unwrap();
+            symbols
+                .iter()
+                .map(|(name, sym)| (name.clone(), sym.usages.clone()))
+                .collect()
+        };
+
+        // Check each symbol usage
+        for (name, usages) in symbols_snapshot {
+            // Look up symbol in parent scopes
+            if let Some((_parent_sym, parent_scope_id)) = self.lookup_from_scope(&name, scope_id) {
+                // If found in parent scope, mark as captured
+                if parent_scope_id != scope_id && !usages.is_empty() {
+                    // Mark in parent scope as captured
+                    self.scopes[parent_scope_id].lookup_local_mut(&name, |sym| {
+                        sym.mark_captured();
+                    });
+
+                    // Mark in current scope as free variable
+                    self.scopes[scope_id]
+                        .symbols
+                        .write()
+                        .unwrap()
+                        .entry(name.clone())
+                        .or_insert_with(|| {
+                            let mut sym =
+                                Symbol::new(name.clone(), BindingKind::Parameter, usages[0]);
+                            sym.mark_free_var();
+                            sym
+                        })
+                        .mark_free_var();
                 }
             }
         }
     }
 
-    /// Mark a symbol as captured when accessed from a nested scope
-    fn mark_symbol_captured(&mut self, name: &str, accessing_scope_id: usize) {
-        // Walk up the scope chain from the accessing scope
-        let mut current_id = accessing_scope_id;
+    /// Lookup from a specific scope (helper for closure analysis)
+    fn lookup_from_scope(&self, name: &str, start_scope: usize) -> Option<(Symbol, usize)> {
+        let mut current = start_scope;
 
-        while let Some(scope) = self.scopes.get(current_id) {
+        loop {
+            let scope = &self.scopes[current];
+
+            // Check if symbol is in this scope
+            let symbols = scope.symbols.read().unwrap();
+            if let Some(symbol) = symbols.get(name) {
+                return Some((symbol.clone(), current));
+            }
+            drop(symbols);
+
+            // Move to parent scope
             if let Some(parent_id) = scope.parent_id {
-                // Check if the symbol is defined in the parent scope
-                if let Some(scope) = self.scopes.get(parent_id) {
-                    let found = scope.lookup_local_mut(name, |symbol| {
-                        symbol.mark_captured();
-                    });
-                    if found.is_some() {
-                        return;
-                    }
-                }
-                current_id = parent_id;
+                current = parent_id;
             } else {
                 break;
             }
         }
+
+        None
     }
 
     /// Mark a symbol usage and track if it's a free variable

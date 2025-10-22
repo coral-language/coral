@@ -216,7 +216,7 @@ impl<'a> HirLowerer<'a> {
                 let next_call = self.create_next_call(iter_ref)?;
                 let body = self.lower_statements(for_stmt.body);
                 let orelse = self.lower_statements(for_stmt.orelse);
-                Some(TypedStmt::For(TypedForStmt {
+                Some(TypedStmt::For(Box::new(TypedForStmt {
                     target,
                     iter: iter_ref.clone(),
                     iter_call,
@@ -225,7 +225,7 @@ impl<'a> HirLowerer<'a> {
                     orelse,
                     is_async: for_stmt.is_async,
                     span: for_stmt.span,
-                }))
+                })))
             }
             Stmt::FuncDef(func) => self.lower_function_definition(func),
             Stmt::ClassDef(class) => self.lower_class_definition(class),

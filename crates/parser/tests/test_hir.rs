@@ -1,6 +1,8 @@
 //! Tests for HIR (High-Level Intermediate Representation) functionality
 
 use coral_parser::arena::interner::Interner;
+use coral_parser::semantic::passes::type_inference::{TypeInference, TypeInferenceContext};
+use coral_parser::semantic::symbol::SymbolTable;
 use coral_parser::{Arena, lexer::Lexer, parser::Parser, semantic::hir::lower::HirLowerer};
 
 /// Test basic HIR lowering functionality
@@ -623,4 +625,35 @@ def handle_multiple_errors():
             println!("Note: Name resolution errors are expected in current implementation");
         }
     }
+}
+
+/// Test lambda inference integration with full semantic analysis
+#[test]
+fn test_lambda_inference_integration() {
+    let source = r#"
+// Test various lambda scenarios
+simple = lambda x: x
+annotated = lambda x: int: x * 2
+multi_param = lambda x, y, z: x + y + z
+
+def higher_order(f):
+    return f(42)
+
+result = higher_order(lambda n: n * 3)
+"#;
+
+    let arena = Arena::new();
+    let lexer = Lexer::new(source);
+    let mut parser = Parser::new(lexer, &arena);
+    let module = parser.parse_module().expect("Parse failed");
+
+    // Should parse and infer without errors
+    let symbol_table = SymbolTable::new();
+    let mut context = TypeInferenceContext::new(symbol_table);
+    let mut inference = TypeInference::new(&mut context);
+    inference.infer_module(module);
+
+    // Lambda inference should run without panicking
+    // Full integration with name resolution would be tested separately
+    // For now, just ensure the inference completes
 }

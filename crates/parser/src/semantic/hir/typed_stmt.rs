@@ -24,7 +24,7 @@ pub enum TypedStmt<'a> {
     /// While statement
     While(TypedWhileStmt<'a>),
     /// For statement with explicit iterator protocol
-    For(TypedForStmt<'a>),
+    For(Box<TypedForStmt<'a>>),
     /// Function definition
     FuncDef(TypedFuncDefStmt<'a>),
     /// Class definition with computed MRO

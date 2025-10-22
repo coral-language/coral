@@ -49,6 +49,8 @@ pub enum Type {
     Function {
         params: Vec<Type>,
         returns: Box<Type>,
+        /// Captured variables from enclosing scopes (for closures)
+        captures: Vec<(String, Type)>,
     },
 
     /// Class type with name
@@ -123,6 +125,19 @@ impl Type {
         Type::Function {
             params,
             returns: Box::new(returns),
+            captures: Vec::new(), // No captures by default
+        }
+    }
+
+    pub fn function_with_captures(
+        params: Vec<Type>,
+        returns: Type,
+        captures: Vec<(String, Type)>,
+    ) -> Self {
+        Type::Function {
+            params,
+            returns: Box::new(returns),
+            captures,
         }
     }
 
@@ -213,12 +228,16 @@ impl Type {
                 Type::Function {
                     params: p1,
                     returns: r1,
+                    captures: _c1,
                 },
                 Type::Function {
                     params: p2,
                     returns: r2,
+                    captures: _c2,
                 },
             ) => {
+                // Function subtyping: contravariant params, covariant returns
+                // Captures don't affect subtyping (implementation detail)
                 p1.len() == p2.len() &&
                 p1.iter().zip(p2.iter()).all(|(a, b)| b.is_subtype_of(a)) && // contravariant
                 r1.is_subtype_of(r2) // covariant
@@ -255,9 +274,18 @@ impl Type {
             }
             Type::Set(t) => format!("set[{}]", t.display_name()),
             Type::Dict(k, v) => format!("dict[{}, {}]", k.display_name(), v.display_name()),
-            Type::Function { params, returns } => {
+            Type::Function {
+                params,
+                returns,
+                captures,
+            } => {
                 let param_names: Vec<_> = params.iter().map(|t| t.display_name()).collect();
-                format!("({}) -> {}", param_names.join(", "), returns.display_name())
+                let sig = format!("({}) -> {}", param_names.join(", "), returns.display_name());
+                if !captures.is_empty() {
+                    format!("{} [captures: {}]", sig, captures.len())
+                } else {
+                    sig
+                }
             }
             Type::Class(name) => format!("type[{}]", name),
             Type::Instance(name) => name.clone(),

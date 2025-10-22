@@ -15,7 +15,11 @@ impl fmt::Display for Type {
 pub fn pretty_print_type(ty: &Type, indent: usize) -> String {
     let prefix = "  ".repeat(indent);
     match ty {
-        Type::Function { params, returns } => {
+        Type::Function {
+            params,
+            returns,
+            captures: _,
+        } => {
             let mut result = format!("{}Function:\n", prefix);
             result.push_str(&format!("{}  Parameters:\n", prefix));
             for (i, param) in params.iter().enumerate() {

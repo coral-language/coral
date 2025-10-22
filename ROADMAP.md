@@ -123,15 +123,15 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 
 ### Semantic Module - Type Inference
 
-- [ ] **Lambda Type Inference**
-  - [ ] Infer parameter types from call sites
-  - [ ] Infer return type from body
-  - [ ] Handle closures and captured variables
-  - [ ] Build proper `Type::Function` types
+- [x] **Lambda Type Inference**
+  - [x] Infer parameter types from call sites
+  - [x] Infer return type from body
+  - [x] Handle closures and captured variables
+  - [x] Build proper `Type::Function` types
 
 - [ ] **Generator Types**
   - [x] Add `Type::Generator(Box<Type>)` to type system
-  - [ ] Distinguish generators from lists
+  - [x] Distinguish generators from lists
   - [ ] Handle yield expressions
   - [ ] Track generator protocol methods
 
