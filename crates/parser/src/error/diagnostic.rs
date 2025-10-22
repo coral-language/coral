@@ -5,7 +5,7 @@ use super::context::ErrorContext;
 use text_size::TextRange;
 
 /// A diagnostic report for a parse error.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Diagnostic {
     /// Error severity
     pub severity: Severity,

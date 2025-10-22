@@ -42,6 +42,8 @@ bincode = { version = "2.0", features = ["serde"] }
 smallvec = { version = "1.15", features = ["serde", "union", "const_generics"] }
 thin-vec = { version = "0.2", features = ["serde"] }
 parking_lot = "0.12"
+sha2 = "0.10"
+memmap2 = "0.9"
 # Dev dependencies
 proptest = "1.8"
 arbitrary = "1.4.2"

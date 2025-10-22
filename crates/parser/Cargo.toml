@@ -29,6 +29,8 @@ unicode-xid = "0.2"
 unicode-normalization = "0.1"
 owo-colors = { version = "4.0", features = ["supports-colors"] }
 terminal_size = "0.4"
+sha2.workspace = true
+memmap2.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -40,4 +42,8 @@ harness = false
 
 [[bench]]
 name = "parser_bench"
+harness = false
+
+[[bench]]
+name = "parallel_passes_bench"
 harness = false

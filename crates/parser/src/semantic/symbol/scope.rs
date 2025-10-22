@@ -178,16 +178,21 @@ impl Scope {
         symbols.get_mut(name).map(f)
     }
 
-    /// Create an atomic snapshot of this scope's symbols (lock-free read)
-    pub fn snapshot(&self) -> HashMap<String, Symbol> {
-        self.symbols.read().unwrap().clone()
+    /// Create an atomic snapshot of this scope's symbols (shared references for memory efficiency)
+    pub fn snapshot(&self) -> HashMap<String, Arc<Symbol>> {
+        self.symbols
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(name, symbol)| (name.clone(), Arc::new(symbol.clone())))
+            .collect()
     }
 
     /// Look up a symbol in a snapshot (lock-free)
     pub fn lookup_in_snapshot<'a>(
-        snapshot: &'a HashMap<String, Symbol>,
+        snapshot: &'a HashMap<String, Arc<Symbol>>,
         name: &str,
-    ) -> Option<&'a Symbol> {
+    ) -> Option<&'a Arc<Symbol>> {
         snapshot.get(name)
     }
 

@@ -1,33 +1,38 @@
 {
-  "rust-analyzer.cargo.allTargets": true,
-  "rust-analyzer.cargo.features": "all",
-  "rust-analyzer.check.command": "clippy",
-  "rust-analyzer.check.allTargets": true,
-  "rust-analyzer.checkOnSave": true,
-  "rust-analyzer.rustfmt.extraArgs": ["+1.90"],
-  "rust-analyzer.server.extraEnv": {
-    "RUSTFLAGS": "-D warnings"
-  },
-  "rust-analyzer.cargo.buildScripts.enable": true,
-  "rust-analyzer.procMacro.enable": true,
-  "rust-analyzer.inlayHints.typeHints.enable": false,
-  "rust-analyzer.inlayHints.parameterHints.enable": false,
-  "rust-analyzer.inlayHints.chainingHints.enable": false,
-  "rust-analyzer.inlayHints.closureReturnTypeHints.enable": "never",
-  "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit"
-  },
-  "editor.defaultFormatter": "rust-lang.rust-analyzer",
-  "files.eol": "\n",
-  "files.insertFinalNewline": true,
-  "files.trimTrailingWhitespace": true,
-  "editor.tabSize": 4,
-  "editor.insertSpaces": true,
-  "editor.detectIndentation": false,
-  "[rust]": {
+    "rust-analyzer.cargo.allTargets": true,
+    "rust-analyzer.cargo.features": "all",
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.check.allTargets": true,
+    "rust-analyzer.checkOnSave": true,
+    "rust-analyzer.rustfmt.extraArgs": [
+        "+1.90"
+    ],
+    "rust-analyzer.server.extraEnv": {
+        "RUSTFLAGS": "-D warnings"
+    },
+    "rust-analyzer.cargo.buildScripts.enable": true,
+    "rust-analyzer.procMacro.enable": true,
+    "rust-analyzer.inlayHints.typeHints.enable": false,
+    "rust-analyzer.inlayHints.parameterHints.enable": false,
+    "rust-analyzer.inlayHints.chainingHints.enable": false,
+    "rust-analyzer.inlayHints.closureReturnTypeHints.enable": "never",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
     "editor.defaultFormatter": "rust-lang.rust-analyzer",
-    "editor.tabSize": 4
-  }
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.tabSize": 4
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    }
 }

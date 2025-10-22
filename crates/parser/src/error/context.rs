@@ -3,7 +3,7 @@
 use text_size::TextRange;
 
 /// Context information for an error.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ErrorContext {
     /// The source file name (if available)
     pub filename: Option<String>,

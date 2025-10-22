@@ -3,7 +3,9 @@
 // produced by the parser, including type checking, name resolution,
 // and advanced static analysis.
 
+pub mod cache;
 pub mod hir;
+pub mod metrics;
 pub mod module;
 pub mod parallel;
 pub mod passes;

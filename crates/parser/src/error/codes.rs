@@ -1,7 +1,9 @@
 //! Error codes and categories for Coral parsing.
 
 /// Error severity levels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Severity {
     /// Informational message
     Info,
@@ -14,7 +16,7 @@ pub enum Severity {
 }
 
 /// Error code categories.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ErrorCode {
     // ===== Lexical Errors (E1xxx) =====
     E1001, // Invalid character

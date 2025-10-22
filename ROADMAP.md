@@ -283,11 +283,11 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [ ] Real-time analysis support
   - [ ] Quick fix suggestions
 
-- [ ] **Performance Instrumentation**
+- [x] **Performance Instrumentation**
   - [x] Per-pass timing
-  - [ ] Memory profiling
-  - [ ] Identify bottlenecks
-  - [ ] Optimization targets
+  - [x] Memory profiling
+  - [x] Identify bottlenecks
+  - [x] Optimization targets
 
 - [ ] **Configuration**
   - [ ] Per-pass strictness levels

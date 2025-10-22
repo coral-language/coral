@@ -1,4 +1,5 @@
 use super::scope::{BindingKind, Scope, ScopeType, Symbol};
+use crate::semantic::metrics::MetricsCollector;
 use crate::semantic::types::Type;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -23,10 +24,10 @@ pub struct SyncSymbolTable {
 }
 
 /// Atomic snapshot of a symbol table for lock-free reads
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymbolTableSnapshot {
-    /// All scopes in the snapshot (symbol data only)
-    scope_symbols: Vec<HashMap<String, Symbol>>,
+    /// All scopes in the snapshot (shared symbol references for memory efficiency)
+    scope_symbols: Vec<HashMap<String, Arc<Symbol>>>,
     /// Current scope stack
     scope_stack: Vec<usize>,
     /// Module scope ID
@@ -372,12 +373,49 @@ impl SymbolTable {
 
     /// Create an atomic snapshot of the entire symbol table (consistent view)
     pub fn atomic_snapshot(&self) -> SymbolTableSnapshot {
+        self.atomic_snapshot_with_metrics(None)
+    }
+
+    /// Create an atomic snapshot with optional metrics collection
+    pub fn atomic_snapshot_with_metrics(
+        &self,
+        mut metrics_collector: Option<&mut MetricsCollector>,
+    ) -> SymbolTableSnapshot {
+        // Collect metrics if enabled
+        let mut before_size = 0;
+        let mut total_symbols = 0;
+
+        // Calculate size before snapshot (rough estimate)
+        if let Some(ref mut collector) = metrics_collector
+            && collector.memory_metrics_enabled()
+        {
+            for scope in &self.scopes {
+                if let Ok(symbols) = scope.symbols.read() {
+                    for symbol in symbols.values() {
+                        // Rough estimate: symbol struct size + string sizes
+                        before_size += std::mem::size_of::<Symbol>() + symbol.name.capacity();
+                    }
+                    total_symbols += symbols.len();
+                }
+            }
+
+            collector.record_symbol_count(total_symbols);
+            collector.record_scope_count(self.scopes.len());
+        }
+
         let mut scope_symbols = Vec::new();
         let mut scope_metadata = Vec::new();
+        let mut arc_count = 0;
 
         // Create snapshots of all scopes atomically
         for scope in &self.scopes {
             let symbols_snapshot = scope.snapshot();
+
+            // Count Arc references in the snapshot
+            for symbol_arc in symbols_snapshot.values() {
+                arc_count += Arc::strong_count(symbol_arc);
+            }
+
             scope_symbols.push(symbols_snapshot);
 
             let metadata = ScopeMetadata {
@@ -391,12 +429,40 @@ impl SymbolTable {
             scope_metadata.push(metadata);
         }
 
-        SymbolTableSnapshot {
+        let snapshot = SymbolTableSnapshot {
             scope_symbols,
             scope_stack: self.scope_stack.clone(),
             module_scope_id: self.module_scope_id,
             scope_metadata,
+        };
+
+        // Calculate size after snapshot and record metrics
+        if let Some(collector) = metrics_collector
+            && collector.memory_metrics_enabled()
+        {
+            // Rough estimate of snapshot size
+            let mut after_size = std::mem::size_of::<SymbolTableSnapshot>();
+            for scope_symbols in &snapshot.scope_symbols {
+                after_size += std::mem::size_of::<HashMap<String, Arc<Symbol>>>()
+                    + scope_symbols.len()
+                        * (std::mem::size_of::<String>() + std::mem::size_of::<Arc<Symbol>>());
+                // Add string capacities
+                for key in scope_symbols.keys() {
+                    after_size += key.capacity();
+                }
+            }
+
+            collector.record_snapshot_creation(before_size, after_size, arc_count);
+
+            // Update metrics with calculated values
+            let mut metrics = collector.current_metrics().clone();
+            metrics.symbol_table_size_before = before_size;
+            metrics.symbol_table_size_after = after_size;
+            metrics.arc_reference_count = arc_count;
+            collector.update_memory_metrics(metrics);
         }
+
+        snapshot
     }
 
     /// Get a summary of the symbol table for debugging
@@ -475,13 +541,18 @@ impl Default for SyncSymbolTable {
 
 impl SymbolTableSnapshot {
     /// Look up a symbol in the snapshot (lock-free)
-    pub fn lookup(&self, name: &str) -> Option<Symbol> {
+    pub fn lookup(&self, name: &str) -> Option<Arc<Symbol>> {
         let current_id = *self.scope_stack.last()?;
         self.lookup_legb(name, current_id)
     }
 
+    /// Get a mutable copy of a symbol (copy-on-write for modifications)
+    pub fn get_symbol_mut(&self, name: &str) -> Option<Symbol> {
+        self.lookup(name).map(|arc_symbol| (*arc_symbol).clone())
+    }
+
     /// Perform LEGB lookup in the snapshot
-    fn lookup_legb(&self, name: &str, start_scope_id: usize) -> Option<Symbol> {
+    fn lookup_legb(&self, name: &str, start_scope_id: usize) -> Option<Arc<Symbol>> {
         let mut scope_id = start_scope_id;
 
         loop {
@@ -493,7 +564,7 @@ impl SymbolTableSnapshot {
                 // Look only in module scope
                 let module_symbols = self.scope_symbols.get(self.module_scope_id)?;
                 if let Some(symbol) = Scope::lookup_in_snapshot(module_symbols, name) {
-                    return Some(symbol.clone());
+                    return Some(Arc::clone(symbol));
                 }
                 return None;
             }
@@ -506,7 +577,7 @@ impl SymbolTableSnapshot {
 
             // Local: Check current scope
             if let Some(symbol) = Scope::lookup_in_snapshot(symbols, name) {
-                return Some(symbol.clone());
+                return Some(Arc::clone(symbol));
             }
 
             // Move to enclosing scope
@@ -520,7 +591,7 @@ impl SymbolTableSnapshot {
     }
 
     /// Look up in enclosing scopes (for nonlocal)
-    fn lookup_in_enclosing(&self, name: &str, current_scope_id: usize) -> Option<Symbol> {
+    fn lookup_in_enclosing(&self, name: &str, current_scope_id: usize) -> Option<Arc<Symbol>> {
         let current_metadata = self.scope_metadata.get(current_scope_id)?;
         if let Some(parent_id) = current_metadata.parent_id {
             self.lookup_legb(name, parent_id)
@@ -530,12 +601,12 @@ impl SymbolTableSnapshot {
     }
 
     /// Get the scope symbols in this snapshot
-    pub fn scope_symbols(&self) -> &[HashMap<String, Symbol>] {
+    pub fn scope_symbols(&self) -> &[HashMap<String, Arc<Symbol>>] {
         &self.scope_symbols
     }
 
     /// Get the module scope symbols from this snapshot
-    pub fn module_scope_symbols(&self) -> &HashMap<String, Symbol> {
+    pub fn module_scope_symbols(&self) -> &HashMap<String, Arc<Symbol>> {
         &self.scope_symbols[self.module_scope_id]
     }
 

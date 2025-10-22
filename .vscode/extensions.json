@@ -1,8 +1,10 @@
 {
-  "recommendations": [
-    "rust-lang.rust-analyzer",
-    "tamasfe.even-better-toml",
-    "redhat.vscode-yaml"
-  ],
-  "unwantedRecommendations": ["ms-vscode.cpptools"]
+    "recommendations": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml"
+    ],
+    "unwantedRecommendations": [
+        "ms-vscode.cpptools"
+    ]
 }
