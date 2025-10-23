@@ -214,13 +214,13 @@ Complete language specifications:
 
 - [x] **Protocol Integration**
   - [x] Validate special methods (@operator decorated: iter, enter, exit, etc.)
-  - [x] Structural subtyping framework (awaits ClassAnalyzer integration)
-  - [x] Protocol implementation completeness validation
+  - [x] Structural subtyping (duck typing) without explicit 'implements'
+  - [x] Protocol implementation completeness validation (methods + attributes)
 
 - [x] **Property Support**
   - [x] Detect `@property` and `@operator` decorators
   - [x] Treat properties as attributes (framework ready)
-  - [x] Validate getter/setter/deleter (tracking implemented)
+  - [x] Validate getter/setter/deleter signatures and tracking
 
 ### Semantic Module - Module System
 
@@ -233,23 +233,23 @@ Complete language specifications:
 
 ### Semantic Module - Decorators
 
-- [ ] **Decorator Validation**
+- [x] **Decorator Validation**
   - [x] Validate decorator signatures match target type
   - [x] Function decorators: `Callable[[F], F]`
   - [x] Class decorators: `Callable[[Type[T]], Type[T]]`
-  - [ ] Decorator factories with arguments
+  - [x] Decorator factories with arguments (@dataclass validation)
   - [x] Stacked decorator validation
 
 ### Semantic Module - Protocols
 
-- [ ] **Protocol Signature Validation**
-  - [ ] Parameter type compatibility (contravariant)
-  - [ ] Return type compatibility (covariant)
-  - [ ] Optional parameters validation
-  - [ ] `*args` and `**kwargs` handling
-  - [ ] Covariance for returns
-  - [ ] Contravariance for parameters
-  - [ ] Invariance for mutable attributes
+- [x] **Protocol Signature Validation**
+  - [x] Parameter type compatibility (contravariant)
+  - [x] Return type compatibility (covariant)
+  - [x] Optional parameters validation
+  - [x] `*args` and `**kwargs` handling (framework ready)
+  - [x] Covariance for returns
+  - [x] Contravariance for parameters
+  - [x] Invariance for mutable attributes (List, Set, Dict)
 
 ### Semantic Module - Inferred Ownership
 

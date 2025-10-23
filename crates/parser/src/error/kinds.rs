@@ -244,6 +244,13 @@ pub enum ErrorKind {
         method_name: String,
     },
 
+    /// Class doesn't have required protocol attribute
+    MissingProtocolAttribute {
+        class_name: String,
+        protocol_name: String,
+        attribute_name: String,
+    },
+
     /// Method signature doesn't match protocol
     MethodSignatureMismatch {
         class_name: String,

@@ -21,11 +21,12 @@ pub struct ProtocolChecker<'a> {
     classes: HashMap<String, ClassInfo<'a>>,
 }
 
-/// Protocol definition with required methods
+/// Protocol definition with required methods and attributes
 #[derive(Debug, Clone)]
 struct ProtocolDef<'a> {
     _name: String,
     methods: HashMap<String, MethodSignature<'a>>,
+    attributes: HashMap<String, Option<&'a Expr<'a>>>, // attribute name -> type annotation
     _is_runtime_checkable: bool,
 }
 
@@ -40,6 +41,7 @@ struct MethodSignature<'a> {
 #[derive(Debug, Clone)]
 struct ClassInfo<'a> {
     methods: HashMap<String, MethodSignature<'a>>,
+    attributes: HashMap<String, Option<&'a Expr<'a>>>, // attribute name -> type annotation
     bases: Vec<String>,
     span: TextRange,
 }
@@ -152,32 +154,42 @@ impl<'a> ProtocolChecker<'a> {
 
     fn collect_protocol(&mut self, class: &ClassDefStmt<'a>) {
         let mut methods = HashMap::new();
+        let mut attributes = HashMap::new();
         let is_runtime_checkable = self.has_runtime_checkable_decorator(class);
 
-        // Collect methods from protocol
+        // Collect methods and attributes from protocol
         for stmt in class.body {
-            if let Stmt::FuncDef(func) = stmt {
-                // Check if method has implementation (body has more than just pass/...)
-                let has_implementation = self.has_method_implementation(func);
+            match stmt {
+                Stmt::FuncDef(func) => {
+                    // Check if method has implementation (body has more than just pass/...)
+                    let has_implementation = self.has_method_implementation(func);
 
-                if has_implementation && !self.is_special_method(func.name) {
-                    self.errors.push(*error(
-                        ErrorKind::ProtocolWithImplementation {
-                            protocol_name: class.name.to_string(),
-                            method_name: func.name.to_string(),
+                    if has_implementation && !self.is_special_method(func.name) {
+                        self.errors.push(*error(
+                            ErrorKind::ProtocolWithImplementation {
+                                protocol_name: class.name.to_string(),
+                                method_name: func.name.to_string(),
+                            },
+                            func.span,
+                        ));
+                    }
+
+                    methods.insert(
+                        func.name.to_string(),
+                        MethodSignature {
+                            args: &func.args,
+                            returns: func.returns.as_ref().map(|r| r.as_ref()),
+                            span: func.span,
                         },
-                        func.span,
-                    ));
+                    );
                 }
-
-                methods.insert(
-                    func.name.to_string(),
-                    MethodSignature {
-                        args: &func.args,
-                        returns: func.returns.as_ref().map(|r| r.as_ref()),
-                        span: func.span,
-                    },
-                );
+                Stmt::AnnAssign(ann_assign) => {
+                    // Collect required attributes from annotated assignments
+                    if let Expr::Name(name) = &ann_assign.target {
+                        attributes.insert(name.id.to_string(), Some(&ann_assign.annotation));
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -186,6 +198,7 @@ impl<'a> ProtocolChecker<'a> {
             ProtocolDef {
                 _name: class.name.to_string(),
                 methods,
+                attributes,
                 _is_runtime_checkable: is_runtime_checkable,
             },
         );
@@ -193,6 +206,7 @@ impl<'a> ProtocolChecker<'a> {
 
     fn collect_class(&mut self, class: &ClassDefStmt<'a>) {
         let mut methods = HashMap::new();
+        let mut attributes = HashMap::new();
         let mut bases = Vec::new();
 
         // Extract base class names
@@ -202,17 +216,26 @@ impl<'a> ProtocolChecker<'a> {
             }
         }
 
-        // Collect methods
+        // Collect methods and attributes
         for stmt in class.body {
-            if let Stmt::FuncDef(func) = stmt {
-                methods.insert(
-                    func.name.to_string(),
-                    MethodSignature {
-                        args: &func.args,
-                        returns: func.returns.as_ref().map(|r| r.as_ref()),
-                        span: func.span,
-                    },
-                );
+            match stmt {
+                Stmt::FuncDef(func) => {
+                    methods.insert(
+                        func.name.to_string(),
+                        MethodSignature {
+                            args: &func.args,
+                            returns: func.returns.as_ref().map(|r| r.as_ref()),
+                            span: func.span,
+                        },
+                    );
+                }
+                Stmt::AnnAssign(ann_assign) => {
+                    // Collect class attributes
+                    if let Expr::Name(name) = &ann_assign.target {
+                        attributes.insert(name.id.to_string(), Some(&ann_assign.annotation));
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -220,6 +243,7 @@ impl<'a> ProtocolChecker<'a> {
             class.name.to_string(),
             ClassInfo {
                 methods,
+                attributes,
                 bases,
                 span: class.span,
             },
@@ -232,20 +256,26 @@ impl<'a> ProtocolChecker<'a> {
             TextRange,
             String,
             Vec<(String, MethodSignature<'a>)>,
+            Vec<(String, Option<&'a Expr<'a>>)>,
         );
 
         // Collect all validation data upfront to avoid borrow checker issues
         let mut validations: Vec<ValidationData> = Vec::new();
 
+        // Check explicit protocol implementations (classes with 'implements Protocol')
         for (class_name, class_info) in &self.classes {
             for base_name in &class_info.bases {
                 if let Some(protocol) = self.protocols.get(base_name) {
                     // Collect protocol methods that need validation
                     let mut protocol_methods = Vec::new();
                     for (method_name, method_sig) in &protocol.methods {
-                        if !self.is_special_method(method_name) {
-                            protocol_methods.push((method_name.clone(), method_sig.clone()));
-                        }
+                        protocol_methods.push((method_name.clone(), method_sig.clone()));
+                    }
+
+                    // Collect protocol attributes that need validation
+                    let mut protocol_attributes = Vec::new();
+                    for (attr_name, attr_type) in &protocol.attributes {
+                        protocol_attributes.push((attr_name.clone(), *attr_type));
                     }
 
                     validations.push((
@@ -253,15 +283,19 @@ impl<'a> ProtocolChecker<'a> {
                         class_info.span,
                         base_name.clone(),
                         protocol_methods,
+                        protocol_attributes,
                     ));
                 }
             }
         }
 
         // Now perform validations with collected data
-        for (class_name, class_span, protocol_name, protocol_methods) in validations {
+        for (class_name, class_span, protocol_name, protocol_methods, protocol_attributes) in
+            validations
+        {
             let class_info = self.classes.get(&class_name).unwrap();
 
+            // Validate methods
             for (method_name, protocol_sig) in protocol_methods {
                 match class_info.methods.get(&method_name) {
                     None => {
@@ -291,6 +325,71 @@ impl<'a> ProtocolChecker<'a> {
                     }
                 }
             }
+
+            // Validate attributes
+            for (attr_name, _attr_type) in protocol_attributes {
+                if !class_info.attributes.contains_key(&attr_name) {
+                    self.errors.push(*error(
+                        ErrorKind::MissingProtocolAttribute {
+                            class_name: class_name.clone(),
+                            protocol_name: protocol_name.clone(),
+                            attribute_name: attr_name.clone(),
+                        },
+                        class_span,
+                    ));
+                }
+                // Note: Full type compatibility checking for attributes would require
+                // type inference integration. For now, we just check presence.
+            }
+        }
+    }
+
+    /// Check if a class structurally satisfies a protocol (duck typing)
+    /// Returns true if the class has all required methods and attributes
+    /// without requiring explicit 'implements Protocol'
+    pub fn check_structural_compatibility(
+        &self,
+        class_name: &str,
+        protocol_name: &str,
+    ) -> Result<(), Vec<String>> {
+        let class_info = self
+            .classes
+            .get(class_name)
+            .ok_or_else(|| vec![format!("Class '{}' not found", class_name)])?;
+
+        let protocol = self
+            .protocols
+            .get(protocol_name)
+            .ok_or_else(|| vec![format!("Protocol '{}' not found", protocol_name)])?;
+
+        let mut missing_items = Vec::new();
+
+        // Check all required methods
+        for (method_name, protocol_sig) in &protocol.methods {
+            match class_info.methods.get(method_name) {
+                None => {
+                    missing_items.push(format!("method '{}'", method_name));
+                }
+                Some(class_sig) => {
+                    if !self.signatures_match(protocol_sig, class_sig) {
+                        missing_items
+                            .push(format!("method '{}' with matching signature", method_name));
+                    }
+                }
+            }
+        }
+
+        // Check all required attributes
+        for attr_name in protocol.attributes.keys() {
+            if !class_info.attributes.contains_key(attr_name) {
+                missing_items.push(format!("attribute '{}'", attr_name));
+            }
+        }
+
+        if missing_items.is_empty() {
+            Ok(())
+        } else {
+            Err(missing_items)
         }
     }
 

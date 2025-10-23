@@ -65,6 +65,8 @@ pub struct PropertyDescriptor {
     pub getter_type: Type,
     /// The setter method type (if exists)
     pub setter_type: Option<Type>,
+    /// The deleter method type (if exists)
+    pub deleter_type: Option<Type>,
     /// The attribute name
     pub attr_name: Symbol,
     /// The class this property belongs to
@@ -538,9 +540,13 @@ impl<'a> ClassAnalyzer<'a> {
             // Look for a corresponding setter method (@attr_name.setter)
             let setter_type = self.find_property_setter(attr_name, body);
 
+            // Look for a corresponding deleter method (@attr_name.deleter)
+            let deleter_type = self.find_property_deleter(attr_name, body);
+
             Some(PropertyDescriptor {
                 getter_type,
                 setter_type,
+                deleter_type,
                 attr_name,
                 class_name,
             })
@@ -551,25 +557,68 @@ impl<'a> ClassAnalyzer<'a> {
 
     /// Find property setter method for a given property name
     fn find_property_setter(&self, property_name: Symbol, body: &[TypedStmt<'a>]) -> Option<Type> {
-        // Look for a method decorated with @property_name.setter
+        self.find_property_accessor(property_name, body, "setter")
+    }
+
+    /// Find property deleter method for a given property name
+    fn find_property_deleter(&self, property_name: Symbol, body: &[TypedStmt<'a>]) -> Option<Type> {
+        self.find_property_accessor(property_name, body, "deleter")
+    }
+
+    /// Generic method to find property accessor (setter/deleter)
+    fn find_property_accessor(
+        &self,
+        property_name: Symbol,
+        body: &[TypedStmt<'a>],
+        accessor_type: &str,
+    ) -> Option<Type> {
+        // Look for a method decorated with @property_name.setter or @property_name.deleter
+        let interner = self.interner?;
+
         for stmt in body {
             if let TypedStmt::FuncDef(func) = stmt {
-                // Check if any decorator matches the setter pattern
+                // Check if any decorator matches the accessor pattern
                 for decorator in func.decorators {
                     if let TypedExpr::Attribute(attr) = decorator {
-                        // Check if it matches pattern: property_name.setter
-                        if attr.attr == property_name
+                        // Check if it matches pattern: property_name.accessor_type
+                        if let Some(attr_name) = interner.resolve(attr.attr)
+                            && attr_name == accessor_type
                             && let TypedExpr::Name(base) = &attr.value
                             && base.symbol == property_name
                         {
-                            // This is a setter for the property
-                            return Some(func.ty.clone());
+                            // Found the accessor for the property
+                            // Validate signature: setter should have one parameter, deleter should have none
+                            if self.validate_accessor_signature(func, accessor_type) {
+                                return Some(func.ty.clone());
+                            }
                         }
                     }
                 }
             }
         }
         None
+    }
+
+    /// Validate property accessor signature
+    fn validate_accessor_signature(
+        &self,
+        func: &super::typed_stmt::TypedFuncDefStmt<'a>,
+        accessor_type: &str,
+    ) -> bool {
+        // Get the parameter count (excluding self)
+        let param_count = func.args.args.len().saturating_sub(1);
+
+        match accessor_type {
+            "setter" => {
+                // Setter should have exactly one parameter (plus self)
+                param_count == 1
+            }
+            "deleter" => {
+                // Deleter should have no parameters (just self)
+                param_count == 0
+            }
+            _ => false,
+        }
     }
 
     /// Check if function has @property decorator

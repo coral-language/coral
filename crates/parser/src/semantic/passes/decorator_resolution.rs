@@ -8,7 +8,7 @@
 
 #![allow(clippy::only_used_in_recursion)]
 
-use crate::ast::expr::Expr;
+use crate::ast::expr::{CallExpr, Expr};
 use crate::ast::nodes::{ClassDefStmt, FuncDefStmt, Module, Stmt};
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
 use crate::semantic::symbol::SymbolTable;
@@ -205,6 +205,11 @@ impl<'a> DecoratorResolver<'a> {
                 continue;
             }
 
+            // Validate decorator factory arguments if it's a call expression
+            if let Expr::Call(call) = decorator {
+                self.validate_decorator_factory_call(&name, call, span);
+            }
+
             // Check if decorator is defined
             if !self.is_decorator_defined(&name) {
                 self.errors.push(*error(
@@ -288,6 +293,11 @@ impl<'a> DecoratorResolver<'a> {
                     span,
                 ));
                 continue;
+            }
+
+            // Validate decorator factory arguments if it's a call expression
+            if let Expr::Call(call) = decorator {
+                self.validate_decorator_factory_call(&name, call, span);
             }
 
             // Check if decorator is defined
@@ -451,6 +461,122 @@ impl<'a> DecoratorResolver<'a> {
             Expr::Tuple(_) => "(...)".to_string(),
             Expr::Dict(_) => "{...}".to_string(),
             _ => "<expression>".to_string(),
+        }
+    }
+
+    /// Validate decorator factory call arguments
+    fn validate_decorator_factory_call(
+        &mut self,
+        decorator_name: &str,
+        call: &CallExpr<'a>,
+        span: TextRange,
+    ) {
+        // Validate known decorator factories
+        match decorator_name {
+            "dataclass" => {
+                // @dataclass can accept keyword arguments like:
+                // @dataclass(frozen=True, order=True, etc.)
+                self.validate_dataclass_args(call, span);
+            }
+            "property" | "staticmethod" | "classmethod" | "abstractmethod" => {
+                // These decorators should NOT be called (no arguments)
+                self.errors.push(*error(
+                    ErrorKind::InvalidDecoratorExpression {
+                        decorator: format!(
+                            "'{}' should not be called with arguments",
+                            decorator_name
+                        ),
+                    },
+                    span,
+                ));
+            }
+            "operator" => {
+                // @operator should NOT be called
+                self.errors.push(*error(
+                    ErrorKind::InvalidDecoratorExpression {
+                        decorator: "'operator' should not be called with arguments".to_string(),
+                    },
+                    span,
+                ));
+            }
+            _ => {
+                // For custom decorators, we can't validate arguments without type information
+                // This would require type inference integration to check:
+                // 1. The decorator returns a callable
+                // 2. The returned callable accepts the decorated function/class
+                // 3. The factory arguments match the decorator's signature
+            }
+        }
+    }
+
+    /// Validate @dataclass decorator arguments
+    fn validate_dataclass_args(&mut self, call: &CallExpr<'a>, span: TextRange) {
+        // Valid @dataclass keyword arguments (based on Python's dataclasses)
+        let valid_kwargs = [
+            "init",
+            "repr",
+            "eq",
+            "order",
+            "unsafe_hash",
+            "frozen",
+            "match_args",
+            "kw_only",
+            "slots",
+        ];
+
+        // Check for positional arguments (not allowed for @dataclass)
+        if !call.args.is_empty() {
+            self.errors.push(*error(
+                ErrorKind::InvalidDecoratorExpression {
+                    decorator: "@dataclass does not accept positional arguments".to_string(),
+                },
+                span,
+            ));
+        }
+
+        // Validate keyword arguments
+        for keyword in call.keywords {
+            if let Some(arg_name) = keyword.arg {
+                if !valid_kwargs.contains(&arg_name) {
+                    self.errors.push(*error(
+                        ErrorKind::InvalidDecoratorExpression {
+                            decorator: format!(
+                                "@dataclass has no keyword argument '{}'. Valid options: {}",
+                                arg_name,
+                                valid_kwargs.join(", ")
+                            ),
+                        },
+                        keyword.value.span(),
+                    ));
+                }
+
+                // Validate argument types (should be bool for most)
+                match arg_name {
+                    "init" | "repr" | "eq" | "order" | "unsafe_hash" | "frozen" | "match_args"
+                    | "kw_only" | "slots" => {
+                        // These should all be boolean values (True/False)
+                        // We check if it's a Name expr with value "True" or "False"
+                        let is_bool = match &keyword.value {
+                            Expr::Name(name) => name.id == "True" || name.id == "False",
+                            Expr::Constant(c) => c.value == "True" || c.value == "False",
+                            _ => false,
+                        };
+
+                        if !is_bool {
+                            self.errors.push(*error(
+                                ErrorKind::InvalidDecoratorExpression {
+                                    decorator: format!(
+                                        "@dataclass argument '{}' should be a boolean (True or False)",
+                                        arg_name
+                                    ),
+                                },
+                                keyword.value.span(),
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }

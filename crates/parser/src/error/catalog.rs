@@ -720,8 +720,17 @@ impl ErrorKind {
                 description: "The class is missing a method required by the protocol",
                 suggestion: Some("Implement all methods required by the protocol"),
             },
-            ErrorKind::MethodSignatureMismatch { .. } => ErrorMetadata {
+            ErrorKind::MissingProtocolAttribute { .. } => ErrorMetadata {
                 code: ErrorCode::E4101,
+                severity: Severity::Error,
+                category: ErrorCategory::Protocol,
+                error_type: "ProtocolError",
+                title: "Class doesn't have required protocol attribute",
+                description: "The class is missing an attribute required by the protocol",
+                suggestion: Some("Add all attributes required by the protocol"),
+            },
+            ErrorKind::MethodSignatureMismatch { .. } => ErrorMetadata {
+                code: ErrorCode::E4102,
                 severity: Severity::Error,
                 category: ErrorCategory::Protocol,
                 error_type: "ProtocolError",
@@ -730,7 +739,7 @@ impl ErrorKind {
                 suggestion: Some("Update the method signature to match the protocol"),
             },
             ErrorKind::ProtocolWithImplementation { .. } => ErrorMetadata {
-                code: ErrorCode::E4102,
+                code: ErrorCode::E4103,
                 severity: Severity::Error,
                 category: ErrorCategory::Protocol,
                 error_type: "ProtocolError",
@@ -1367,6 +1376,16 @@ impl ErrorKind {
                 format!(
                     "Class '{}' doesn't implement protocol '{}' method '{}'",
                     class_name, protocol_name, method_name
+                )
+            }
+            ErrorKind::MissingProtocolAttribute {
+                class_name,
+                protocol_name,
+                attribute_name,
+            } => {
+                format!(
+                    "Class '{}' doesn't have protocol '{}' attribute '{}'",
+                    class_name, protocol_name, attribute_name
                 )
             }
             ErrorKind::MethodSignatureMismatch {
