@@ -224,12 +224,15 @@ Complete language specifications:
 
 ### Semantic Module - Module System
 
-- [ ] **Cross-Module Validation**
+- [x] **Cross-Module Validation**
   - [x] Load and parse imported modules
   - [x] Build module dependency graph
-  - [ ] Validate re-export chains (`export X from Y`)
+  - [x] Validate re-export chains (`export X from Y`)
   - [x] Detect circular re-exports
   - [x] Cache parsed modules
+  - [x] ModuleExportRegistry for tracking exports
+  - [x] Re-export validation with source module checking
+  - [x] Circular self-reference detection
 
 ### Semantic Module - Decorators
 

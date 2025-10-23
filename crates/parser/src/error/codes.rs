@@ -116,6 +116,8 @@ pub enum ErrorCode {
     E5102, // Invalid module introspection
     E5103, // Export from non-existent module
     E5104, // Invalid export syntax
+    E5105, // Exported name not in source module
+    E5106, // Circular re-export
 
     // ===== Concurrency Errors (E6xxx) =====
     E6001, // Data race detected
@@ -264,6 +266,8 @@ impl ErrorCode {
             ErrorCode::E5102 => 5102,
             ErrorCode::E5103 => 5103,
             ErrorCode::E5104 => 5104,
+            ErrorCode::E5105 => 5105,
+            ErrorCode::E5106 => 5106,
 
             // Concurrency
             ErrorCode::E6001 => 6001,

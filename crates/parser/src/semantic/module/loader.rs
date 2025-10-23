@@ -1,0 +1,190 @@
+//! Module loader for cross-module validation.
+//!
+//! This module provides functionality to load and parse modules on-demand
+//! for cross-module validation, particularly for re-export validation.
+
+use crate::ast::Module;
+use crate::error::UnifiedError as Error;
+use crate::semantic::module::exports::{ExportInfo, ModuleExportRegistry};
+use crate::semantic::passes::module_system::ModuleSystemChecker;
+use crate::semantic::passes::name_resolution::NameResolver;
+use crate::semantic::types::Type;
+use crate::{Arena, Lexer, Parser};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use text_size::TextRange;
+
+/// Module loader for cross-module validation
+pub struct ModuleLoader<'a> {
+    /// Root directory for module resolution
+    root_dir: PathBuf,
+    /// Arena for allocating AST nodes
+    arena: &'a Arena,
+    /// Cache of parsed modules (module_path -> (AST, errors))
+    module_cache: HashMap<PathBuf, (Module<'a>, Vec<Error>)>,
+    /// Export registry tracking all module exports
+    export_registry: ModuleExportRegistry,
+}
+
+impl<'a> ModuleLoader<'a> {
+    /// Create a new module loader
+    pub fn new(root_dir: PathBuf, arena: &'a Arena) -> Self {
+        Self {
+            root_dir,
+            arena,
+            module_cache: HashMap::new(),
+            export_registry: ModuleExportRegistry::new(),
+        }
+    }
+
+    /// Load and parse a module, returning the AST and any errors
+    ///
+    /// If the module has already been loaded, returns the cached version.
+    pub fn load_module(&mut self, module_path: &Path) -> Result<&Module<'a>, Vec<Error>> {
+        // Check cache first
+        if self.module_cache.contains_key(module_path) {
+            let (module, errors) = self.module_cache.get(module_path).unwrap();
+            if errors.is_empty() {
+                return Ok(module);
+            } else {
+                return Err(errors.clone());
+            }
+        }
+
+        // Read and parse the module
+        let source = std::fs::read_to_string(module_path).map_err(|_e| {
+            vec![*crate::error::error(
+                crate::error::UnifiedErrorKind::ModuleNotFound {
+                    module_name: module_path.display().to_string(),
+                },
+                TextRange::default(),
+            )]
+        })?;
+
+        let lexer = Lexer::new(&source);
+        let mut parser = Parser::new(lexer, self.arena);
+        let module = parser.parse_module().map_err(|e| vec![*e])?;
+
+        // Run name resolution
+        let mut name_resolver = NameResolver::new();
+        name_resolver.resolve_module(module);
+        let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
+
+        // Validate module system
+        let module_name = self.module_path_to_name(module_path);
+        let checker =
+            ModuleSystemChecker::with_registry(&symbol_table, &self.export_registry, &module_name);
+        let errors = checker.check(module);
+
+        // Extract and register exports from this module
+        self.extract_and_register_exports(module, &module_name);
+
+        // Cache the result
+        self.module_cache
+            .insert(module_path.to_path_buf(), (module.clone(), errors.clone()));
+
+        if errors.is_empty() {
+            Ok(self.module_cache.get(module_path).map(|(m, _)| m).unwrap())
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// Extract exports from a module and register them
+    fn extract_and_register_exports(&mut self, module: &Module<'a>, module_name: &str) {
+        use crate::ast::Stmt;
+
+        for stmt in module.body {
+            if let Stmt::Export(export) = stmt {
+                // Handle regular exports
+                if export.module.is_none() {
+                    for (name, alias) in export.names {
+                        let exported_name = alias.unwrap_or(name);
+                        let info = ExportInfo {
+                            original_name: name.to_string(),
+                            ty: Type::Unknown, // Type inference would provide actual type
+                            source_module: None,
+                            span: export.span,
+                        };
+                        self.export_registry.register_export(
+                            module_name,
+                            exported_name.to_string(),
+                            info,
+                        );
+                    }
+                }
+                // Re-exports are handled by looking up in the registry
+                // during validation
+            }
+        }
+    }
+
+    /// Convert a module file path to a module name
+    fn module_path_to_name(&self, path: &Path) -> String {
+        path.strip_prefix(&self.root_dir)
+            .unwrap_or(path)
+            .with_extension("")
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, ".")
+    }
+
+    /// Get the export registry
+    pub fn export_registry(&self) -> &ModuleExportRegistry {
+        &self.export_registry
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_module_loader_basic() {
+        let temp_dir = TempDir::new().unwrap();
+        let module_path = temp_dir.path().join("test.coral");
+
+        // Create a simple module
+        std::fs::write(
+            &module_path,
+            r#"
+def my_function():
+    return 42
+
+export my_function
+"#,
+        )
+        .unwrap();
+
+        let arena = Arena::new();
+        let mut loader = ModuleLoader::new(temp_dir.path().to_path_buf(), &arena);
+
+        // Load the module
+        let result = loader.load_module(&module_path);
+        assert!(result.is_ok());
+
+        // Check that exports were registered
+        let registry = loader.export_registry();
+        assert!(registry.is_exported("test", "my_function"));
+    }
+
+    #[test]
+    fn test_module_loader_caching() {
+        let temp_dir = TempDir::new().unwrap();
+        let module_path = temp_dir.path().join("cached.coral");
+
+        std::fs::write(&module_path, "x = 42\nexport x").unwrap();
+
+        let arena = Arena::new();
+        let mut loader = ModuleLoader::new(temp_dir.path().to_path_buf(), &arena);
+
+        // Load twice - second should come from cache
+        let result1 = loader.load_module(&module_path).is_ok();
+        let result2 = loader.load_module(&module_path).is_ok();
+        let cache_len = loader.module_cache.len();
+
+        assert!(result1);
+        assert!(result2);
+        assert_eq!(cache_len, 1);
+    }
+}

@@ -319,6 +319,12 @@ pub enum ErrorKind {
     /// Invalid export syntax
     InvalidExportSyntax { syntax: String },
 
+    /// Exported name not found in source module (for re-exports)
+    ExportedNameNotInSourceModule { name: String, source_module: String },
+
+    /// Circular re-export detected
+    CircularReExport { cycle: Vec<String> },
+
     // ===== Concurrency Errors (E6xxx) =====
     /// Data race: shared mutable data accessed without synchronization
     DataRace {

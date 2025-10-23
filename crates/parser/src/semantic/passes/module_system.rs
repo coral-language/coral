@@ -8,6 +8,7 @@
 
 use crate::ast::*;
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
+use crate::semantic::module::exports::ModuleExportRegistry;
 use crate::semantic::symbol::table::SymbolTable;
 use text_size::TextRange;
 
@@ -18,6 +19,9 @@ pub struct ModuleSystemChecker<'a> {
     symbol_table: &'a SymbolTable,
     errors: Vec<Error>,
     exported_names: Vec<(&'a str, TextRange)>, // Track exports to detect duplicates
+    export_registry: Option<&'a ModuleExportRegistry>, // Registry for cross-module validation
+    current_module_name: Option<&'a str>,      // Current module being validated
+    reexport_chain: Vec<String>,               // Track re-export chain for circular detection
 }
 
 impl<'a> ModuleSystemChecker<'a> {
@@ -26,6 +30,25 @@ impl<'a> ModuleSystemChecker<'a> {
             symbol_table,
             errors: Vec::new(),
             exported_names: Vec::new(),
+            export_registry: None,
+            current_module_name: None,
+            reexport_chain: Vec::new(),
+        }
+    }
+
+    /// Create a new checker with export registry for cross-module validation
+    pub fn with_registry(
+        symbol_table: &'a SymbolTable,
+        export_registry: &'a ModuleExportRegistry,
+        current_module_name: &'a str,
+    ) -> Self {
+        Self {
+            symbol_table,
+            errors: Vec::new(),
+            exported_names: Vec::new(),
+            export_registry: Some(export_registry),
+            current_module_name: Some(current_module_name),
+            reexport_chain: Vec::new(),
         }
     }
 
@@ -254,20 +277,19 @@ impl<'a> ModuleSystemChecker<'a> {
     }
 
     fn check_export(&mut self, export: &ExportStmt<'a>) {
-        // If this is a re-export (has module field), we can't validate the names
-        // at compile time without module resolution system
-        if export.module.is_some() {
-            // For re-exports, we just track the exported names for duplicate detection
-            for (name, _alias) in export.names {
-                self.check_duplicate_export(name, export.span);
-            }
+        // If this is a re-export (has module field), validate it
+        if let Some(source_module) = export.module {
+            self.validate_reexport(export, source_module);
             return;
         }
 
         // For regular exports, check that each name is defined
-        for (name, _alias) in export.names {
+        for (name, alias) in export.names {
+            // Determine the exported name (alias if present, otherwise original name)
+            let exported_name = alias.unwrap_or(name);
+
             // Check if already exported
-            self.check_duplicate_export(name, export.span);
+            self.check_duplicate_export(exported_name, export.span);
 
             // Check if name is defined in module scope
             if self
@@ -282,6 +304,61 @@ impl<'a> ModuleSystemChecker<'a> {
                     },
                     export.span,
                 ));
+            }
+        }
+    }
+
+    /// Validate a re-export statement (export X from module)
+    fn validate_reexport(&mut self, export: &ExportStmt<'a>, source_module: &'a str) {
+        // Check for duplicate exports first
+        for (name, alias) in export.names {
+            let exported_name = alias.unwrap_or(name);
+            self.check_duplicate_export(exported_name, export.span);
+        }
+
+        // Check for self-reference (circular re-export to same module)
+        if let Some(current_module) = self.current_module_name
+            && source_module == current_module
+        {
+            self.errors.push(*error(
+                ErrorKind::CircularReExport {
+                    cycle: vec![current_module.to_string(), source_module.to_string()],
+                },
+                export.span,
+            ));
+            return; // Don't continue validation if it's a self-reference
+        }
+
+        // If we have an export registry, validate that the source module exists
+        // and that it exports the requested names
+        if let Some(registry) = self.export_registry {
+            // Check for circular re-exports in the chain
+            if self.current_module_name.is_some() {
+                // Build the re-export chain to detect cycles
+                let reexport_key = format!("{}::{}", source_module, export.names[0].0);
+
+                if self.reexport_chain.contains(&reexport_key) {
+                    // Circular re-export detected
+                    let mut cycle = self.reexport_chain.clone();
+                    cycle.push(reexport_key);
+                    self.errors
+                        .push(*error(ErrorKind::CircularReExport { cycle }, export.span));
+                    return;
+                }
+            }
+
+            // Check each exported name exists in the source module
+            for (name, _alias) in export.names {
+                if !registry.is_exported(source_module, name) {
+                    // The name is not exported from the source module
+                    self.errors.push(*error(
+                        ErrorKind::ExportedNameNotInSourceModule {
+                            name: name.to_string(),
+                            source_module: source_module.to_string(),
+                        },
+                        export.span,
+                    ));
+                }
             }
         }
     }
@@ -553,5 +630,298 @@ x = 42
         assert_eq!(levenshtein_distance("is_main", "ismain"), 1);
         assert_eq!(levenshtein_distance("is_main", "name"), 6); // Changed from 4 to 6
         assert_eq!(levenshtein_distance("path", "pth"), 1);
+    }
+
+    // ===== Re-export validation tests with registry =====
+
+    fn check_module_system_with_registry(
+        source: &str,
+        registry: &ModuleExportRegistry,
+        module_name: &str,
+    ) -> Result<(), Vec<Error>> {
+        let arena = Arena::new();
+        let lexer = Lexer::new(source);
+        let mut parser = Parser::new(lexer, &arena);
+        let module = parser.parse_module().expect("Parse failed");
+
+        // First run name resolution to build symbol table
+        let mut name_resolver = NameResolver::new();
+        name_resolver.resolve_module(module);
+        let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
+
+        // Then check module system with registry
+        let checker = ModuleSystemChecker::with_registry(&symbol_table, registry, module_name);
+        let errors = checker.check(module);
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
+    #[test]
+    fn test_reexport_with_valid_registry() {
+        use crate::semantic::module::exports::ExportInfo;
+        use crate::semantic::types::Type;
+        use text_size::TextSize;
+
+        let source = r#"
+export add, subtract from math
+"#;
+
+        // Create a registry with the math module's exports
+        let mut registry = ModuleExportRegistry::new();
+        registry.register_export(
+            "math",
+            "add".to_string(),
+            ExportInfo {
+                original_name: "add".to_string(),
+                ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
+                source_module: None,
+                span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+            },
+        );
+        registry.register_export(
+            "math",
+            "subtract".to_string(),
+            ExportInfo {
+                original_name: "subtract".to_string(),
+                ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
+                source_module: None,
+                span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+            },
+        );
+
+        // This should now pass because the names exist in the registry
+        assert!(check_module_system_with_registry(source, &registry, "mymodule").is_ok());
+    }
+
+    #[test]
+    fn test_reexport_with_missing_name() {
+        use crate::semantic::module::exports::ExportInfo;
+        use crate::semantic::types::Type;
+        use text_size::TextSize;
+
+        let source = r#"
+export add, nonexistent from math
+"#;
+
+        // Create a registry with only 'add', not 'nonexistent'
+        let mut registry = ModuleExportRegistry::new();
+        registry.register_export(
+            "math",
+            "add".to_string(),
+            ExportInfo {
+                original_name: "add".to_string(),
+                ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
+                source_module: None,
+                span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+            },
+        );
+
+        let result = check_module_system_with_registry(source, &registry, "mymodule");
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        match &errors[0].kind {
+            ErrorKind::ExportedNameNotInSourceModule {
+                name,
+                source_module,
+            } => {
+                assert_eq!(name, "nonexistent");
+                assert_eq!(source_module, "math");
+            }
+            _ => panic!("Expected ExportedNameNotInSourceModule error"),
+        }
+    }
+
+    #[test]
+    fn test_reexport_from_empty_module() {
+        let source = r#"
+export User from models
+"#;
+
+        // Create a registry with an empty models module
+        let registry = ModuleExportRegistry::new();
+
+        let result = check_module_system_with_registry(source, &registry, "api");
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        match &errors[0].kind {
+            ErrorKind::ExportedNameNotInSourceModule {
+                name,
+                source_module,
+            } => {
+                assert_eq!(name, "User");
+                assert_eq!(source_module, "models");
+            }
+            _ => panic!("Expected ExportedNameNotInSourceModule error"),
+        }
+    }
+
+    #[test]
+    fn test_reexport_with_alias() {
+        use crate::semantic::module::exports::ExportInfo;
+        use crate::semantic::types::Type;
+        use text_size::TextSize;
+
+        let source = r#"
+export User as U from models
+"#;
+
+        let mut registry = ModuleExportRegistry::new();
+        registry.register_export(
+            "models",
+            "User".to_string(),
+            ExportInfo {
+                original_name: "User".to_string(),
+                ty: Type::Class("User".to_string()),
+                source_module: None,
+                span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+            },
+        );
+
+        // Should pass - we check the source name (User), not the alias (U)
+        assert!(check_module_system_with_registry(source, &registry, "api").is_ok());
+    }
+
+    #[test]
+    fn test_circular_reexport_self() {
+        use crate::semantic::module::exports::ExportInfo;
+        use crate::semantic::types::Type;
+        use text_size::TextSize;
+
+        let source = r#"
+export add from mymodule
+"#;
+
+        // Create a registry where mymodule has 'add' exported
+        let mut registry = ModuleExportRegistry::new();
+        registry.register_export(
+            "mymodule",
+            "add".to_string(),
+            ExportInfo {
+                original_name: "add".to_string(),
+                ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
+                source_module: None,
+                span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+            },
+        );
+
+        let result = check_module_system_with_registry(source, &registry, "mymodule");
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        match &errors[0].kind {
+            ErrorKind::CircularReExport { cycle } => {
+                assert_eq!(cycle.len(), 2);
+                assert!(cycle.contains(&"mymodule".to_string()));
+            }
+            _ => panic!("Expected CircularReExport error, got {:?}", errors[0].kind),
+        }
+    }
+
+    #[test]
+    fn test_duplicate_reexport() {
+        use crate::semantic::module::exports::ExportInfo;
+        use crate::semantic::types::Type;
+        use text_size::TextSize;
+
+        let source = r#"
+export add from math
+export add from utils
+"#;
+
+        let mut registry = ModuleExportRegistry::new();
+        registry.register_export(
+            "math",
+            "add".to_string(),
+            ExportInfo {
+                original_name: "add".to_string(),
+                ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
+                source_module: None,
+                span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+            },
+        );
+        registry.register_export(
+            "utils",
+            "add".to_string(),
+            ExportInfo {
+                original_name: "add".to_string(),
+                ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
+                source_module: None,
+                span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+            },
+        );
+
+        let result = check_module_system_with_registry(source, &registry, "mymodule");
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        match &errors[0].kind {
+            ErrorKind::DuplicateExport { name, .. } => {
+                assert_eq!(name, "add");
+            }
+            _ => panic!("Expected DuplicateExport error"),
+        }
+    }
+
+    #[test]
+    fn test_mixed_regular_and_reexport() {
+        use crate::semantic::module::exports::ExportInfo;
+        use crate::semantic::types::Type;
+        use text_size::TextSize;
+
+        let source = r#"
+def my_function():
+    pass
+
+export my_function
+export add from math
+"#;
+
+        let mut registry = ModuleExportRegistry::new();
+        registry.register_export(
+            "math",
+            "add".to_string(),
+            ExportInfo {
+                original_name: "add".to_string(),
+                ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
+                source_module: None,
+                span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+            },
+        );
+
+        // Should pass - both regular export and re-export are valid
+        assert!(check_module_system_with_registry(source, &registry, "mymodule").is_ok());
+    }
+
+    #[test]
+    fn test_multiple_reexports_from_same_module() {
+        use crate::semantic::module::exports::ExportInfo;
+        use crate::semantic::types::Type;
+        use text_size::TextSize;
+
+        let source = r#"
+export add, subtract, multiply from math
+"#;
+
+        let mut registry = ModuleExportRegistry::new();
+        for name in &["add", "subtract", "multiply"] {
+            registry.register_export(
+                "math",
+                name.to_string(),
+                ExportInfo {
+                    original_name: name.to_string(),
+                    ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
+                    source_module: None,
+                    span: TextRange::new(TextSize::from(0), TextSize::from(10)),
+                },
+            );
+        }
+
+        assert!(check_module_system_with_registry(source, &registry, "mymodule").is_ok());
     }
 }

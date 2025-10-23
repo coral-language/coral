@@ -877,6 +877,24 @@ impl ErrorKind {
                 description: "The export syntax is not valid",
                 suggestion: Some("Check the export statement syntax"),
             },
+            ErrorKind::ExportedNameNotInSourceModule { .. } => ErrorMetadata {
+                code: ErrorCode::E5105,
+                severity: Severity::Error,
+                category: ErrorCategory::ModuleSystem,
+                error_type: "NameError",
+                title: "Exported name not found in source module",
+                description: "The name being re-exported does not exist in the source module",
+                suggestion: Some("Check that the name is exported from the source module"),
+            },
+            ErrorKind::CircularReExport { .. } => ErrorMetadata {
+                code: ErrorCode::E5106,
+                severity: Severity::Error,
+                category: ErrorCategory::ModuleSystem,
+                error_type: "CircularDependencyError",
+                title: "Circular re-export detected",
+                description: "A circular dependency was detected in the re-export chain",
+                suggestion: Some("Break the circular dependency by removing one of the re-exports"),
+            },
 
             // Concurrency errors
             ErrorKind::DataRace { .. } => ErrorMetadata {
@@ -1473,6 +1491,18 @@ impl ErrorKind {
             }
             ErrorKind::InvalidExportSyntax { syntax } => {
                 format!("Invalid export syntax: '{}'", syntax)
+            }
+            ErrorKind::ExportedNameNotInSourceModule {
+                name,
+                source_module,
+            } => {
+                format!(
+                    "Name '{}' is not exported from module '{}'",
+                    name, source_module
+                )
+            }
+            ErrorKind::CircularReExport { cycle } => {
+                format!("Circular re-export detected: {}", cycle.join(" -> "))
             }
 
             // Concurrency errors

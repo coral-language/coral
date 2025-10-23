@@ -99,6 +99,36 @@ from models import User
 from utils import validate
 ```
 
+#### Re-export Validation
+
+Coral validates re-export statements to ensure:
+
+1. **Source module exports exist**: The names you're re-exporting must actually be exported by the source module
+2. **No circular re-exports**: You cannot re-export from your own module
+3. **No duplicate exports**: Each name can only be exported once (even across regular and re-exports)
+
+**Valid re-export:**
+```coral
+# models.coral exports User
+class User:
+    pass
+export User
+
+# api.coral can re-export it
+export User from models  # ✅ Valid
+```
+
+**Invalid re-export:**
+```coral
+# models.coral does NOT export Admin
+class User:
+    pass
+export User
+
+# api.coral tries to re-export non-existent name
+export Admin from models  # ❌ Error: Admin not exported from models
+```
+
 ### Export Rules
 
 1. **Exported names must be defined** in the current module or imported from another module
@@ -137,8 +167,11 @@ export undefined_function
 export foo
 export foo
 
-# ❌ Error: Exporting before import (if re-exporting)
-export User from models  # models must be imported first
+# ❌ Error: Re-exporting name that doesn't exist in source module
+export NonExistent from models
+
+# ❌ Error: Circular re-export (exporting from self)
+export func from mymodule
 ```
 
 ## Module Introspection
