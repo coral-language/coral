@@ -193,13 +193,16 @@ Complete language specifications:
 
 ### Semantic Module - Exhaustiveness
 
-- [ ] **Pattern Exhaustiveness Checking**
-  - [ ] Integer literal exhaustiveness
-  - [ ] String literal exhaustiveness
-  - [ ] Nested pattern exhaustiveness with pattern matrix algorithm
-  - [ ] Or-pattern handling
-  - [ ] Detect redundant patterns
-  - [ ] Optimize large or-patterns
+- [x] **Pattern Exhaustiveness Checking**
+  - [x] Integer literal exhaustiveness with configurable sampling
+  - [x] String literal exhaustiveness
+  - [x] Nested pattern exhaustiveness with pattern matrix algorithm
+  - [x] Or-pattern handling with expansion support
+  - [x] Detect redundant patterns with O(n²) incremental checking
+  - [x] Star pattern support for variable-length sequences
+  - [x] Mapping pattern support with key tracking
+  - [x] Guard handling (conservative exhaustiveness)
+  - [x] Improved witness formatting for error messages
 
 ### Semantic Module - Type Checking
 
