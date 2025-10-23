@@ -119,15 +119,10 @@ pub enum ErrorCode {
     E5105, // Exported name not in source module
     E5106, // Circular re-export
 
-    // ===== Concurrency Errors (E6xxx) =====
-    E6001, // Data race detected
-    E6002, // Potential deadlock
-    E6003, // Non-Send type across threads
-    E6004, // Non-Sync type shared between threads
-    E6005, // Lock not released
-    E6006, // Unsynchronized access
-    E6007, // Double lock acquisition
-    E6008, // Lock order violation
+    // ===== Async/Await Errors (E6xxx) =====
+    E6001, // Blocking call in async context
+    E6002, // Invalid Future type
+    E6003, // Async lifetime violation
 
     // ===== Memory Safety Errors (E7xxx) =====
     E7001, // Use after free
@@ -269,15 +264,10 @@ impl ErrorCode {
             ErrorCode::E5105 => 5105,
             ErrorCode::E5106 => 5106,
 
-            // Concurrency
+            // Async/Await
             ErrorCode::E6001 => 6001,
             ErrorCode::E6002 => 6002,
             ErrorCode::E6003 => 6003,
-            ErrorCode::E6004 => 6004,
-            ErrorCode::E6005 => 6005,
-            ErrorCode::E6006 => 6006,
-            ErrorCode::E6007 => 6007,
-            ErrorCode::E6008 => 6008,
 
             // Memory Safety
             ErrorCode::E7001 => 7001,

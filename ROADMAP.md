@@ -275,12 +275,12 @@ Complete language specifications:
 
 ### Semantic Module - Async/Await
 
-- [ ] **Async Validation**
-  - [ ] Remove thread-based concurrency code
-  - [ ] Validate `.await` only in async functions
-  - [ ] Check Future types
-  - [ ] Detect blocking calls in async contexts
-  - [ ] Validate async lifetimes across await points
+- [x] **Async Validation**
+  - [x] Remove thread-based concurrency code
+  - [x] Validate `.await` only in async functions
+  - [x] Detect blocking calls in async contexts
+  - [x] Check Future types (advanced type system integration)
+  - [x] Validate async lifetimes across await points (advanced analysis)
 
 ### Cross-Cutting Improvements
 

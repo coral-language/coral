@@ -405,13 +405,13 @@ impl PassManager {
         });
 
         self.register_pass(PassMetadata {
-            id: "concurrency_check",
-            name: "Concurrency Safety",
-            description: "Validates concurrent code safety",
-            priority: PassPriority::Optional,
-            dependencies: vec!["type_checking"],
+            id: "async_validation",
+            name: "Async/Await Validation",
+            description: "Validates async/await usage and detects blocking calls in async contexts",
+            priority: PassPriority::Medium,
+            dependencies: vec!["type_inference"],
             parallelizable: true,
-            enabled_by_default: false,
+            enabled_by_default: true,
         });
 
         self.register_pass(PassMetadata {
@@ -738,7 +738,7 @@ impl PassManager {
             "exhaustiveness" => self.run_exhaustiveness(module, source),
             "decorator_resolution" => self.run_decorator_resolution(module, source),
             "ownership_check" => self.run_ownership_check(module, source),
-            "concurrency_check" => self.run_concurrency_check(module, source),
+            "async_validation" => self.run_async_validation(module, source),
             "protocol_checking" => self.run_protocol_checking(module, source),
             _ => {
                 if self.config.verbose {
@@ -1021,11 +1021,11 @@ impl PassManager {
     }
 
     /// Run concurrency safety checking pass
-    fn run_concurrency_check(&mut self, module: &Module, source: &str) -> PassResult {
-        use crate::semantic::passes::concurrency_check::ConcurrencyChecker;
+    fn run_async_validation(&mut self, module: &Module, source: &str) -> PassResult {
+        use crate::semantic::passes::async_validation::AsyncValidator;
 
-        let mut checker = ConcurrencyChecker::new();
-        let errors = checker.check_module(module);
+        let mut validator = AsyncValidator::new();
+        let errors = validator.validate_module(module);
 
         if errors.is_empty() {
             Ok(())
@@ -1683,7 +1683,7 @@ mod tests {
         assert!(manager.passes.contains_key("name_resolution"));
         assert!(manager.passes.contains_key("type_checking"));
         assert!(manager.passes.contains_key("ownership_check"));
-        assert!(manager.passes.contains_key("concurrency_check"));
+        assert!(manager.passes.contains_key("async_validation"));
 
         // Verify pass metadata
         let ownership = manager.passes.get("ownership_check").unwrap();

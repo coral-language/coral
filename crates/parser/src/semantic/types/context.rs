@@ -117,6 +117,10 @@ pub enum Type {
     /// Generator type with yielded element type
     Generator(Box<Type>),
 
+    /// Coroutine type (returned by async functions)
+    /// Represents an awaitable future that yields a value of the inner type
+    Coroutine(Box<Type>),
+
     /// Slice type
     Slice,
 
@@ -231,6 +235,18 @@ impl Type {
     /// Create a generator type
     pub fn generator(element: Type) -> Self {
         Type::Generator(Box::new(element))
+    }
+
+    /// Create a coroutine type
+    pub fn coroutine(returns: Type) -> Self {
+        Type::Coroutine(Box::new(returns))
+    }
+
+    /// Check if this type is awaitable (coroutine or known async library types)
+    pub fn is_awaitable(&self) -> bool {
+        matches!(self, Type::Coroutine(_))
+            || matches!(self, Type::Instance(name) if name == "Future" || name == "Task" || name == "Coroutine")
+            || matches!(self, Type::Unknown) // Unknown types are conservatively awaitable
     }
 
     /// Check if this is a subtype of another type
@@ -376,6 +392,7 @@ impl Type {
             }
             Type::Module(name) => format!("module[{}]", name),
             Type::Generator(element) => format!("generator[{}]", element.display_name()),
+            Type::Coroutine(returns) => format!("coroutine[{}]", returns.display_name()),
             Type::Slice => "slice".to_string(),
             Type::TemplateString => "tstring".to_string(),
             Type::AttributeDescriptor {
@@ -418,6 +435,7 @@ impl Type {
                 | Type::Str
                 | Type::Bytes
                 | Type::Generator(_)
+                | Type::Coroutine(_)
         )
     }
 
@@ -426,10 +444,16 @@ impl Type {
         matches!(self, Type::Generator(_))
     }
 
+    /// Check if this is a coroutine type
+    pub fn is_coroutine(&self) -> bool {
+        matches!(self, Type::Coroutine(_))
+    }
+
     /// Get the element type from an iterable/generator
     pub fn get_element_type(&self) -> Option<Type> {
         match self {
             Type::List(elem) | Type::Set(elem) | Type::Generator(elem) => Some((**elem).clone()),
+            Type::Coroutine(returns) => Some((**returns).clone()),
             Type::Tuple(elems) if !elems.is_empty() => Some(elems[0].clone()),
             Type::Dict(key, _) => Some((**key).clone()),
             Type::Str => Some(Type::Str),

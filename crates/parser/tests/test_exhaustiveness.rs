@@ -1,13 +1,29 @@
 // Tests for pattern matching exhaustiveness checking
 
-use coral_parser::{CoralError, parse};
+use coral_parser::{CoralError, CoralResult, parse};
 
-/// Helper to check if an error result contains a specific error message or code
-fn has_error_containing<T>(result: &Result<T, CoralError>, text: &str) -> bool {
+/// Helper to check if parse result contains a specific error message or code
+fn has_error_containing(
+    result: &CoralResult<coral_parser::ParseResultWithMetadata>,
+    text: &str,
+) -> bool {
     match result {
-        Err(CoralError::SemanticErrors(diagnostics)) => {
-            diagnostics.iter().any(|d| {
+        Ok(parse_result) => {
+            // Check diagnostics in the parse result
+            parse_result.diagnostics.iter().any(|d| {
                 // Check the error code, message, and title
+                let code_matches = d
+                    .code
+                    .as_ref()
+                    .is_some_and(|c| format!("{:?}", c).contains(text));
+                let message_matches = d.message.contains(text);
+                let title_matches = d.title.as_ref().is_some_and(|t| t.contains(text));
+                code_matches || message_matches || title_matches
+            })
+        }
+        Err(CoralError::SemanticErrors(diagnostics)) => {
+            // Check diagnostics in the error
+            diagnostics.iter().any(|d| {
                 let code_matches = d
                     .code
                     .as_ref()

@@ -325,43 +325,13 @@ pub enum ErrorKind {
     /// Circular re-export detected
     CircularReExport { cycle: Vec<String> },
 
-    // ===== Concurrency Errors (E6xxx) =====
-    /// Data race: shared mutable data accessed without synchronization
-    DataRace {
-        var_name: String,
-        access_type: String,
-        second_access: TextRange,
-    },
-
-    /// Potential deadlock: circular lock dependency detected
-    PotentialDeadlock {
-        lock_chain: Vec<String>,
-        second_acquisition: TextRange,
-    },
-
-    /// Attempting to send non-Send type across threads
-    NonSendType { var_name: String, type_name: String },
-
-    /// Attempting to share non-Sync type between threads
-    NonSyncType { var_name: String, type_name: String },
-
-    /// Lock acquired but never released
-    LockNotReleased { lock_name: String },
-
-    /// Accessing shared data without holding required lock
-    UnsynchronizedAccess {
-        var_name: String,
-        required_lock: String,
-    },
-
-    /// Double lock acquisition
-    DoubleLock {
-        lock_name: String,
-        first_acquire: TextRange,
-    },
-
-    /// Lock order violation
-    LockOrderViolation { lock1: String, lock2: String },
+    // ===== Async/Await Errors (E6xxx) =====
+    /// Blocking call detected in async context
+    BlockingCallInAsync { call: String },
+    /// Invalid Future type for await
+    InvalidFutureType { expr: String, actual_type: String },
+    /// Variable lifetime doesn't span await point
+    AsyncLifetimeViolation { var: String },
 
     // ===== Memory Safety Errors (E7xxx) =====
     /// Variable used after being freed/deallocated

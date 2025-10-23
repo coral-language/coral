@@ -17,7 +17,7 @@
 //! - **Control flow analysis** - Detects unreachable code and validates return paths
 //! - **Pattern match exhaustiveness** - Ensures all cases are handled
 //! - **Ownership and lifetime analysis** - Prevents use-after-free and memory leaks
-//! - **Concurrency safety analysis** - Detects data races and deadlocks at compile time
+//! - **Async/await validation** - Validates async function usage and detects blocking calls in async contexts
 //! - **Module system validation** - Validates imports and exports with transitive re-export resolution
 //! - **Import resolution** - Resolves and validates module dependencies
 //! - **Decorator validation** - Ensures correct decorator usage

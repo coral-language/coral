@@ -896,82 +896,39 @@ impl ErrorKind {
                 suggestion: Some("Break the circular dependency by removing one of the re-exports"),
             },
 
-            // Concurrency errors
-            ErrorKind::DataRace { .. } => ErrorMetadata {
+            // Async/Await errors
+            ErrorKind::BlockingCallInAsync { .. } => ErrorMetadata {
                 code: ErrorCode::E6001,
-                severity: Severity::Error,
+                severity: Severity::Warning,
                 category: ErrorCategory::Concurrency,
-                error_type: "ConcurrencyError",
-                title: "Data race detected",
-                description: "Shared mutable data accessed without synchronization",
+                error_type: "BlockingCallWarning",
+                title: "Blocking call in async context",
+                description: "A blocking operation is called in an async function, which may block the async runtime",
                 suggestion: Some(
-                    "Use locks (Lock, RLock) or atomic types to protect shared mutable state",
+                    "Use async-compatible alternatives (e.g., asyncio.sleep instead of time.sleep, aiofiles instead of open)",
                 ),
             },
-            ErrorKind::PotentialDeadlock { .. } => ErrorMetadata {
+            ErrorKind::InvalidFutureType { .. } => ErrorMetadata {
                 code: ErrorCode::E6002,
                 severity: Severity::Error,
-                category: ErrorCategory::Concurrency,
-                error_type: "ConcurrencyError",
-                title: "Potential deadlock detected",
-                description: "Circular lock dependency could lead to deadlock",
-                suggestion: Some("Acquire locks in consistent order to avoid deadlocks"),
-            },
-            ErrorKind::NonSendType { .. } => ErrorMetadata {
-                code: ErrorCode::E6003,
-                severity: Severity::Error,
-                category: ErrorCategory::Concurrency,
+                category: ErrorCategory::Type,
                 error_type: "TypeError",
-                title: "Non-Send type cannot cross thread boundaries",
-                description: "This type cannot be safely sent to another thread",
-                suggestion: Some("Only Send types can be transferred between threads"),
-            },
-            ErrorKind::NonSyncType { .. } => ErrorMetadata {
-                code: ErrorCode::E6004,
-                severity: Severity::Error,
-                category: ErrorCategory::Concurrency,
-                error_type: "TypeError",
-                title: "Non-Sync type cannot be shared between threads",
-                description: "This type cannot be safely shared between threads",
-                suggestion: Some("Only Sync types can be shared between threads"),
-            },
-            ErrorKind::LockNotReleased { .. } => ErrorMetadata {
-                code: ErrorCode::E6005,
-                severity: Severity::Error,
-                category: ErrorCategory::Concurrency,
-                error_type: "ConcurrencyError",
-                title: "Lock acquired but never released",
-                description: "A lock was acquired but no corresponding release was found",
-                suggestion: Some("Use 'with' statement to automatically release locks"),
-            },
-            ErrorKind::UnsynchronizedAccess { .. } => ErrorMetadata {
-                code: ErrorCode::E6006,
-                severity: Severity::Error,
-                category: ErrorCategory::Concurrency,
-                error_type: "ConcurrencyError",
-                title: "Unsynchronized access to shared data",
-                description: "Shared data accessed without holding the required lock",
-                suggestion: Some("Acquire the lock before accessing shared data"),
-            },
-            ErrorKind::DoubleLock { .. } => ErrorMetadata {
-                code: ErrorCode::E6007,
-                severity: Severity::Error,
-                category: ErrorCategory::Concurrency,
-                error_type: "ConcurrencyError",
-                title: "Double lock acquisition",
-                description: "Attempting to acquire the same lock twice",
+                title: "Invalid Future type for await",
+                description: "Cannot await a value that is not awaitable (does not return a Future or coroutine)",
                 suggestion: Some(
-                    "Use RLock for reentrant locking or restructure code to avoid double acquisition",
+                    "Ensure the awaited expression returns a Future, coroutine, or other awaitable type",
                 ),
             },
-            ErrorKind::LockOrderViolation { .. } => ErrorMetadata {
-                code: ErrorCode::E6008,
+            ErrorKind::AsyncLifetimeViolation { .. } => ErrorMetadata {
+                code: ErrorCode::E6003,
                 severity: Severity::Error,
-                category: ErrorCategory::Concurrency,
-                error_type: "ConcurrencyError",
-                title: "Lock order violation",
-                description: "Locks acquired in inconsistent order",
-                suggestion: Some("Always acquire locks in the same order to prevent deadlocks"),
+                category: ErrorCategory::MemorySafety,
+                error_type: "LifetimeError",
+                title: "Variable lifetime does not span await point",
+                description: "A variable's lifetime ends before an await point in an async function",
+                suggestion: Some(
+                    "Ensure variables are properly scoped or use cloning if necessary",
+                ),
             },
 
             // Memory Safety errors
@@ -1505,55 +1462,18 @@ impl ErrorKind {
                 format!("Circular re-export detected: {}", cycle.join(" -> "))
             }
 
-            // Concurrency errors
-            ErrorKind::DataRace {
-                var_name,
-                access_type,
-                ..
-            } => {
+            // Async/Await errors
+            ErrorKind::BlockingCallInAsync { call } => {
+                format!("Blocking call '{}' in async context", call)
+            }
+            ErrorKind::InvalidFutureType { expr, actual_type } => {
                 format!(
-                    "Data race detected: '{}' accessed {} without proper synchronization",
-                    var_name, access_type
+                    "Cannot await '{}': expected awaitable type, found '{}'",
+                    expr, actual_type
                 )
             }
-            ErrorKind::PotentialDeadlock { lock_chain, .. } => {
-                format!("Potential deadlock: {}", lock_chain.join(" -> "))
-            }
-            ErrorKind::NonSendType {
-                var_name,
-                type_name,
-            } => {
-                format!(
-                    "Cannot send '{}' of type '{}' across threads",
-                    var_name, type_name
-                )
-            }
-            ErrorKind::NonSyncType {
-                var_name,
-                type_name,
-            } => {
-                format!(
-                    "Cannot share '{}' of type '{}' between threads",
-                    var_name, type_name
-                )
-            }
-            ErrorKind::LockNotReleased { lock_name } => {
-                format!("Lock '{}' acquired but never released", lock_name)
-            }
-            ErrorKind::UnsynchronizedAccess {
-                var_name,
-                required_lock,
-            } => {
-                format!(
-                    "Unsynchronized access to '{}' (requires lock '{}')",
-                    var_name, required_lock
-                )
-            }
-            ErrorKind::DoubleLock { lock_name, .. } => {
-                format!("Attempting to acquire lock '{}' twice", lock_name)
-            }
-            ErrorKind::LockOrderViolation { lock1, lock2 } => {
-                format!("Lock order violation: '{}' and '{}'", lock1, lock2)
+            ErrorKind::AsyncLifetimeViolation { var } => {
+                format!("Variable '{}' may not be valid across await point", var)
             }
 
             // Memory safety errors
