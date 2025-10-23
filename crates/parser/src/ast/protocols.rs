@@ -4,87 +4,132 @@
 pub struct Protocols;
 
 impl Protocols {
-    /// Iterator protocol methods.
-    pub const ITER: &'static str = "__iter__";
-    pub const NEXT: &'static str = "__next__";
+    /// Constructor method (uses keyword, not @operator)
+    pub const CONSTRUCTOR: &'static str = "constructor";
 
-    /// Context manager protocol methods.
-    pub const ENTER: &'static str = "__enter__";
-    pub const EXIT: &'static str = "__exit__";
-    pub const AENTER: &'static str = "__aenter__";
-    pub const AEXIT: &'static str = "__aexit__";
+    /// Iterator protocol methods (use @operator decorator)
+    pub const ITER: &'static str = "iter";
+    pub const NEXT: &'static str = "next";
 
-    /// Descriptor protocol methods.
-    pub const GET: &'static str = "__get__";
-    pub const SET: &'static str = "__set__";
-    pub const DELETE: &'static str = "__delete__";
+    /// Context manager protocol methods (use @operator decorator)
+    pub const ENTER: &'static str = "enter";
+    pub const EXIT: &'static str = "exit";
+    pub const AENTER: &'static str = "aenter";
+    pub const AEXIT: &'static str = "aexit";
 
-    /// Callable protocol.
-    pub const CALL: &'static str = "__call__";
+    /// Descriptor protocol methods (use @operator decorator)
+    pub const GET: &'static str = "get";
+    pub const SET: &'static str = "set";
+    pub const DELETE: &'static str = "delete";
 
-    /// Container protocol methods.
-    pub const LEN: &'static str = "__len__";
-    pub const GETITEM: &'static str = "__getitem__";
-    pub const SETITEM: &'static str = "__setitem__";
-    pub const DELITEM: &'static str = "__delitem__";
-    pub const CONTAINS: &'static str = "__contains__";
+    /// Callable protocol (use @operator decorator)
+    pub const CALL: &'static str = "call";
 
-    /// Comparison protocol methods.
-    pub const EQ: &'static str = "__eq__";
-    pub const NE: &'static str = "__ne__";
-    pub const LT: &'static str = "__lt__";
-    pub const LE: &'static str = "__le__";
-    pub const GT: &'static str = "__gt__";
-    pub const GE: &'static str = "__ge__";
+    /// Container protocol methods (use @operator decorator)
+    pub const LEN: &'static str = "len";
+    pub const GETITEM: &'static str = "getitem";
+    pub const SETITEM: &'static str = "setitem";
+    pub const DELITEM: &'static str = "delitem";
+    pub const CONTAINS: &'static str = "contains";
 
-    /// Arithmetic protocol methods.
-    pub const ADD: &'static str = "__add__";
-    pub const SUB: &'static str = "__sub__";
-    pub const MUL: &'static str = "__mul__";
-    pub const TRUEDIV: &'static str = "__truediv__";
-    pub const FLOORDIV: &'static str = "__floordiv__";
-    pub const MOD: &'static str = "__mod__";
-    pub const POW: &'static str = "__pow__";
+    /// Comparison protocol methods (use @operator decorator)
+    pub const EQUALS: &'static str = "equals";
+    pub const NOT_EQUALS: &'static str = "not_equals";
+    pub const LESS_THAN: &'static str = "less_than";
+    pub const LESS_EQUAL: &'static str = "less_equal";
+    pub const GREATER_THAN: &'static str = "greater_than";
+    pub const GREATER_EQUAL: &'static str = "greater_equal";
 
-    /// Reflected arithmetic protocol methods.
-    pub const RADD: &'static str = "__radd__";
-    pub const RSUB: &'static str = "__rsub__";
-    pub const RMUL: &'static str = "__rmul__";
+    /// Arithmetic protocol methods (use @operator decorator)
+    pub const ADD: &'static str = "add";
+    pub const SUBTRACT: &'static str = "subtract";
+    pub const MULTIPLY: &'static str = "multiply";
+    pub const TRUEDIV: &'static str = "truediv";
+    pub const FLOORDIV: &'static str = "floordiv";
+    pub const MOD: &'static str = "mod";
+    pub const POW: &'static str = "pow";
 
-    /// Unary protocol methods.
-    pub const NEG: &'static str = "__neg__";
-    pub const POS: &'static str = "__pos__";
-    pub const INVERT: &'static str = "__invert__";
+    /// Reflected arithmetic protocol methods (use @operator decorator)
+    pub const RADD: &'static str = "radd";
+    pub const RSUB: &'static str = "rsub";
+    pub const RMUL: &'static str = "rmul";
 
-    /// String representation methods.
-    pub const STR: &'static str = "__str__";
-    pub const REPR: &'static str = "__repr__";
-    pub const FORMAT: &'static str = "__format__";
+    /// Unary protocol methods (use @operator decorator)
+    pub const NEG: &'static str = "neg";
+    pub const POS: &'static str = "pos";
+    pub const INVERT: &'static str = "invert";
 
-    /// Object lifecycle methods.
-    pub const INIT: &'static str = "__init__";
-    pub const NEW: &'static str = "__new__";
-    pub const DEL: &'static str = "__del__";
+    /// String representation methods (use @operator decorator)
+    pub const STR: &'static str = "str";
+    pub const REPR: &'static str = "repr";
+    pub const FORMAT: &'static str = "format";
 
-    /// Attribute access methods.
-    pub const GETATTR: &'static str = "__getattr__";
-    pub const SETATTR: &'static str = "__setattr__";
-    pub const DELATTR: &'static str = "__delattr__";
-    pub const GETATTRIBUTE: &'static str = "__getattribute__";
+    /// Object lifecycle methods - del is rarely used, NEW not supported
+    pub const DEL: &'static str = "del";
 
-    /// Check if a name is a special method.
+    /// Attribute access methods (use @operator decorator)
+    pub const GETATTR: &'static str = "getattr";
+    pub const SETATTR: &'static str = "setattr";
+    pub const DELATTR: &'static str = "delattr";
+    pub const GETATTRIBUTE: &'static str = "getattribute";
+
+    /// Check if a name is a special method that requires @operator decorator.
+    /// Constructor is special - it's a keyword, not a decorated method.
     pub fn is_special_method(name: &str) -> bool {
-        name.starts_with("__") && name.ends_with("__") && name.len() > 4
+        matches!(
+            name,
+            "iter"
+                | "next"
+                | "enter"
+                | "exit"
+                | "aenter"
+                | "aexit"
+                | "get"
+                | "set"
+                | "delete"
+                | "call"
+                | "len"
+                | "getitem"
+                | "setitem"
+                | "delitem"
+                | "contains"
+                | "equals"
+                | "not_equals"
+                | "less_than"
+                | "less_equal"
+                | "greater_than"
+                | "greater_equal"
+                | "add"
+                | "subtract"
+                | "multiply"
+                | "truediv"
+                | "floordiv"
+                | "mod"
+                | "pow"
+                | "radd"
+                | "rsub"
+                | "rmul"
+                | "neg"
+                | "pos"
+                | "invert"
+                | "str"
+                | "repr"
+                | "format"
+                | "getattr"
+                | "setattr"
+                | "delattr"
+                | "getattribute"
+        )
     }
 
     /// Check if a name is a private method.
     pub fn is_private_method(name: &str) -> bool {
-        name.starts_with('_') && !Self::is_special_method(name)
+        name.starts_with('_') && !Self::is_special_method(name) && name != "constructor"
     }
 
     /// Check if a name is a public method.
     pub fn is_public_method(name: &str) -> bool {
-        !name.starts_with('_')
+        !name.starts_with('_') || name == "constructor" || Self::is_special_method(name)
     }
 }
 

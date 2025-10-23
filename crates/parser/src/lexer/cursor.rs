@@ -91,6 +91,7 @@ impl LineCursor {
             LogosToken::Is => TokenKind::Is,
             LogosToken::Async => TokenKind::Async,
             LogosToken::Await => TokenKind::Await,
+            LogosToken::Constructor => TokenKind::Constructor,
             // match, case, type are soft keywords - handled as Ident
             LogosToken::Ident => TokenKind::Ident,
             LogosToken::Number => TokenKind::Number,

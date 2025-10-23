@@ -81,7 +81,7 @@ result = add(1, 2)
 fn test_hir_lowering_classes() {
     let source = r#"
 class Point:
-    def __init__(self, x: int, y: int):
+    def constructor(self, x: int, y: int):
         self.x = x
         self.y = y
 
@@ -277,7 +277,7 @@ z = x + 1
 fn test_hir_lowering_generics() {
     let source = r#"
 class Container[T]:
-    def __init__(self, value: T):
+    def constructor(self, value: T):
         self.value = value
 
     def get(self) -> T:
@@ -474,7 +474,7 @@ export def public_function():
     return "public"
 
 export class PublicClass:
-    def __init__(self):
+    def constructor(self):
         self.value = 42
 
 def private_function():
@@ -526,7 +526,7 @@ def process_callable(func: Callable[[int, int], int]) -> int:
     return func(1, 2)
 
 class GenericContainer(Generic[T]):
-    def __init__(self, value: T):
+    def constructor(self, value: T):
         self.value = value
 
     def get(self) -> T:

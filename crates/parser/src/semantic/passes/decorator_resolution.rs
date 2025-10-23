@@ -25,6 +25,7 @@ enum DecoratorKind {
     Override,
     Final,
     Cached,
+    Operator,
 }
 
 impl DecoratorKind {
@@ -39,6 +40,7 @@ impl DecoratorKind {
             "final" | "typing.final" => Some(Self::Final),
             "cached_property" | "functools.cached_property" => Some(Self::Cached),
             "lru_cache" | "functools.lru_cache" => Some(Self::Cached),
+            "operator" => Some(Self::Operator),
             _ => None,
         }
     }
@@ -52,6 +54,7 @@ impl DecoratorKind {
                 | Self::AbstractMethod
                 | Self::Override
                 | Self::Cached
+                | Self::Operator
         )
     }
 
@@ -223,12 +226,32 @@ impl<'a> DecoratorResolver<'a> {
                     ));
                 }
 
+                // Validate @operator decorator usage
+                if kind == DecoratorKind::Operator {
+                    use crate::ast::protocols::Protocols;
+                    if !Protocols::is_special_method(func.name) {
+                        self.errors.push(*error(
+                            ErrorKind::InvalidDecoratorTarget {
+                                decorator: "operator".to_string(),
+                                target: format!(
+                                    "method '{}' is not a valid operator method. Valid names: add, subtract, multiply, str, repr, equals, less_than, iter, next, len, getitem, contains, call, enter, exit, etc.",
+                                    func.name
+                                ),
+                            },
+                            span,
+                        ));
+                    }
+                }
+
                 decorator_kinds.push((kind, name, span));
             }
         }
 
         // Check decorator stacking order
         self.check_decorator_order(&decorator_kinds);
+
+        // Check if special method names have @operator decorator
+        self.check_special_method_decorator(func, &decorator_kinds);
     }
 
     fn check_class_decorators(&mut self, class: &ClassDefStmt<'a>) {
@@ -310,6 +333,40 @@ impl<'a> DecoratorResolver<'a> {
         }
     }
 
+    /// Check if special method names have the required @operator decorator
+    fn check_special_method_decorator(
+        &mut self,
+        func: &FuncDefStmt<'a>,
+        decorator_kinds: &[(DecoratorKind, String, TextRange)],
+    ) {
+        use crate::ast::protocols::Protocols;
+
+        // Skip constructor - it's a keyword, not a decorated method
+        if func.name == "constructor" {
+            return;
+        }
+
+        // Check if this is a special method name
+        if Protocols::is_special_method(func.name) {
+            // Check if it has @operator decorator
+            let has_operator = decorator_kinds
+                .iter()
+                .any(|(kind, _, _)| *kind == DecoratorKind::Operator);
+
+            if !has_operator {
+                self.errors.push(*error(
+                    ErrorKind::InvalidSyntax {
+                        message: format!(
+                            "Method '{}' is a special operator method and requires the @operator decorator",
+                            func.name
+                        ),
+                    },
+                    func.span,
+                ));
+            }
+        }
+    }
+
     /// Extract the decorator name from a decorator expression
     fn extract_decorator_name(&self, expr: &Expr<'a>) -> (String, TextRange) {
         match expr {
@@ -363,6 +420,7 @@ impl<'a> DecoratorResolver<'a> {
                 | "dataclass"
                 | "override"
                 | "final"
+                | "operator"
         ) {
             return true;
         }

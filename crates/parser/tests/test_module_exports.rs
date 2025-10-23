@@ -57,7 +57,7 @@ export internal_function as public_function
 fn test_export_class() {
     let source = r#"
 class MyClass:
-    def __init__(self):
+    def constructor(self):
         pass
 
 export MyClass

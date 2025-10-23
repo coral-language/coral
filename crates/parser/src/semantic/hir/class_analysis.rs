@@ -55,6 +55,7 @@ enum MethodDecorator {
     StaticMethod,
     ClassMethod,
     InstanceMethod,
+    Operator,
 }
 
 /// Property descriptor information
@@ -456,7 +457,7 @@ impl<'a> ClassAnalyzer<'a> {
                     {
                         properties.insert(prop_desc.attr_name, prop_desc);
                     } else {
-                        // Check for classmethod/staticmethod decorators
+                        // Check for classmethod/staticmethod/operator decorators
                         let decorator_kind = self.detect_method_decorator(func.decorators);
                         match decorator_kind {
                             MethodDecorator::StaticMethod => {
@@ -466,6 +467,10 @@ impl<'a> ClassAnalyzer<'a> {
                             MethodDecorator::ClassMethod => {
                                 // Class methods are class attributes
                                 class_attributes.insert(func.name, func.ty.clone());
+                            }
+                            MethodDecorator::Operator => {
+                                // Operator methods are instance methods with special behavior
+                                // They are handled in build_method_table like regular methods
                             }
                             MethodDecorator::InstanceMethod | MethodDecorator::None => {
                                 // Regular instance methods are handled in build_method_table
@@ -593,7 +598,7 @@ impl<'a> ClassAnalyzer<'a> {
         }
     }
 
-    /// Detect method decorators (@staticmethod, @classmethod)
+    /// Detect method decorators (@staticmethod, @classmethod, @operator)
     fn detect_method_decorator(&self, decorators: &[TypedExpr<'a>]) -> MethodDecorator {
         match self.interner {
             Some(interner) => {
@@ -602,6 +607,7 @@ impl<'a> ClassAnalyzer<'a> {
                         match interner.resolve(name_expr.symbol) {
                             Some("staticmethod") => return MethodDecorator::StaticMethod,
                             Some("classmethod") => return MethodDecorator::ClassMethod,
+                            Some("operator") => return MethodDecorator::Operator,
                             _ => {}
                         }
                     }

@@ -67,6 +67,7 @@ pub enum TokenKind {
     Match,
     Case,
     Type,
+    Constructor,
     Ident,
     Number,
     Complex,
@@ -218,6 +219,8 @@ pub enum LogosToken {
     // Case,
     // #[token("type")]
     // Type,
+    #[token("constructor")]
+    Constructor,
 
     // Identifiers support Unicode
     // XID_Start for first char (or underscore), XID_Continue for rest

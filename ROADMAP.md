@@ -2,6 +2,12 @@
 
 This roadmap outlines the complete development plan for Coral, a fast interpreted/compiled language with elegant syntax and Rust's memory safety.
 
+## Documentation
+
+Complete language specifications:
+- `docs/module-system.md` - Module system, exports, and introspection
+- `docs/classes-and-protocols.md` - Classes, protocols, operators, and special methods
+
 ## Phase 1: Frontend Development (Current)
 
 ### Parser Module
@@ -204,12 +210,12 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
   - [x] Handle attribute shadowing
 
 - [ ] **Protocol Integration**
-  - [x] Validate special methods (`__iter__`, `__enter__`, etc.)
+  - [x] Validate special methods (iter, enter, etc. with @operator decorator)
   - [ ] Structural subtyping checks
   - [ ] Protocol implementation completeness
 
 - [ ] **Property Support**
-  - [x] Detect `@property` decorators
+  - [x] Detect `@property` and `@operator` decorators
   - [ ] Treat properties as attributes
   - [ ] Validate getter/setter/deleter
 

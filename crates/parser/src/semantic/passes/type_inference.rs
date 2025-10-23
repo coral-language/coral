@@ -1503,12 +1503,12 @@ class Person:
     fn test_class_with_constructor() {
         let source = r#"
 class Person:
-    def __init__(self, name: str, age: int):
+    def constructor(self, name: str, age: int):
         self.name = name
         self.age = age
 "#;
         let ctx = infer_types(source);
-        // Class with __init__ method should parse without errors
+        // Class with constructor method should parse without errors
         let _ = ctx;
     }
 
@@ -1533,7 +1533,7 @@ class Calculator:
 class Counter:
     count = 0  # Class attribute
 
-    def __init__(self):
+    def constructor(self):
         self.value = 0  # Instance attribute
 "#;
         let ctx = infer_types(source);
@@ -1571,7 +1571,7 @@ class Factory:
     fn test_property_decorator() {
         let source = r#"
 class Circle:
-    def __init__(self, radius: float):
+    def constructor(self, radius: float):
         self._radius = radius
 
     @property
@@ -1587,7 +1587,7 @@ class Circle:
     fn test_property_with_setter() {
         let source = r#"
 class Circle:
-    def __init__(self, radius: float):
+    def constructor(self, radius: float):
         self._radius = radius
 
     @property
@@ -1655,11 +1655,11 @@ length = len(s)
     fn test_chained_attributes() {
         let source = r#"
 class Address:
-    def __init__(self):
+    def constructor(self):
         self.city = "NYC"
 
 class Person:
-    def __init__(self):
+    def constructor(self):
         self.address = Address()
 
 person = Person()

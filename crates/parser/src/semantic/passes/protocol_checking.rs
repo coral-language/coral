@@ -367,6 +367,7 @@ impl<'a> ProtocolChecker<'a> {
     }
 
     fn is_special_method(&self, name: &str) -> bool {
-        name.starts_with("__") && name.ends_with("__")
+        use crate::ast::protocols::Protocols;
+        Protocols::is_special_method(name)
     }
 }

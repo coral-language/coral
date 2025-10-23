@@ -434,7 +434,13 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         self.consume(TokenKind::Def)?;
 
-        let name = self.consume_ident()?;
+        // Allow 'constructor' keyword as a function name
+        let name = if self.peek().kind == TokenKind::Constructor {
+            self.advance();
+            self.arena.alloc_str("constructor")
+        } else {
+            self.consume_ident()?
+        };
 
         // Parse type parameters if present: def func[T, U](...):
         let type_params = if self.peek().kind == TokenKind::LeftBracket {

@@ -124,7 +124,7 @@ person_info = f"{person['name']} is {person['age']} years old"
 
 # Attribute access
 class Point:
-    def __init__(self, x, y):
+    def constructor(self, x, y):
         self.x = x
         self.y = y
 

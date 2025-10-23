@@ -114,7 +114,7 @@ impl<'a> HirLowerer<'a> {
         let exports = self.extract_exports(module.body);
 
         let typed_module = TypedModule {
-            name: self.intern("__main__"), // Module symbol
+            name: self.intern("<module>"), // Default module symbol (will be set by compiler)
             body,
             imports,
             exports,
@@ -665,7 +665,7 @@ impl<'a> HirLowerer<'a> {
                 }))
             }
             Expr::ModuleIntrospection(introspection) => {
-                let ty = Type::Module("__main__".to_string());
+                let ty = Type::Module("<module>".to_string());
                 Some(TypedExpr::ModuleIntrospection(
                     TypedModuleIntrospectionExpr {
                         function: introspection.function,
