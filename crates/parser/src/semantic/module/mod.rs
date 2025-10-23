@@ -3,7 +3,7 @@ pub mod graph;
 pub mod loader;
 pub mod resolver;
 
-pub use exports::{ExportInfo, ModuleExportRegistry};
+pub use exports::{ExportInfo, ModuleExportRegistry, ReexportError};
 pub use graph::{ModuleGraph, ModuleNode, ModuleState};
 pub use loader::ModuleLoader;
 pub use resolver::{

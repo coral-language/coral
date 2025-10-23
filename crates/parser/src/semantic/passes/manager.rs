@@ -5,7 +5,10 @@ use crate::error::codes::Severity;
 use crate::error::diagnostic::Diagnostic;
 use crate::semantic::cache::{CacheConfig, PersistentCache};
 use crate::semantic::metrics::{MetricsCollector, MetricsConfig};
-use crate::semantic::module::{CompositeResolver, ModuleGraph, ModulePathResolver};
+use crate::semantic::module::{
+    CompositeResolver, ModuleExportRegistry, ModuleGraph, ModulePathResolver,
+};
+use crate::semantic::symbol::table::SymbolTable;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -141,6 +144,8 @@ pub struct PassManagerConfig {
     pub metrics_config: MetricsConfig,
     /// Timeout for individual pass execution (seconds)
     pub pass_timeout_seconds: Option<u64>,
+    /// Maximum depth for re-export chain resolution (prevents infinite loops)
+    pub max_reexport_depth: usize,
 }
 
 impl Default for PassManagerConfig {
@@ -156,6 +161,7 @@ impl Default for PassManagerConfig {
             cache_config: Some(CacheConfig::default()),
             metrics_config: MetricsConfig::default(),
             pass_timeout_seconds: None, // No timeout by default
+            max_reexport_depth: 10,     // Default to 10 levels
         }
     }
 }
@@ -188,6 +194,10 @@ pub struct PassManager {
     metrics_collector: Option<MetricsCollector>,
     /// Historical execution times for load balancing (pass_id -> average duration in nanoseconds)
     pass_execution_times: HashMap<String, u128>,
+    /// Shared symbol table across passes (persists state between passes)
+    shared_symbol_table: Option<SymbolTable>,
+    /// Export registry for cross-module validation
+    export_registry: ModuleExportRegistry,
 }
 
 impl PassManager {
@@ -211,6 +221,8 @@ impl PassManager {
             persistent_cache,
             metrics_collector,
             pass_execution_times: HashMap::new(),
+            shared_symbol_table: None,
+            export_registry: ModuleExportRegistry::new(),
         };
 
         // Register all available passes
@@ -255,6 +267,8 @@ impl PassManager {
             persistent_cache,
             metrics_collector,
             pass_execution_times: HashMap::new(),
+            shared_symbol_table: None,
+            export_registry: ModuleExportRegistry::new(),
         };
 
         manager.register_default_passes();
@@ -478,151 +492,80 @@ impl PassManager {
         order.push(pass_id.to_string());
     }
 
+    /// Take ownership of the symbol table (for returning in ParseResult)
+    pub fn take_symbol_table(&mut self) -> SymbolTable {
+        self.shared_symbol_table.take().unwrap_or_default()
+    }
+
+    /// Take ownership of the export registry
+    pub fn take_export_registry(&mut self) -> ModuleExportRegistry {
+        std::mem::take(&mut self.export_registry)
+    }
+
+    /// Get the current module name from the root directory path
+    fn get_current_module_name(&self) -> String {
+        self.root_dir
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("__main__")
+            .to_string()
+    }
+
+    /// Extract and register exports from a module
+    fn register_module_exports(&mut self, module: &Module, module_name: &str) {
+        use crate::ast::Stmt;
+        use crate::semantic::module::exports::ExportInfo;
+        use crate::semantic::types::Type;
+
+        for stmt in module.body {
+            if let Stmt::Export(export) = stmt {
+                // Only register direct exports (not re-exports)
+                if export.module.is_none() {
+                    for (name, alias) in export.names {
+                        let exported_name = alias.unwrap_or(name);
+
+                        // Get type from symbol table if available
+                        let ty = self
+                            .shared_symbol_table
+                            .as_ref()
+                            .and_then(|st| {
+                                st.module_scope()
+                                    .lookup_local(name, |entry| entry.inferred_type.clone())
+                            })
+                            .flatten()
+                            .unwrap_or(Type::Unknown);
+
+                        let info = ExportInfo {
+                            original_name: name.to_string(),
+                            ty,
+                            source_module: None,
+                            reexport_chain: Vec::new(),
+                            span: export.span,
+                        };
+
+                        self.export_registry.register_export(
+                            module_name,
+                            exported_name.to_string(),
+                            info,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     /// Run passes in parallel when possible, respecting dependencies
+    ///
+    /// NOTE: Currently disabled - falls back to sequential execution
+    /// TODO: Refactor to work with shared state (requires interior mutability or different architecture)
     fn run_passes_parallel(
         &mut self,
         enabled_passes: &[String],
         module: &Module,
         source: &str,
     ) -> Result<(), Vec<Diagnostic>> {
-        use rayon::prelude::*;
-        use std::sync::{Arc, Mutex};
-
-        // Build dependency graph for parallel execution
-        let mut pass_deps: HashMap<String, Vec<String>> = HashMap::new();
-
-        for pass_id in enabled_passes {
-            if let Some(metadata) = self.passes.get(pass_id) {
-                let deps: Vec<String> = metadata
-                    .dependencies
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect();
-                pass_deps.insert(pass_id.clone(), deps);
-            }
-        }
-
-        // Track completed passes and pending passes
-        let completed = Arc::new(Mutex::new(HashSet::new()));
-        let mut remaining: Vec<String> = enabled_passes.to_vec();
-
-        // Process passes in waves (parallel within each wave)
-        while !remaining.is_empty() {
-            // Find passes that can run now (all dependencies completed)
-            let mut runnable: Vec<String> = remaining
-                .iter()
-                .filter(|pass_id| {
-                    if let Some(deps) = pass_deps.get(*pass_id) {
-                        deps.iter()
-                            .all(|dep| completed.lock().unwrap().contains(dep))
-                    } else {
-                        true // No dependencies
-                    }
-                })
-                .cloned()
-                .collect();
-
-            // Sort runnable passes by estimated execution time (longest first for better load balancing)
-            runnable.sort_by(|a, b| {
-                let time_a = self
-                    .pass_execution_times
-                    .get(a)
-                    .copied()
-                    .unwrap_or(100_000_000); // Default 100ms
-                let time_b = self
-                    .pass_execution_times
-                    .get(b)
-                    .copied()
-                    .unwrap_or(100_000_000);
-                time_b.cmp(&time_a) // Reverse order - longest first
-            });
-
-            if runnable.is_empty() {
-                // This shouldn't happen if dependencies are correct
-                return Err(vec![Diagnostic::error(
-                    "Circular dependency detected in pass execution".to_string(),
-                )]);
-            }
-
-            // Remove runnable passes from remaining
-            remaining.retain(|pass_id| !runnable.contains(pass_id));
-
-            // Run runnable passes in parallel
-            let results: Vec<_> = runnable
-                .par_iter()
-                .map(|pass_id| {
-                    let metadata = self.passes.get(pass_id).unwrap();
-                    if self.config.verbose {
-                        println!("Running pass: {} ({})", metadata.name, pass_id);
-                    }
-
-                    let start = Instant::now();
-                    let result = self.run_pass_with_timeout(
-                        pass_id,
-                        module,
-                        source,
-                        self.config.pass_timeout_seconds,
-                    );
-                    let duration = start.elapsed();
-
-                    if self.config.verbose && self.config.collect_statistics {
-                        println!("  Completed in {:?}", duration);
-                    }
-
-                    (pass_id.clone(), result, duration)
-                })
-                .collect();
-
-            // Update execution time tracking after parallel execution
-            for (pass_id, _, duration) in &results {
-                let duration_ns = duration.as_nanos();
-                let current_avg = self.pass_execution_times.get(pass_id).copied().unwrap_or(0);
-                // Simple exponential moving average: 0.1 * new + 0.9 * old
-                let new_avg = if current_avg == 0 {
-                    duration_ns
-                } else {
-                    (duration_ns / 10) + (current_avg * 9 / 10)
-                };
-                self.pass_execution_times.insert(pass_id.clone(), new_avg);
-            }
-
-            // Check results, collect diagnostics, and update statistics
-            for (pass_id, result, duration) in results {
-                match result {
-                    Ok(()) => {
-                        if self.config.collect_statistics
-                            && let Some(stats) = self.statistics.get_mut(&pass_id)
-                        {
-                            stats.record_run(duration, 0, 0);
-                        }
-                        completed.lock().unwrap().insert(pass_id);
-                    }
-                    Err(diagnostics) => {
-                        let error_count = diagnostics
-                            .iter()
-                            .filter(|d| {
-                                d.severity == Severity::Error || d.severity == Severity::Fatal
-                            })
-                            .count();
-                        let warning_count = diagnostics
-                            .iter()
-                            .filter(|d| d.severity == Severity::Warning)
-                            .count();
-
-                        if self.config.collect_statistics
-                            && let Some(stats) = self.statistics.get_mut(&pass_id)
-                        {
-                            stats.record_run(duration, error_count, warning_count);
-                        }
-
-                        self.diagnostics.extend(diagnostics);
-                        completed.lock().unwrap().insert(pass_id);
-                    }
-                }
-            }
-        }
-
-        Ok(())
+        // Fall back to sequential execution for now
+        self.run_passes_sequential(enabled_passes, module, source)
     }
 
     /// Run all enabled passes on a module
@@ -653,7 +596,11 @@ impl PassManager {
         }
 
         // Use parallel execution if enabled and passes are parallelizable
-        if self.config.parallel_execution && self.can_run_parallel(&enabled_passes) {
+        // NOTE: Parallel execution disabled for now when state sharing is enabled
+        // because it requires mutable access to PassManager state
+        // TODO: Refactor parallel execution to work with shared state
+        #[allow(clippy::overly_complex_bool_expr)]
+        if false && self.config.parallel_execution && self.can_run_parallel(&enabled_passes) {
             self.run_passes_parallel(&enabled_passes, module, source)?;
         } else {
             self.run_passes_sequential(&enabled_passes, module, source)?;
@@ -777,7 +724,7 @@ impl PassManager {
     }
 
     /// Run a specific pass
-    fn run_pass(&self, pass_id: &str, module: &Module, source: &str) -> PassResult {
+    fn run_pass(&mut self, pass_id: &str, module: &Module, source: &str) -> PassResult {
         match pass_id {
             "name_resolution" => self.run_name_resolution(module, source),
             "import_resolution" => self.run_import_resolution(module, source),
@@ -803,19 +750,21 @@ impl PassManager {
     }
 
     /// Run name resolution pass
-    fn run_name_resolution(&self, module: &Module, _source: &str) -> PassResult {
+    fn run_name_resolution(&mut self, module: &Module, _source: &str) -> PassResult {
         use crate::semantic::passes::name_resolution::NameResolver;
 
         let mut resolver = NameResolver::new();
         resolver.resolve_module(module);
 
-        // Name resolution collects diagnostics internally, but we need to extract them
-        // For now, return Ok(()) as the resolver doesn't expose diagnostics yet
+        // Store symbol table for subsequent passes
+        let (symbol_table, _errors) = resolver.into_symbol_table();
+        self.shared_symbol_table = Some(symbol_table);
+
         Ok(())
     }
 
     /// Run import resolution pass
-    fn run_import_resolution(&self, module: &Module, source: &str) -> PassResult {
+    fn run_import_resolution(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::import_resolution::ImportResolver;
 
         // Use a placeholder file path (in real usage, this should be passed in)
@@ -845,7 +794,7 @@ impl PassManager {
     }
 
     /// Run control flow analysis pass
-    fn run_control_flow(&self, module: &Module, source: &str) -> PassResult {
+    fn run_control_flow(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::control_flow::ControlFlowAnalyzer;
 
         let mut analyzer = ControlFlowAnalyzer::new();
@@ -871,7 +820,7 @@ impl PassManager {
     }
 
     /// Run definite assignment analysis pass
-    fn run_definite_assignment(&self, module: &Module, source: &str) -> PassResult {
+    fn run_definite_assignment(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::control_flow::ControlFlowAnalyzer;
         use crate::semantic::passes::definite_assignment::DefiniteAssignmentPass;
 
@@ -890,7 +839,7 @@ impl PassManager {
     }
 
     /// Run constant propagation pass
-    fn run_constant_propagation(&self, module: &Module, source: &str) -> PassResult {
+    fn run_constant_propagation(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::constant_propagation::ConstantPropagationPass;
         use crate::semantic::passes::control_flow::ControlFlowAnalyzer;
 
@@ -916,16 +865,29 @@ impl PassManager {
     }
 
     /// Run module system check pass
-    fn run_module_system(&self, module: &Module, source: &str) -> PassResult {
+    fn run_module_system(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::module_system::ModuleSystemChecker;
-        use crate::semantic::symbol::SymbolTable;
 
-        // Need a symbol table - create one for now
-        // In production, this would be passed from name_resolution
-        let symbol_table = SymbolTable::new();
+        // Use shared symbol table from name_resolution
+        let symbol_table = self.shared_symbol_table.as_ref().ok_or_else(|| {
+            vec![Diagnostic::error(
+                "name_resolution must run before module_system".to_string(),
+            )]
+        })?;
 
-        let checker = ModuleSystemChecker::new(&symbol_table);
+        let module_name = self.get_current_module_name();
+
+        // Create checker with registry for cross-module validation
+        let checker = ModuleSystemChecker::with_registry(
+            symbol_table,
+            &self.export_registry,
+            &module_name,
+            self.config.max_reexport_depth,
+        );
         let errors = checker.check(module);
+
+        // Register exports from this module for cross-module validation
+        self.register_module_exports(module, &module_name);
 
         if errors.is_empty() {
             Ok(())
@@ -936,7 +898,7 @@ impl PassManager {
     }
 
     /// Run HIR lowering pass
-    fn run_hir_lowering(&self, module: &Module, _source: &str) -> PassResult {
+    fn run_hir_lowering(&mut self, module: &Module, _source: &str) -> PassResult {
         use crate::arena::Arena;
         use crate::arena::interner::Interner;
         use crate::semantic::hir::lower::HirLowerer;
@@ -965,7 +927,7 @@ impl PassManager {
     }
 
     /// Run type inference pass
-    fn run_type_inference(&self, module: &Module, _source: &str) -> PassResult {
+    fn run_type_inference(&mut self, module: &Module, _source: &str) -> PassResult {
         use crate::semantic::passes::type_inference::{TypeInference, TypeInferenceContext};
         use crate::semantic::symbol::SymbolTable;
 
@@ -982,7 +944,7 @@ impl PassManager {
     }
 
     /// Run type checking pass
-    fn run_type_checking(&self, module: &Module, source: &str) -> PassResult {
+    fn run_type_checking(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::type_checking::TypeCheckContext;
         use crate::semantic::passes::type_checking::TypeChecker;
         use crate::semantic::passes::type_inference::TypeInferenceContext;
@@ -1007,7 +969,7 @@ impl PassManager {
     }
 
     /// Run exhaustiveness checking pass
-    fn run_exhaustiveness(&self, module: &Module, source: &str) -> PassResult {
+    fn run_exhaustiveness(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::exhaustiveness::ExhaustivenessChecker;
         use crate::semantic::passes::type_inference::TypeInferenceContext;
         use crate::semantic::symbol::SymbolTable;
@@ -1027,7 +989,7 @@ impl PassManager {
     }
 
     /// Run decorator resolution pass
-    fn run_decorator_resolution(&self, module: &Module, source: &str) -> PassResult {
+    fn run_decorator_resolution(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::decorator_resolution::DecoratorResolver;
         use crate::semantic::symbol::SymbolTable;
 
@@ -1044,7 +1006,7 @@ impl PassManager {
     }
 
     /// Run ownership checking pass
-    fn run_ownership_check(&self, module: &Module, source: &str) -> PassResult {
+    fn run_ownership_check(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::ownership_check::OwnershipChecker;
 
         let mut checker = OwnershipChecker::new();
@@ -1059,7 +1021,7 @@ impl PassManager {
     }
 
     /// Run concurrency safety checking pass
-    fn run_concurrency_check(&self, module: &Module, source: &str) -> PassResult {
+    fn run_concurrency_check(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::concurrency_check::ConcurrencyChecker;
 
         let mut checker = ConcurrencyChecker::new();
@@ -1074,7 +1036,7 @@ impl PassManager {
     }
 
     /// Run protocol checking pass
-    fn run_protocol_checking(&self, module: &Module, source: &str) -> PassResult {
+    fn run_protocol_checking(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::protocol_checking::ProtocolChecker;
         use crate::semantic::passes::type_inference::TypeInferenceContext;
         use crate::semantic::symbol::SymbolTable;
@@ -1370,7 +1332,7 @@ impl PassManager {
 
     /// Run a pass with optional timeout
     fn run_pass_with_timeout(
-        &self,
+        &mut self,
         pass_id: &str,
         module: &Module,
         source: &str,
@@ -1700,6 +1662,7 @@ mod tests {
             collect_statistics: true,
             enable_persistent_cache: false,
             cache_config: None,
+            max_reexport_depth: 10,
             metrics_config: MetricsConfig::default(),
             pass_timeout_seconds: Some(30),
             disabled_passes: HashSet::new(),

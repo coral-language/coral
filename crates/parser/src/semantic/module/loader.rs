@@ -72,8 +72,12 @@ impl<'a> ModuleLoader<'a> {
 
         // Validate module system
         let module_name = self.module_path_to_name(module_path);
-        let checker =
-            ModuleSystemChecker::with_registry(&symbol_table, &self.export_registry, &module_name);
+        let checker = ModuleSystemChecker::with_registry(
+            &symbol_table,
+            &self.export_registry,
+            &module_name,
+            10, // Default max depth
+        );
         let errors = checker.check(module);
 
         // Extract and register exports from this module
@@ -104,6 +108,7 @@ impl<'a> ModuleLoader<'a> {
                             original_name: name.to_string(),
                             ty: Type::Unknown, // Type inference would provide actual type
                             source_module: None,
+                            reexport_chain: Vec::new(),
                             span: export.span,
                         };
                         self.export_registry.register_export(

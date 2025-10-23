@@ -21,7 +21,7 @@ pub struct ModuleSystemChecker<'a> {
     exported_names: Vec<(&'a str, TextRange)>, // Track exports to detect duplicates
     export_registry: Option<&'a ModuleExportRegistry>, // Registry for cross-module validation
     current_module_name: Option<&'a str>,      // Current module being validated
-    reexport_chain: Vec<String>,               // Track re-export chain for circular detection
+    max_reexport_depth: usize,                 // Maximum depth for re-export chain resolution
 }
 
 impl<'a> ModuleSystemChecker<'a> {
@@ -32,7 +32,7 @@ impl<'a> ModuleSystemChecker<'a> {
             exported_names: Vec::new(),
             export_registry: None,
             current_module_name: None,
-            reexport_chain: Vec::new(),
+            max_reexport_depth: 10, // Default value
         }
     }
 
@@ -41,6 +41,7 @@ impl<'a> ModuleSystemChecker<'a> {
         symbol_table: &'a SymbolTable,
         export_registry: &'a ModuleExportRegistry,
         current_module_name: &'a str,
+        max_reexport_depth: usize,
     ) -> Self {
         Self {
             symbol_table,
@@ -48,7 +49,7 @@ impl<'a> ModuleSystemChecker<'a> {
             exported_names: Vec::new(),
             export_registry: Some(export_registry),
             current_module_name: Some(current_module_name),
-            reexport_chain: Vec::new(),
+            max_reexport_depth,
         }
     }
 
@@ -310,6 +311,8 @@ impl<'a> ModuleSystemChecker<'a> {
 
     /// Validate a re-export statement (export X from module)
     fn validate_reexport(&mut self, export: &ExportStmt<'a>, source_module: &'a str) {
+        use crate::semantic::module::ReexportError;
+
         // Check for duplicate exports first
         for (name, alias) in export.names {
             let exported_name = alias.unwrap_or(name);
@@ -322,42 +325,53 @@ impl<'a> ModuleSystemChecker<'a> {
         {
             self.errors.push(*error(
                 ErrorKind::CircularReExport {
-                    cycle: vec![current_module.to_string(), source_module.to_string()],
+                    cycle: vec![current_module.to_string()],
                 },
                 export.span,
             ));
             return; // Don't continue validation if it's a self-reference
         }
 
-        // If we have an export registry, validate that the source module exists
-        // and that it exports the requested names
+        // If we have an export registry, resolve the full re-export chain
         if let Some(registry) = self.export_registry {
-            // Check for circular re-exports in the chain
-            if self.current_module_name.is_some() {
-                // Build the re-export chain to detect cycles
-                let reexport_key = format!("{}::{}", source_module, export.names[0].0);
-
-                if self.reexport_chain.contains(&reexport_key) {
-                    // Circular re-export detected
-                    let mut cycle = self.reexport_chain.clone();
-                    cycle.push(reexport_key);
-                    self.errors
-                        .push(*error(ErrorKind::CircularReExport { cycle }, export.span));
-                    return;
-                }
-            }
-
-            // Check each exported name exists in the source module
             for (name, _alias) in export.names {
-                if !registry.is_exported(source_module, name) {
-                    // The name is not exported from the source module
-                    self.errors.push(*error(
-                        ErrorKind::ExportedNameNotInSourceModule {
-                            name: name.to_string(),
-                            source_module: source_module.to_string(),
-                        },
-                        export.span,
-                    ));
+                match registry.resolve_reexport_chain(source_module, name, self.max_reexport_depth)
+                {
+                    Ok((_origin_module, _info, chain)) => {
+                        // Valid re-export - check if current module is in the chain (circular)
+                        if let Some(current_module) = self.current_module_name
+                            && chain.contains(&current_module.to_string())
+                        {
+                            self.errors.push(*error(
+                                ErrorKind::CircularReExport { cycle: chain },
+                                export.span,
+                            ));
+                        }
+                    }
+                    Err(ReexportError::NotFound {
+                        name: missing_name,
+                        module,
+                    }) => {
+                        self.errors.push(*error(
+                            ErrorKind::ExportedNameNotInSourceModule {
+                                name: missing_name,
+                                source_module: module,
+                            },
+                            export.span,
+                        ));
+                    }
+                    Err(ReexportError::CircularChain { chain }) => {
+                        self.errors.push(*error(
+                            ErrorKind::CircularReExport { cycle: chain },
+                            export.span,
+                        ));
+                    }
+                    Err(ReexportError::ChainTooDeep { chain, .. }) => {
+                        self.errors.push(*error(
+                            ErrorKind::CircularReExport { cycle: chain },
+                            export.span,
+                        ));
+                    }
                 }
             }
         }
@@ -650,7 +664,7 @@ x = 42
         let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
 
         // Then check module system with registry
-        let checker = ModuleSystemChecker::with_registry(&symbol_table, registry, module_name);
+        let checker = ModuleSystemChecker::with_registry(&symbol_table, registry, module_name, 10);
         let errors = checker.check(module);
 
         if errors.is_empty() {
@@ -679,6 +693,7 @@ export add, subtract from math
                 original_name: "add".to_string(),
                 ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
                 source_module: None,
+                reexport_chain: Vec::new(),
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
@@ -689,6 +704,7 @@ export add, subtract from math
                 original_name: "subtract".to_string(),
                 ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
                 source_module: None,
+                reexport_chain: Vec::new(),
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
@@ -716,6 +732,7 @@ export add, nonexistent from math
                 original_name: "add".to_string(),
                 ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
                 source_module: None,
+                reexport_chain: Vec::new(),
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
@@ -779,6 +796,7 @@ export User as U from models
                 original_name: "User".to_string(),
                 ty: Type::Class("User".to_string()),
                 source_module: None,
+                reexport_chain: Vec::new(),
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
@@ -806,6 +824,7 @@ export add from mymodule
                 original_name: "add".to_string(),
                 ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
                 source_module: None,
+                reexport_chain: Vec::new(),
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
@@ -816,7 +835,7 @@ export add from mymodule
         assert_eq!(errors.len(), 1);
         match &errors[0].kind {
             ErrorKind::CircularReExport { cycle } => {
-                assert_eq!(cycle.len(), 2);
+                assert_eq!(cycle.len(), 1);
                 assert!(cycle.contains(&"mymodule".to_string()));
             }
             _ => panic!("Expected CircularReExport error, got {:?}", errors[0].kind),
@@ -842,6 +861,7 @@ export add from utils
                 original_name: "add".to_string(),
                 ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
                 source_module: None,
+                reexport_chain: Vec::new(),
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
@@ -852,6 +872,7 @@ export add from utils
                 original_name: "add".to_string(),
                 ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
                 source_module: None,
+                reexport_chain: Vec::new(),
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
@@ -890,6 +911,7 @@ export add from math
                 original_name: "add".to_string(),
                 ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
                 source_module: None,
+                reexport_chain: Vec::new(),
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
@@ -917,6 +939,7 @@ export add, subtract, multiply from math
                     original_name: name.to_string(),
                     ty: Type::function(vec![Type::Int, Type::Int], Type::Int),
                     source_module: None,
+                    reexport_chain: Vec::new(),
                     span: TextRange::new(TextSize::from(0), TextSize::from(10)),
                 },
             );

@@ -4,7 +4,7 @@
 //! and must be explicitly exported using the `export` keyword.
 
 use crate::semantic::types::Type;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use text_size::TextRange;
 
 /// Registry of exported symbols from modules
@@ -23,6 +23,8 @@ pub struct ExportInfo {
     pub ty: Type,
     /// Source module if this is a re-export (export Name from module)
     pub source_module: Option<String>,
+    /// Track full re-export chain for validation (e.g., ["A", "B", "C"] means A -> B -> C)
+    pub reexport_chain: Vec<String>,
     /// Span for error reporting
     pub span: TextRange,
 }
@@ -105,6 +107,80 @@ impl ModuleExportRegistry {
             .map(|exports| exports.len())
             .unwrap_or(0)
     }
+
+    /// Resolve a re-export chain to find the original export
+    ///
+    /// Returns (origin_module, export_info, chain) or error if not found/circular
+    ///
+    /// # Arguments
+    /// * `module_name` - Starting module name
+    /// * `name` - Export name to resolve
+    /// * `max_depth` - Maximum chain depth to prevent infinite loops
+    ///
+    /// # Returns
+    /// Result with (origin_module, final_export_info, full_chain) or ReexportError
+    pub fn resolve_reexport_chain(
+        &self,
+        module_name: &str,
+        name: &str,
+        max_depth: usize,
+    ) -> Result<(String, ExportInfo, Vec<String>), ReexportError> {
+        let mut visited = HashSet::new();
+        let mut chain = vec![module_name.to_string()];
+        let mut current_module = module_name;
+        let mut current_name = name;
+
+        loop {
+            // Check depth limit
+            if chain.len() > max_depth {
+                return Err(ReexportError::ChainTooDeep {
+                    max_depth,
+                    chain: chain.clone(),
+                });
+            }
+
+            // Check for circular chains
+            if !visited.insert(current_module.to_string()) {
+                return Err(ReexportError::CircularChain {
+                    chain: chain.clone(),
+                });
+            }
+
+            // Look up current export
+            if let Some(info) = self.get_export(current_module, current_name) {
+                if let Some(source) = &info.source_module {
+                    // This is a re-export, follow the chain
+                    chain.push(source.clone());
+                    current_module = source;
+                    current_name = &info.original_name;
+                } else {
+                    // Found the original export
+                    let mut final_info = info.clone();
+                    final_info.reexport_chain = chain.clone();
+                    return Ok((current_module.to_string(), final_info, chain));
+                }
+            } else {
+                return Err(ReexportError::NotFound {
+                    name: current_name.to_string(),
+                    module: current_module.to_string(),
+                });
+            }
+        }
+    }
+}
+
+/// Errors that can occur when resolving re-export chains
+#[derive(Debug, Clone)]
+pub enum ReexportError {
+    /// The export name was not found in the specified module
+    NotFound { name: String, module: String },
+    /// A circular re-export chain was detected
+    CircularChain { chain: Vec<String> },
+    /// The re-export chain exceeded the maximum depth
+    ChainTooDeep {
+        max_depth: usize,
+        chain: Vec<String>,
+    },
 }
 
 impl Default for ModuleExportRegistry {
@@ -130,6 +206,7 @@ mod tests {
             original_name: "my_func".to_string(),
             ty: Type::function(vec![Type::Int], Type::Str),
             source_module: None,
+            reexport_chain: Vec::new(),
             span: make_span(),
         };
 
@@ -150,6 +227,7 @@ mod tests {
             original_name: "internal_name".to_string(),
             ty: Type::Int,
             source_module: None,
+            reexport_chain: Vec::new(),
             span: make_span(),
         };
 
@@ -172,6 +250,7 @@ mod tests {
             original_name: "User".to_string(),
             ty: Type::Class("User".to_string()),
             source_module: Some("models.user".to_string()),
+            reexport_chain: Vec::new(),
             span: make_span(),
         };
 
@@ -189,6 +268,7 @@ mod tests {
             original_name: "func1".to_string(),
             ty: Type::function(vec![], Type::None),
             source_module: None,
+            reexport_chain: Vec::new(),
             span: make_span(),
         };
 
@@ -196,6 +276,7 @@ mod tests {
             original_name: "func2".to_string(),
             ty: Type::function(vec![], Type::None),
             source_module: None,
+            reexport_chain: Vec::new(),
             span: make_span(),
         };
 
@@ -216,6 +297,7 @@ mod tests {
             original_name: "func".to_string(),
             ty: Type::function(vec![], Type::None),
             source_module: None,
+            reexport_chain: Vec::new(),
             span: make_span(),
         };
 
