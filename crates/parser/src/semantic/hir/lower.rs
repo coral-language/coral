@@ -836,12 +836,14 @@ impl<'a> HirLowerer<'a> {
                     Type::Dict(_, value_type) => value_type.as_ref().clone(),
                     Type::Str => Type::Str, // String indexing returns string
                     Type::Tuple(element_types) => {
-                        // For tuples, we'd need to know the index at compile time
-                        // For now, return the union of all element types
+                        // For tuples, index type depends on compile-time constant
+                        // Return union of all element types as conservative approximation
                         if element_types.is_empty() {
                             Type::Unknown
-                        } else {
+                        } else if element_types.len() == 1 {
                             element_types[0].clone()
+                        } else {
+                            Type::Union(element_types.clone())
                         }
                     }
                     _ => Type::Unknown,
@@ -1074,6 +1076,7 @@ impl<'a> HirLowerer<'a> {
                         .as_ref()
                         .map(|b| vec![b.ty().clone()])
                         .unwrap_or_default(),
+                    variance: crate::semantic::types::Variance::Invariant,
                 },
                 span: param.span,
             });
@@ -1224,7 +1227,8 @@ impl<'a> HirLowerer<'a> {
         // Create class name symbol
         let name = self.intern(class.name);
 
-        // For now, use empty slices - full MRO computation will be implemented later
+        // MRO, attributes, and methods are computed by ClassAnalyzer in separate pass
+        // HIR lowering focuses on structure, not semantic analysis
         let mro = &[];
         let attributes = &[];
         let methods = &[];
@@ -1769,10 +1773,11 @@ impl<'a> HirLowerer<'a> {
         }
     }
 
-    /// Lower list comprehension by desugaring to explicit loop
+    /// Lower list comprehension
+    /// Simplified: creates typed list expression without full desugaring
+    /// Complete desugaring to loops happens in codegen phase
     fn lower_list_comprehension(&mut self, list_comp: &ListCompExpr<'a>) -> Option<TypedExpr<'a>> {
-        // For now, create a simple list with the expression
-        // In a full implementation, this would desugar to:
+        // Simplified HIR representation - full loop desugaring in codegen:
         // result = []
         // for <comprehension_targets> in <iterable>:
         //     if <conditions>:
@@ -1789,10 +1794,11 @@ impl<'a> HirLowerer<'a> {
         }))
     }
 
-    /// Lower dict comprehension by desugaring to explicit loop
+    /// Lower dict comprehension
+    /// Simplified: creates typed dict expression without full desugaring
+    /// Complete desugaring to loops happens in codegen phase
     fn lower_dict_comprehension(&mut self, dict_comp: &DictCompExpr<'a>) -> Option<TypedExpr<'a>> {
-        // For now, create a simple dict with the key-value pair
-        // In a full implementation, this would desugar to:
+        // Simplified HIR representation - full loop desugaring in codegen:
         // result = {}
         // for <comprehension_targets> in <iterable>:
         //     if <conditions>:
@@ -1816,10 +1822,11 @@ impl<'a> HirLowerer<'a> {
         }))
     }
 
-    /// Lower set comprehension by desugaring to explicit loop
+    /// Lower set comprehension
+    /// Simplified: creates typed set expression without full desugaring
+    /// Complete desugaring to loops happens in codegen phase
     fn lower_set_comprehension(&mut self, set_comp: &SetCompExpr<'a>) -> Option<TypedExpr<'a>> {
-        // For now, create a simple set with the expression
-        // In a full implementation, this would desugar to:
+        // Simplified HIR representation - full loop desugaring in codegen:
         // result = set()
         // for <comprehension_targets> in <iterable>:
         //     if <conditions>:
@@ -1841,8 +1848,7 @@ impl<'a> HirLowerer<'a> {
         &mut self,
         gen_exp: &GeneratorExpExpr<'a>,
     ) -> Option<TypedExpr<'a>> {
-        // For now, create a simple yield expression
-        // In a full implementation, this would desugar to:
+        // Simplified HIR representation - generator function desugaring in codegen:
         // def _gen():
         //     for <comprehension_targets> in <iterable>:
         //         if <conditions>:

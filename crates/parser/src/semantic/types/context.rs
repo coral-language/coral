@@ -3,6 +3,25 @@
 /// Type identifier for fast equality checks
 pub type TypeId = usize;
 
+/// Variance of type parameters
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Variance {
+    /// Covariant (+T): preserves subtyping order
+    /// If A <: B then Container[A] <: Container[B]
+    /// Used for immutable containers and return types
+    Covariant,
+
+    /// Contravariant (-T): reverses subtyping order
+    /// If A <: B then Container[B] <: Container[A]
+    /// Used for function parameters
+    Contravariant,
+
+    /// Invariant (T): requires exact type match
+    /// Container[A] <: Container[B] only if A == B
+    /// Used for mutable containers
+    Invariant,
+}
+
 /// Kind of attribute descriptor
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AttributeKind {
@@ -83,7 +102,11 @@ pub enum Type {
     Optional(Box<Type>),
 
     /// Type variable for generics
-    TypeVar { name: String, bounds: Vec<Type> },
+    TypeVar {
+        name: String,
+        bounds: Vec<Type>,
+        variance: Variance,
+    },
 
     /// Generic type with type parameters
     Generic { base: Box<Type>, params: Vec<Type> },
@@ -112,19 +135,34 @@ pub enum Type {
 }
 
 impl Type {
-    /// Create a new type variable
+    /// Create a new invariant type variable (default)
     pub fn type_var(name: impl Into<String>) -> Self {
         Type::TypeVar {
             name: name.into(),
             bounds: Vec::new(),
+            variance: Variance::Invariant,
         }
     }
 
-    /// Create a new type variable with bounds
+    /// Create a new type variable with bounds and default invariance
     pub fn type_var_with_bounds(name: impl Into<String>, bounds: Vec<Type>) -> Self {
         Type::TypeVar {
             name: name.into(),
             bounds,
+            variance: Variance::Invariant,
+        }
+    }
+
+    /// Create a new type variable with variance and bounds
+    pub fn type_var_with_variance(
+        name: impl Into<String>,
+        bounds: Vec<Type>,
+        variance: Variance,
+    ) -> Self {
+        Type::TypeVar {
+            name: name.into(),
+            bounds,
+            variance,
         }
     }
 
@@ -231,18 +269,20 @@ impl Type {
             // T <: Union[A, B] if T <: A or T <: B
             (t, Type::Union(types)) => types.iter().any(|ty| t.is_subtype_of(ty)),
 
-            // List covariance (simplified - lists are actually invariant)
-            (Type::List(t1), Type::List(t2)) => t1.is_subtype_of(t2),
+            // List invariance: mutable containers are invariant
+            // List[T] <: List[U] only if T == U
+            (Type::List(t1), Type::List(t2)) => t1 == t2,
 
-            // Set covariance (simplified - sets are actually invariant)
-            (Type::Set(t1), Type::Set(t2)) => t1.is_subtype_of(t2),
+            // Set invariance: mutable containers are invariant
+            // Set[T] <: Set[U] only if T == U
+            (Type::Set(t1), Type::Set(t2)) => t1 == t2,
 
-            // Dict covariance (simplified - dicts are actually invariant)
-            (Type::Dict(k1, v1), Type::Dict(k2, v2)) => {
-                k1.is_subtype_of(k2) && v1.is_subtype_of(v2)
-            }
+            // Dict invariance: mutable containers are invariant
+            // Dict[K1, V1] <: Dict[K2, V2] only if K1 == K2 and V1 == V2
+            (Type::Dict(k1, v1), Type::Dict(k2, v2)) => k1 == k2 && v1 == v2,
 
-            // Tuple structural subtyping
+            // Tuple covariance: immutable containers are covariant
+            // Tuple[T1, T2, ...] <: Tuple[U1, U2, ...] if T1 <: U1, T2 <: U2, ...
             (Type::Tuple(t1), Type::Tuple(t2)) => {
                 t1.len() == t2.len() && t1.iter().zip(t2.iter()).all(|(a, b)| a.is_subtype_of(b))
             }
@@ -318,7 +358,11 @@ impl Type {
                 names.join(" | ")
             }
             Type::Optional(t) => format!("{} | None", t.display_name()),
-            Type::TypeVar { name, bounds } => {
+            Type::TypeVar {
+                name,
+                bounds,
+                variance: _,
+            } => {
                 if bounds.is_empty() {
                     name.clone()
                 } else {

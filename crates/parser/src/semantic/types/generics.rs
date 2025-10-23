@@ -30,7 +30,11 @@ impl GenericContext {
     /// Apply substitutions to a type
     pub fn apply(&self, ty: &Type) -> Type {
         match ty {
-            Type::TypeVar { name, bounds } => {
+            Type::TypeVar {
+                name,
+                bounds,
+                variance,
+            } => {
                 if let Some(concrete_ty) = self.lookup(name) {
                     // Recursively apply in case the substitution contains type vars
                     self.apply(concrete_ty)
@@ -38,6 +42,7 @@ impl GenericContext {
                     Type::TypeVar {
                         name: name.clone(),
                         bounds: bounds.clone(),
+                        variance: *variance,
                     }
                 }
             }

@@ -40,7 +40,22 @@ fn unify_with_context(ty1: &Type, ty2: &Type, ctx: &mut GenericContext) -> bool 
         (Type::Unknown, _) | (_, Type::Unknown) => true,
 
         // Type variable unification
-        (Type::TypeVar { name, bounds }, ty) | (ty, Type::TypeVar { name, bounds }) => {
+        (
+            Type::TypeVar {
+                name,
+                bounds,
+                variance: _,
+            },
+            ty,
+        )
+        | (
+            ty,
+            Type::TypeVar {
+                name,
+                bounds,
+                variance: _,
+            },
+        ) => {
             // Check bounds
             if !GenericContext::satisfies_bounds(ty, bounds) {
                 return false;

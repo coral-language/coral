@@ -307,11 +307,14 @@ impl<'a> ProtocolChecker<'a> {
             return false;
         }
 
-        // For now, we do a simple check
-        // A full implementation would check:
-        // - Argument types are compatible
-        // - Return types are compatible (contravariant for args, covariant for return)
-        // - Default arguments are compatible
+        // Basic signature compatibility check
+        // Full implementation requires:
+        // - Parse type annotations from args.annotation
+        // - Check argument type contravariance (protocol more general)
+        // - Check return type covariance (implementation more specific)
+        // - Validate default arguments compatibility
+        // - Handle *args/**kwargs matching
+        // For now: accept matching argument counts as compatible
         true
     }
 
