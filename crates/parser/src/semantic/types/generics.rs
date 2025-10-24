@@ -63,9 +63,12 @@ impl GenericContext {
                 returns,
                 captures: _,
             } => {
-                let new_params: Vec<Type> = params.iter().map(|t| self.apply(t)).collect();
+                let new_params: Vec<(Option<String>, Type)> = params
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.apply(ty)))
+                    .collect();
                 let new_returns = self.apply(returns);
-                Type::function(new_params, new_returns)
+                Type::function_with_names(new_params, new_returns)
             }
             Type::Generic { base, params } => {
                 let new_base = self.apply(base);

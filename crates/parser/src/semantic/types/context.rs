@@ -81,9 +81,11 @@ pub enum Type {
     /// Dictionary type with key and value types
     Dict(Box<Type>, Box<Type>),
 
-    /// Function type with parameter types and return type
+    /// Function type with parameter names and types
     Function {
-        params: Vec<Type>,
+        /// Parameters as (optional_name, type) tuples
+        /// None for anonymous parameters (e.g., from expressions)
+        params: Vec<(Option<String>, Type)>,
         returns: Box<Type>,
         /// Captured variables from enclosing scopes (for closures)
         captures: Vec<(String, Type)>,
@@ -186,12 +188,21 @@ impl Type {
         Type::Union(types)
     }
 
-    /// Create a function type
+    /// Create a function type without parameter names
     pub fn function(params: Vec<Type>, returns: Type) -> Self {
+        Type::Function {
+            params: params.into_iter().map(|t| (None, t)).collect(),
+            returns: Box::new(returns),
+            captures: Vec::new(), // No captures by default
+        }
+    }
+
+    /// Create a function type with named parameters
+    pub fn function_with_names(params: Vec<(Option<String>, Type)>, returns: Type) -> Self {
         Type::Function {
             params,
             returns: Box::new(returns),
-            captures: Vec::new(), // No captures by default
+            captures: Vec::new(),
         }
     }
 
@@ -201,7 +212,7 @@ impl Type {
         captures: Vec<(String, Type)>,
     ) -> Self {
         Type::Function {
-            params,
+            params: params.into_iter().map(|t| (None, t)).collect(),
             returns: Box::new(returns),
             captures,
         }
@@ -318,8 +329,9 @@ impl Type {
             ) => {
                 // Function subtyping: contravariant params, covariant returns
                 // Captures don't affect subtyping (implementation detail)
+                // Parameter names don't affect subtyping, only types matter
                 p1.len() == p2.len() &&
-                p1.iter().zip(p2.iter()).all(|(a, b)| b.is_subtype_of(a)) && // contravariant
+                p1.iter().zip(p2.iter()).all(|((_n1, t1), (_n2, t2))| t2.is_subtype_of(t1)) && // contravariant
                 r1.is_subtype_of(r2) // covariant
             }
 
@@ -359,7 +371,13 @@ impl Type {
                 returns,
                 captures,
             } => {
-                let param_names: Vec<_> = params.iter().map(|t| t.display_name()).collect();
+                let param_names: Vec<_> = params.iter().map(|(name, ty)| {
+                    if let Some(n) = name {
+                        format!("{}: {}", n, ty.display_name())
+                    } else {
+                        ty.display_name()
+                    }
+                }).collect();
                 let sig = format!("({}) -> {}", param_names.join(", "), returns.display_name());
                 if !captures.is_empty() {
                     format!("{} [captures: {}]", sig, captures.len())

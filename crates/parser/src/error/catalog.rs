@@ -608,8 +608,17 @@ impl ErrorKind {
                     "Check the function signature and provide arguments of the correct type",
                 ),
             },
-            ErrorKind::ReturnTypeMismatch { .. } => ErrorMetadata {
+            ErrorKind::UnexpectedKeywordArgument { .. } => ErrorMetadata {
                 code: ErrorCode::E4006,
+                severity: Severity::Error,
+                category: ErrorCategory::Type,
+                error_type: "TypeError",
+                title: "Unexpected keyword argument",
+                description: "Function does not accept this keyword argument",
+                suggestion: Some("Check the function signature for available parameter names"),
+            },
+            ErrorKind::ReturnTypeMismatch { .. } => ErrorMetadata {
+                code: ErrorCode::E4007,
                 severity: Severity::Error,
                 category: ErrorCategory::Type,
                 error_type: "TypeError",
@@ -1304,6 +1313,9 @@ impl ErrorKind {
                     "Argument {} has wrong type: expected '{}', found '{}'",
                     param_index, expected, found
                 )
+            }
+            ErrorKind::UnexpectedKeywordArgument { name } => {
+                format!("Unexpected keyword argument '{}'", name)
             }
             ErrorKind::ReturnTypeMismatch { expected, found } => {
                 format!(

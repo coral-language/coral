@@ -755,7 +755,7 @@ impl<'a> TypeChecker<'a> {
 
             // Validate positional argument types
             for (i, (arg_ty, arg_span)) in positional_args.iter().enumerate() {
-                if let Some(expected_ty) = params.get(i) {
+                if let Some((_param_name, expected_ty)) = params.get(i) {
                     // Use contravariance: argument type must be subtype of parameter type
                     if !arg_ty.is_subtype_of(expected_ty)
                         && !matches!(arg_ty, Type::Unknown)
@@ -773,35 +773,64 @@ impl<'a> TypeChecker<'a> {
                 }
             }
 
-            // Validate keyword arguments
-            // Note: We don't have parameter names in Type::Function currently,
-            // so we can only check that keyword args have valid types
-            // A full implementation would need parameter names in function types
-            for (_name, arg_ty, arg_span) in keyword_args.iter() {
-                // For now, check if the keyword arg would fit any remaining parameter
-                let remaining_params: Vec<&Type> = params.iter().skip(num_positional).collect();
+            // Validate keyword arguments with parameter name matching
+            for (arg_name, arg_ty, arg_span) in keyword_args.iter() {
+                // Try to find parameter by name
+                let param_match = params.iter().enumerate().find(|(_idx, (param_name, _ty))| {
+                    param_name.as_deref() == *arg_name
+                });
 
-                if !remaining_params.is_empty() {
-                    // Check if argument type matches any remaining parameter
-                    let matches_any = remaining_params
-                        .iter()
-                        .any(|param_ty| arg_ty.is_subtype_of(param_ty));
-
-                    if !matches_any
+                if let Some((idx, (_param_name, param_ty))) = param_match {
+                    // Found matching parameter by name - validate type
+                    if !arg_ty.is_subtype_of(param_ty)
                         && !matches!(arg_ty, Type::Unknown)
-                        && !remaining_params.iter().all(|p| matches!(p, Type::Unknown))
+                        && !matches!(param_ty, Type::Unknown)
                     {
                         self.context.add_error(*error(
                             ErrorKind::InvalidArgumentType {
-                                param_index: num_positional,
-                                expected: remaining_params
-                                    .first()
-                                    .map(|t| t.to_string())
-                                    .unwrap_or_else(|| "unknown".to_string()),
+                                param_index: idx,
+                                expected: param_ty.to_string(),
                                 found: arg_ty.to_string(),
                             },
                             *arg_span,
                         ));
+                    }
+                } else {
+                    // Parameter name not found - check if we can match by position
+                    let remaining_params: Vec<&(Option<String>, Type)> = params.iter().skip(num_positional).collect();
+
+                    if remaining_params.is_empty() {
+                        // No parameters available for this keyword arg
+                        if let Some(name) = arg_name {
+                            self.context.add_error(*error(
+                                ErrorKind::UnexpectedKeywordArgument {
+                                    name: name.to_string(),
+                                },
+                                *arg_span,
+                            ));
+                        }
+                    } else {
+                        // Check if argument type matches any remaining parameter by type
+                        let matches_any = remaining_params
+                            .iter()
+                            .any(|(_name, param_ty)| arg_ty.is_subtype_of(param_ty));
+
+                        if !matches_any
+                            && !matches!(arg_ty, Type::Unknown)
+                            && !remaining_params.iter().all(|(_n, p)| matches!(p, Type::Unknown))
+                        {
+                            self.context.add_error(*error(
+                                ErrorKind::InvalidArgumentType {
+                                    param_index: num_positional,
+                                    expected: remaining_params
+                                        .first()
+                                        .map(|(_n, t)| t.to_string())
+                                        .unwrap_or_else(|| "unknown".to_string()),
+                                    found: arg_ty.to_string(),
+                                },
+                                *arg_span,
+                            ));
+                        }
                     }
                 }
             }

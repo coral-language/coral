@@ -206,6 +206,9 @@ pub enum ErrorKind {
         found: String,
     },
 
+    /// Unexpected keyword argument in function call
+    UnexpectedKeywordArgument { name: String },
+
     /// Return type doesn't match function signature
     ReturnTypeMismatch { expected: String, found: String },
 

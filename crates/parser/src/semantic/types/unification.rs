@@ -107,7 +107,7 @@ fn unify_with_context(ty1: &Type, ty2: &Type, ctx: &mut GenericContext) -> bool 
             let params_unify = p1
                 .iter()
                 .zip(p2.iter())
-                .all(|(t1, t2)| unify_with_context(t1, t2, ctx));
+                .all(|((_n1, t1), (_n2, t2))| unify_with_context(t1, t2, ctx));
             params_unify && unify_with_context(r1, r2, ctx)
         }
 
@@ -129,7 +129,10 @@ fn occurs_check(var_name: &str, ty: &Type) -> bool {
             params,
             returns,
             captures: _,
-        } => params.iter().any(|t| occurs_check(var_name, t)) || occurs_check(var_name, returns),
+        } => {
+            params.iter().any(|(_name, t)| occurs_check(var_name, t))
+                || occurs_check(var_name, returns)
+        }
         Type::Generic { base, params } => {
             occurs_check(var_name, base) || params.iter().any(|t| occurs_check(var_name, t))
         }

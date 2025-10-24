@@ -874,7 +874,7 @@ impl<'a> TypeInference<'a> {
 
                 // Infer argument types with expected types from parameters
                 for (i, arg) in call.args.iter().enumerate() {
-                    let expected = param_types.and_then(|params| params.get(i)).cloned();
+                    let expected = param_types.and_then(|params| params.get(i).map(|(_name, ty)| ty.clone()));
                     self.infer_expr_with_expected(arg, expected);
                 }
 
@@ -965,9 +965,9 @@ impl<'a> TypeInference<'a> {
                     let param_type = if let Some(annotation) = &arg.annotation {
                         // Explicit annotation takes precedence
                         parse_annotation(annotation)
-                    } else if let Some(expected) = expected_params.as_ref().and_then(|p| p.get(i)) {
+                    } else if let Some((_name, expected_ty)) = expected_params.as_ref().and_then(|p| p.get(i)) {
                         // Use expected type from call site
-                        expected.clone()
+                        expected_ty.clone()
                     } else {
                         // No information available
                         Type::Unknown

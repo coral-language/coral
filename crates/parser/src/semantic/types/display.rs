@@ -22,12 +22,17 @@ pub fn pretty_print_type(ty: &Type, indent: usize) -> String {
         } => {
             let mut result = format!("{}Function:\n", prefix);
             result.push_str(&format!("{}  Parameters:\n", prefix));
-            for (i, param) in params.iter().enumerate() {
+            for (i, (name, param_ty)) in params.iter().enumerate() {
+                let param_label = if let Some(n) = name {
+                    format!("{}: {}", n, pretty_print_type(param_ty, indent + 2))
+                } else {
+                    pretty_print_type(param_ty, indent + 2)
+                };
                 result.push_str(&format!(
                     "{}    [{}]: {}\n",
                     prefix,
                     i,
-                    pretty_print_type(param, indent + 2)
+                    param_label
                 ));
             }
             result.push_str(&format!(
