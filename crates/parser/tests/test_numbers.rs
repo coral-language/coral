@@ -123,7 +123,7 @@ complex_underscores = 1_234.567_89+9_876.543_21j
 
 #[test]
 fn test_invalid_patterns_tokenize_without_errors() {
-    // These patterns should tokenize without panicking
+
     let patterns = vec![
         "_100", "100_", "1__000", "0b1010_", "0o755_", "0xff_", "0b11__00", "0o12__34", "0xab__cd",
         "0b2", "0o8", "0xg", "0x", "0b", "0o",
@@ -137,7 +137,7 @@ fn test_invalid_patterns_tokenize_without_errors() {
 
 #[test]
 fn test_invalid_scientific_notation_tokenize() {
-    // These patterns should tokenize without panicking
+
     let patterns = vec!["1ee5", "1.2.3", "1e", "1e+", "1e-"];
 
     for pattern in patterns {

@@ -13,7 +13,6 @@ x, y = (1, 2)
 a, (b, c) = (1, (2, 3))
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -23,7 +22,6 @@ fn test_list_destructuring() {
 [x, y, z] = [1, 2, 3]
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -35,7 +33,6 @@ fn test_starred_pattern() {
 [first, *middle, last] = [1, 2, 3, 4, 5]
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -50,7 +47,6 @@ match value:
         print(first, rest)
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -65,7 +61,6 @@ match value:
         print(y)
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -78,7 +73,6 @@ match data:
         print(a, b, c, d)
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -89,6 +83,5 @@ data = {"x": 1, "y": 2}
 {"x": a, "y": b} = data
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }

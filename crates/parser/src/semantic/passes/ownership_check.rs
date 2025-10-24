@@ -274,7 +274,13 @@ impl OwnershipChecker {
                             // If variable already exists, we're reassigning (old value can be freed)
                             if self.lifetime_states.contains_key(&var_name) {
                                 // Automatic cleanup of old value happens here
-                                // In a real implementation, we'd decrease ref count of old value
+                                // Decrease ref count of the old value
+                                let can_be_freed = self.release_reference(&var_name);
+
+                                // If ref count reaches zero, mark resource as available for cleanup
+                                if can_be_freed {
+                                    self.mark_resource_cleaned(&var_name);
+                                }
                             }
 
                             self.declare_variable(&var_name, target.span(), None);
@@ -527,6 +533,20 @@ impl OwnershipChecker {
             ref_info.ref_count += 1;
             ref_info.ref_spans.push(ref_span);
         }
+    }
+
+    /// Decrease reference count (called when a reference is dropped or reassigned)
+    /// Returns true if the ref count reaches zero (value can be freed)
+    fn release_reference(&mut self, name: &str) -> bool {
+        if let Some(ref_info) = self.references.get_mut(name)
+            && ref_info.ref_count > 0
+        {
+            ref_info.ref_count -= 1;
+            // Value can be freed if no strong references remain
+            // (weak references don't keep the value alive)
+            return ref_info.ref_count == 0;
+        }
+        false
     }
 
     /// Mark a resource as cleaned up

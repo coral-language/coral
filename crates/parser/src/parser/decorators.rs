@@ -26,7 +26,6 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_decorators(&mut self) -> ParseResult<&'a [Expr<'a>]> {
-        // Most classes/functions have 0-4 decorators
         let mut decorators: SmallVec<[Expr<'a>; 4]> = SmallVec::new();
 
         while self.peek().kind == TokenKind::At {

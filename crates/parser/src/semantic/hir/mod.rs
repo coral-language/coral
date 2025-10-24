@@ -10,7 +10,7 @@ pub mod typed_pattern;
 pub mod typed_stmt;
 pub mod validate;
 
-// Re-export commonly used types
+pub use lower::HirLowerer;
 pub use typed_expr::TypedExpr;
 pub use typed_item::TypedItem;
 pub use typed_pattern::TypedPattern;

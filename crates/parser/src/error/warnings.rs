@@ -30,8 +30,6 @@ pub enum WarningCategory {
 /// Errors that prevent compilation are in ErrorKind instead.
 #[derive(Debug, Clone)]
 pub enum WarningKind {
-    // ===== Import/Shadowing Warnings (W3xxx) =====
-    // These are the warnings currently being used in import_resolution.rs
     /// Import never used in the module
     UnusedImport { name: String, span: TextRange },
 
@@ -45,7 +43,6 @@ pub enum WarningKind {
         span: TextRange,
     },
 
-    // ===== Additional Unused Code Warnings =====
     /// Variable assigned but never used
     UnusedVariable { name: String, span: TextRange },
 
@@ -55,7 +52,6 @@ pub enum WarningKind {
     /// Parameter never used in function
     UnusedParameter { name: String, span: TextRange },
 
-    // ===== Deprecation Warnings (W2xxx) =====
     /// Using deprecated feature
     DeprecatedFeature {
         feature: String,
@@ -64,7 +60,6 @@ pub enum WarningKind {
         span: TextRange,
     },
 
-    // ===== Indentation Warnings =====
     /// Mixed tabs and spaces in indentation
     MixedTabsAndSpaces {
         line_content: String,
@@ -129,20 +124,16 @@ impl WarningKind {
     /// Get the error code for this warning.
     pub fn code(&self) -> ErrorCode {
         match self {
-            // Currently used warnings (from import_resolution.rs)
             WarningKind::UnusedImport { .. } => ErrorCode::W3003,
             WarningKind::ShadowsBuiltin { .. } => ErrorCode::W3006,
             WarningKind::ShadowsImport { .. } => ErrorCode::W3007,
 
-            // Additional unused code warnings
             WarningKind::UnusedVariable { .. } => ErrorCode::W3001,
             WarningKind::UnusedFunction { .. } => ErrorCode::W3002,
             WarningKind::UnusedParameter { .. } => ErrorCode::W3004,
 
-            // Deprecation warnings
             WarningKind::DeprecatedFeature { .. } => ErrorCode::W2001,
 
-            // Indentation warnings
             WarningKind::MixedTabsAndSpaces { .. } => ErrorCode::W1005,
             WarningKind::InconsistentIndentation { .. } => ErrorCode::W1005,
         }

@@ -20,7 +20,6 @@ impl DiagnosticFormatter {
     pub fn format(&self, diagnostic: &Diagnostic) -> String {
         let mut output = String::new();
 
-        // Header: Error: Title [E0421]
         let error_type = diagnostic
             .error_type
             .as_deref()
@@ -32,7 +31,6 @@ impl DiagnosticFormatter {
 
         let title = diagnostic.title.as_deref().unwrap_or("Unknown error");
 
-        // Format header with severity-based background coloring and white text
         let header_text = if let Some(code) = &diagnostic.code {
             format!(" {}: {} [{}] ", error_type, title, code)
         } else {
@@ -53,16 +51,13 @@ impl DiagnosticFormatter {
 
         output.push_str(&header);
 
-        // Main message (plain text)
         output.push_str(&format!("\n{}\n\n", diagnostic.message));
 
-        // Context
         if self.config.show_context
             && let Some(context) = &diagnostic.context
         {
             let (line, col) = context.line_and_column();
 
-            // Location line: --> src/utils/math.coral:3:1 (blue arrow, underlined path)
             let location_str = if let Some(filename) = &context.filename {
                 format!("{}:{}:{}", filename, line, col)
             } else {
@@ -75,10 +70,8 @@ impl DiagnosticFormatter {
                 location_str.underline()
             ));
 
-            // Separator pipe
             output.push_str(&format!("    {}\n", "|".cyan()));
 
-            // Context lines
             if self.config.context_lines > 0 {
                 let context_lines = context.context_lines(self.config.context_lines);
                 let start: usize = context.span.start().into();
@@ -93,7 +86,6 @@ impl DiagnosticFormatter {
                 for (line_num, line_text) in context_lines {
                     let is_error_line = line_num == line;
                     if is_error_line {
-                        // Error line - highlight the error part in red
                         let before_error = if col_offset < line_text.len() {
                             &line_text[..col_offset]
                         } else {
@@ -121,7 +113,6 @@ impl DiagnosticFormatter {
                         ));
                         output.push('\n');
 
-                        // Error indicator with red underline
                         output.push_str(&format!(
                             "    {} {}{}\n",
                             "|".cyan(),
@@ -129,7 +120,6 @@ impl DiagnosticFormatter {
                             "-".repeat(length).red()
                         ));
                     } else {
-                        // Context line (normal)
                         output.push_str(&format!(
                             " {} {} {}\n",
                             format!("{:>2}", line_num).cyan(),
@@ -139,7 +129,6 @@ impl DiagnosticFormatter {
                     }
                 }
             } else {
-                // Just show the error line
                 output.push_str(&format!(
                     " {} {} {}\n",
                     format!("{:>2}", line).cyan(),
@@ -148,7 +137,6 @@ impl DiagnosticFormatter {
                 ));
             }
 
-            // Related spans as notes
             if !context.related_spans.is_empty() {
                 for (_, note) in &context.related_spans {
                     output.push_str(&format!("    {} {}\n", "= note".cyan(), note));
@@ -157,10 +145,8 @@ impl DiagnosticFormatter {
             }
         }
 
-        // Add line break before suggestions
         output.push('\n');
 
-        // Suggestion section - check both diagnostic and context
         let suggestion = if let Some(ctx) = &diagnostic.context {
             diagnostic.suggestion.as_ref().or(ctx.suggestion.as_ref())
         } else {
@@ -169,7 +155,7 @@ impl DiagnosticFormatter {
 
         if let Some(suggestion) = suggestion {
             output.push_str(&format!("{}:\n", "Suggestions".green().bold()));
-            // Split by newlines and format as list items
+
             for line in suggestion.lines() {
                 if !line.trim().is_empty() {
                     output.push_str(&format!("  - {}\n", line.trim()));
@@ -178,7 +164,6 @@ impl DiagnosticFormatter {
             output.push('\n');
         }
 
-        // Add help URL if we have an error code
         if let Some(code) = &diagnostic.code {
             output.push_str(&format!(
                 "{}\n{}\n",

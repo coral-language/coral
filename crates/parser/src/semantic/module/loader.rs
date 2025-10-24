@@ -94,16 +94,17 @@ impl<'a> ModuleLoader<'a> {
         let errors = checker.check(module);
 
         // Extract and register exports from this module
-        self.extract_and_register_exports(module, &module_name);
+        let exports = self.extract_exports_map(module, &module_name);
+
+        // Run HIR lowering to extract class metadata
+        let (class_attributes, class_mro) = self.extract_class_metadata(module);
 
         // Create analysis cache with extracted metadata
-        // Note: In a full implementation, this would run HIR lowering to extract
-        // class attributes and MRO. For now, we store empty maps as placeholders.
         let analysis_cache = ModuleAnalysisCache {
             errors: errors.clone(),
-            exports: HashMap::new(),          // TODO: Extract from HIR
-            class_attributes: HashMap::new(), // TODO: Extract from HIR
-            class_mro: HashMap::new(),        // TODO: Extract from HIR
+            exports,
+            class_attributes,
+            class_mro,
         };
 
         // Cache the result with analysis metadata
@@ -123,6 +124,54 @@ impl<'a> ModuleLoader<'a> {
     }
 
     /// Extract exports from a module and register them
+    /// Extract exports from module as a HashMap for caching
+    fn extract_exports_map(&self, module: &Module<'a>, _module_name: &str) -> HashMap<String, Type> {
+        use crate::ast::Stmt;
+        let mut exports = HashMap::new();
+
+        for stmt in module.body {
+            if let Stmt::Export(export) = stmt {
+                // Handle regular exports
+                if export.module.is_none() {
+                    for (name, alias) in export.names {
+                        let exported_name = alias.unwrap_or(name);
+                        // Type inference would provide actual type, for now use Unknown
+                        exports.insert(exported_name.to_string(), Type::Unknown);
+                    }
+                }
+            }
+        }
+        exports
+    }
+
+    /// Extract class attributes and MRO by running HIR lowering
+    #[allow(clippy::type_complexity)]
+    fn extract_class_metadata(&self, module: &Module<'a>) -> (HashMap<(String, String), Type>, HashMap<String, Vec<String>>) {
+        use crate::semantic::hir::HirLowerer;
+        use crate::arena::Interner;
+
+        // Create a temporary interner for HIR lowering
+        let mut interner = Interner::new();
+        let mut lowerer = HirLowerer::new(self.arena, &mut interner);
+
+        // Run HIR lowering and extract class information
+        match lowerer.lower_module(module) {
+            Ok(_typed_module) => {
+                // Extract data from class analyzer using export methods
+                let analyzer = lowerer.class_analyzer();
+                let class_attributes = analyzer.export_class_attributes();
+                let class_mro = analyzer.export_class_mro();
+
+                (class_attributes, class_mro)
+            }
+            Err(_errors) => {
+                // If HIR lowering fails, return empty maps
+                (HashMap::new(), HashMap::new())
+            }
+        }
+    }
+
+    #[allow(dead_code)]
     fn extract_and_register_exports(&mut self, module: &Module<'a>, module_name: &str) {
         use crate::ast::Stmt;
 

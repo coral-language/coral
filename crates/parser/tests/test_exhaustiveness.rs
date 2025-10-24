@@ -47,7 +47,7 @@ def check_bool(value):
 #[test]
 fn test_none_exhaustive() {
     let source = r#"
-def check_none(value):
+def check_none(value: None):
     match value:
         case None:
             return "none"
@@ -59,7 +59,7 @@ def check_none(value):
 #[test]
 fn test_int_literals_non_exhaustive() {
     let source = r#"
-def check_int(value):
+def check_int(value: int):
     match value:
         case 0:
             return "zero"
@@ -75,7 +75,7 @@ def check_int(value):
 #[test]
 fn test_int_literals_exhaustive_with_wildcard() {
     let source = r#"
-def check_int(value):
+def check_int(value: int):
     match value:
         case 0:
             return "zero"
@@ -93,7 +93,7 @@ def check_int(value):
 #[test]
 fn test_string_literals_non_exhaustive() {
     let source = r#"
-def check_string(value):
+def check_string(value: str):
     match value:
         case "":
             return "empty"
@@ -109,7 +109,7 @@ def check_string(value):
 #[test]
 fn test_string_exhaustive_with_wildcard() {
     let source = r#"
-def check_string(value):
+def check_string(value: str):
     match value:
         case "":
             return "empty"
@@ -127,7 +127,7 @@ def check_string(value):
 #[test]
 fn test_redundant_wildcard_after_wildcard() {
     let source = r#"
-def check_redundant(value):
+def check_redundant(value: int):
     match value:
         case _:
             return "first"
@@ -143,7 +143,7 @@ def check_redundant(value):
 #[test]
 fn test_redundant_literal_after_wildcard() {
     let source = r#"
-def check_redundant(value):
+def check_redundant(value: int):
     match value:
         case _:
             return "wildcard"
@@ -159,7 +159,7 @@ def check_redundant(value):
 #[test]
 fn test_or_pattern_exhaustive() {
     let source = r#"
-def check_or(value):
+def check_or(value: bool):
     match value:
         case True | False:
             return "boolean"
@@ -171,7 +171,7 @@ def check_or(value):
 #[test]
 fn test_nested_tuple_pattern() {
     let source = r#"
-def check_nested(value):
+def check_nested(value: tuple):
     match value:
         case (x, y):
             return "pair"
@@ -183,7 +183,7 @@ def check_nested(value):
 #[test]
 fn test_nested_list_pattern() {
     let source = r#"
-def check_nested_list(value):
+def check_nested_list(value: list):
     match value:
         case []:
             return "empty"
@@ -208,7 +208,7 @@ class Point:
         self.x = x
         self.y = y
 
-def check_point(value):
+def check_point(value: Point):
     match value:
         case Point(x, y):
             return "point"
@@ -224,7 +224,7 @@ def check_point(value):
 #[test]
 fn test_mapping_pattern() {
     let source = r#"
-def check_dict(value):
+def check_dict(value: dict):
     match value:
         case {"key": x}:
             return "has key"
@@ -240,7 +240,7 @@ def check_dict(value):
 #[test]
 fn test_guard_doesnt_guarantee_exhaustiveness() {
     let source = r#"
-def check_with_guard(value):
+def check_with_guard(value: int):
     match value:
         case x if x > 0:
             return "positive"
@@ -256,7 +256,7 @@ def check_with_guard(value):
 #[test]
 fn test_guard_with_wildcard_exhaustive() {
     let source = r#"
-def check_with_guard_exhaustive(value):
+def check_with_guard_exhaustive(value: int):
     match value:
         case x if x > 0:
             return "positive"
@@ -272,7 +272,7 @@ def check_with_guard_exhaustive(value):
 #[test]
 fn test_multiple_patterns_same_constructor() {
     let source = r#"
-def check_multiple(value):
+def check_multiple(value: int):
     match value:
         case 0:
             return "zero"
@@ -292,7 +292,7 @@ def check_multiple(value):
 #[test]
 fn test_as_pattern_with_nested() {
     let source = r#"
-def check_as_pattern(value):
+def check_as_pattern(value: list):
     match value:
         case [x, y] as pair:
             return "pair"
@@ -308,7 +308,7 @@ def check_as_pattern(value):
 #[test]
 fn test_deeply_nested_pattern() {
     let source = r#"
-def check_deeply_nested(value):
+def check_deeply_nested(value: list):
     match value:
         case [[x, y], [a, b]]:
             return "nested"
@@ -324,7 +324,7 @@ def check_deeply_nested(value):
 #[test]
 fn test_mixed_constructors() {
     let source = r#"
-def check_mixed(value):
+def check_mixed(value: bool | None):
     match value:
         case True:
             return "true"
@@ -340,7 +340,7 @@ def check_mixed(value):
 #[test]
 fn test_redundant_duplicate_pattern() {
     let source = r#"
-def check_duplicate(value):
+def check_duplicate(value: int):
     match value:
         case 42:
             return "first"
@@ -356,7 +356,7 @@ def check_duplicate(value):
 #[test]
 fn test_complex_or_pattern() {
     let source = r#"
-def check_complex_or(value):
+def check_complex_or(value: int):
     match value:
         case 1 | 2 | 3:
             return "small"
@@ -374,7 +374,7 @@ def check_complex_or(value):
 #[test]
 fn test_sequence_star_pattern() {
     let source = r#"
-def check_star(value):
+def check_star(value: list):
     match value:
         case []:
             return "empty"
@@ -388,7 +388,7 @@ def check_star(value):
 #[test]
 fn test_optional_type_pattern() {
     let source = r#"
-def check_optional(value):
+def check_optional(value: int | None):
     match value:
         case None:
             return "none"
@@ -404,7 +404,7 @@ def check_optional(value):
 #[test]
 fn test_pattern_type_mismatch() {
     let source = r#"
-def check_type_mismatch(value):
+def check_type_mismatch(value: int):
     match value:
         case "string":
             return "string"
@@ -418,7 +418,7 @@ def check_type_mismatch(value):
 #[test]
 fn test_nested_or_patterns() {
     let source = r#"
-def check_nested_or(value):
+def check_nested_or(value: list):
     match value:
         case [[1 | 2], [3 | 4]]:
             return "nested or"
@@ -434,7 +434,7 @@ def check_nested_or(value):
 #[test]
 fn test_or_patterns_with_guards() {
     let source = r#"
-def check_or_with_guard(value):
+def check_or_with_guard(value: int):
     match value:
         case 1 | 2 if value > 0:
             return "positive small"
@@ -450,7 +450,7 @@ def check_or_with_guard(value):
 #[test]
 fn test_empty_tuple_vs_empty_list() {
     let source = r#"
-def check_empty_structures(value):
+def check_empty_structures(value: tuple | list):
     match value:
         case ():
             return "empty tuple"
@@ -468,7 +468,7 @@ def check_empty_structures(value):
 #[test]
 fn test_dict_rest_patterns() {
     let source = r#"
-def check_dict_rest(value):
+def check_dict_rest(value: dict):
     match value:
         case {"a": x, **rest}:
             return "has a"
@@ -484,7 +484,7 @@ def check_dict_rest(value):
 #[test]
 fn test_multiple_dict_patterns() {
     let source = r#"
-def check_multiple_dict(value):
+def check_multiple_dict(value: dict):
     match value:
         case {"x": a}:
             return "has x"
@@ -502,7 +502,7 @@ def check_multiple_dict(value):
 #[test]
 fn test_star_pattern_variations() {
     let source = r#"
-def check_star_variations(value):
+def check_star_variations(value: list):
     match value:
         case []:
             return "empty"
@@ -520,7 +520,7 @@ def check_star_variations(value):
 #[test]
 fn test_star_at_beginning() {
     let source = r#"
-def check_star_beginning(value):
+def check_star_beginning(value: list):
     match value:
         case []:
             return "empty"
@@ -534,7 +534,7 @@ def check_star_beginning(value):
 #[test]
 fn test_star_in_middle() {
     let source = r#"
-def check_star_middle(value):
+def check_star_middle(value: list):
     match value:
         case []:
             return "empty"
@@ -550,7 +550,7 @@ def check_star_middle(value):
 #[test]
 fn test_union_type_matching() {
     let source = r#"
-def check_union(value):
+def check_union(value: int | str):
     match value:
         case int():
             return "int"
@@ -568,7 +568,7 @@ def check_union(value):
 #[test]
 fn test_deeply_nested_structures() {
     let source = r#"
-def check_deeply_nested(value):
+def check_deeply_nested(value: list):
     match value:
         case {"a": {"b": {"c": x}}}:
             return "deep"
@@ -584,7 +584,7 @@ def check_deeply_nested(value):
 #[test]
 fn test_mixed_sequence_types() {
     let source = r#"
-def check_mixed_sequences(value):
+def check_mixed_sequences(value: tuple | list):
     match value:
         case (x, y):
             return "tuple pair"
@@ -602,7 +602,7 @@ def check_mixed_sequences(value):
 #[test]
 fn test_literal_exhaustiveness_bool() {
     let source = r#"
-def check_bool_literals(value):
+def check_bool_literals(value: bool):
     match value:
         case True:
             return "true"
@@ -621,7 +621,7 @@ class Person:
         self.name = name
         self.age = age
 
-def check_person(value):
+def check_person(value: Person):
     match value:
         case Person(name="Alice"):
             return "alice"
@@ -639,7 +639,7 @@ def check_person(value):
 #[test]
 fn test_redundant_after_star_pattern() {
     let source = r#"
-def check_redundant_star(value):
+def check_redundant_star(value: list):
     match value:
         case [*items]:
             return "any list"
@@ -655,7 +655,7 @@ def check_redundant_star(value):
 #[test]
 fn test_specific_before_general() {
     let source = r#"
-def check_order(value):
+def check_order(value: list):
     match value:
         case []:
             return "empty"
@@ -673,7 +673,7 @@ def check_order(value):
 #[test]
 fn test_tuple_length_variations() {
     let source = r#"
-def check_tuple_lengths(value):
+def check_tuple_lengths(value: tuple):
     match value:
         case ():
             return "empty"
@@ -701,7 +701,7 @@ class Inner:
     def __init__(self, value):
         self.value = value
 
-def check_nested_class(value):
+def check_nested_class(value: Container):
     match value:
         case Container(Inner(42)):
             return "container with 42"
@@ -719,7 +719,7 @@ def check_nested_class(value):
 #[test]
 fn test_multiple_guards_same_pattern() {
     let source = r#"
-def check_multiple_guards(value):
+def check_multiple_guards(value: int):
     match value:
         case x if x > 10:
             return "large"
@@ -739,7 +739,7 @@ def check_multiple_guards(value):
 #[test]
 fn test_overlapping_string_patterns() {
     let source = r#"
-def check_strings(value):
+def check_strings(value: str):
     match value:
         case "hello":
             return "greeting"
@@ -757,7 +757,7 @@ def check_strings(value):
 #[test]
 fn test_complex_nested_or() {
     let source = r#"
-def check_complex_nested_or(value):
+def check_complex_nested_or(value: list):
     match value:
         case [1 | 2, 3 | 4]:
             return "complex"
@@ -773,7 +773,7 @@ def check_complex_nested_or(value):
 #[test]
 fn test_as_pattern_in_or() {
     let source = r#"
-def check_as_in_or(value):
+def check_as_in_or(value: tuple):
     match value:
         case (1 as x) | (2 as x):
             return "one or two"
@@ -789,7 +789,7 @@ def check_as_in_or(value):
 #[test]
 fn test_singleton_pattern_coverage() {
     let source = r#"
-def check_singletons(value):
+def check_singletons(value: bool | None):
     match value:
         case None:
             return "none"

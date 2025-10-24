@@ -90,10 +90,8 @@ impl<'a> Parser<'a> {
         let source = arena.alloc_str(lexer.source());
         let (tokens, lexical_errors, lexical_warnings) = lexer.tokenize();
 
-        // Convert lexical errors to Errors for backward compatibility
         let mut errors = Vec::new();
         for lexical_error in lexical_errors {
-            // Preserve the original error kind instead of converting to InvalidSyntax
             errors.push(lexical_error);
         }
 
@@ -121,23 +119,18 @@ impl<'a> Parser<'a> {
         let mut body = Vec::new();
 
         while !self.is_at_end() && self.peek().kind != TokenKind::Eof {
-            // Skip comments and newlines
             self.skip_comments_and_newlines();
             if self.is_at_end() || self.peek().kind == TokenKind::Eof {
                 break;
             }
 
-            // Try to parse a statement with error recovery
             match self.parse_stmt() {
                 Ok(stmt) => body.push(stmt),
                 Err(error) => {
-                    // Record the error
                     self.record_error(*error);
 
-                    // Try to synchronize to the next statement
                     self.synchronize();
 
-                    // If we're still stuck at the same position or hit recovery limit, stop
                     if self.recovery_manager.limit_reached() || self.is_at_end() {
                         break;
                     }
@@ -145,13 +138,10 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Check for unclosed delimiters at EOF and record as error
         if let Some(error) = self.check_unclosed_delimiters() {
             self.record_error(*error);
         }
 
-        // If we collected errors but also got some statements, return the partial AST
-        // If we got no statements and have errors, return the first error
         if body.is_empty() && !self.errors.is_empty() {
             return Err(Box::new(self.errors[0].clone()));
         }
@@ -164,7 +154,6 @@ impl<'a> Parser<'a> {
             TextRange::default()
         };
 
-        // Extract module docstring (first string literal in module, if any)
         let docstring = Self::extract_docstring_from_body(&body, self.source, self.arena);
 
         let body_slice = self.arena.alloc_slice_vec(body);
@@ -178,7 +167,6 @@ impl<'a> Parser<'a> {
 
     /// Parse a single expression (eval mode)
     pub fn parse_eval(&mut self) -> ParseResult<Expr<'a>> {
-        // Skip leading newlines, indents, and dedents
         while matches!(
             self.peek().kind,
             TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent
@@ -186,10 +174,8 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        // Parse the expression
         let expr = self.parse_expression()?;
 
-        // Skip trailing newlines, indents, and dedents
         while matches!(
             self.peek().kind,
             TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent
@@ -197,12 +183,10 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        // Check for unclosed delimiters at EOF
         if let Some(error) = self.check_unclosed_delimiters() {
             return Err(error);
         }
 
-        // Ensure we've consumed all input
         if !self.is_at_end() && self.peek().kind != TokenKind::Eof {
             return Err(error(
                 ErrorKind::UnexpectedToken {
@@ -218,7 +202,6 @@ impl<'a> Parser<'a> {
 
     /// Parse a single statement (interactive mode)
     pub fn parse_interactive(&mut self) -> ParseResult<Stmt<'a>> {
-        // Skip leading newlines, indents, and dedents
         while matches!(
             self.peek().kind,
             TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent
@@ -226,10 +209,8 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        // Parse the statement
         let stmt = self.parse_stmt()?;
 
-        // Skip trailing newlines, indents, and dedents
         while matches!(
             self.peek().kind,
             TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent
@@ -237,12 +218,10 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        // Check for unclosed delimiters at EOF
         if let Some(error) = self.check_unclosed_delimiters() {
             return Err(error);
         }
 
-        // Ensure we've consumed all input
         if !self.is_at_end() && self.peek().kind != TokenKind::Eof {
             return Err(error(
                 ErrorKind::UnexpectedToken {
@@ -293,7 +272,6 @@ impl<'a> Parser<'a> {
             self.advance();
             Ok(())
         } else {
-            // Check if we encountered an unexpected closing delimiter
             let current_token = self.peek();
             let is_unmatched_closing = matches!(
                 current_token.kind,
@@ -313,7 +291,6 @@ impl<'a> Parser<'a> {
                 ));
             }
 
-            // Check for unclosed delimiters - they provide better error messages
             if let Some(delimiter_error) = self.check_unclosed_delimiters() {
                 return Err(delimiter_error);
             }
@@ -339,7 +316,6 @@ impl<'a> Parser<'a> {
             self.advance();
             Ok(())
         } else if kind == TokenKind::Colon {
-            // Special handling for missing colons
             Err(error(
                 ErrorKind::MissingColon {
                     context: context.to_string(),
@@ -390,7 +366,6 @@ impl<'a> Parser<'a> {
 
     /// Get the text of the current identifier without consuming it
     pub(super) fn consume_newline(&mut self) {
-        // Check for unmatched closing delimiters before consuming newlines
         if matches!(
             self.peek().kind,
             TokenKind::RightParen | TokenKind::RightBracket | TokenKind::RightBrace
@@ -407,7 +382,6 @@ impl<'a> Parser<'a> {
             self.advance(); // Skip the unmatched closing delimiter
         }
 
-        // Consume newlines and any comments that follow them
         self.skip_comments_and_newlines();
     }
 
@@ -416,7 +390,6 @@ impl<'a> Parser<'a> {
         let mut stmts = Vec::new();
 
         while self.peek().kind != TokenKind::Dedent && !self.is_at_end() {
-            // Skip comments and newlines
             self.skip_comments_and_newlines();
             if self.peek().kind == TokenKind::Dedent || self.is_at_end() {
                 break;
@@ -432,7 +405,6 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_arguments(&mut self) -> ParseResult<Arguments<'a>> {
-        // Most functions have < 8 args, use SmallVec to avoid heap allocation
         let mut posonlyargs: SmallVec<[Arg<'a>; 8]> = SmallVec::new();
         let mut args: SmallVec<[Arg<'a>; 8]> = SmallVec::new();
         let mut kwonlyargs: SmallVec<[Arg<'a>; 8]> = SmallVec::new();
@@ -445,16 +417,13 @@ impl<'a> Parser<'a> {
         let mut _seen_slash = false;
         let mut seen_star = false;
 
-        // Allow newlines after opening paren
         self.consume_newline();
 
         while self.peek().kind != TokenKind::RightParen && !self.is_at_end() {
-            // Handle / for positional-only separator
             if self.peek().kind == TokenKind::Slash {
                 self.advance();
                 _seen_slash = true;
 
-                // Move args to posonlyargs and their defaults
                 if !args.is_empty() {
                     posonlyargs = args.clone();
                     posonly_defaults = defaults.clone();
@@ -462,18 +431,15 @@ impl<'a> Parser<'a> {
                     defaults.clear();
                 }
 
-                // Continue parsing after /
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
-                // Allow newlines after comma
+
                 self.consume_newline();
                 continue;
             }
 
-            // Handle * or *args
             if self.peek().kind == TokenKind::Star {
-                // Check if we already have a vararg
                 if vararg.is_some() {
                     return Err(error(ErrorKind::InvalidParameterOrder, self.peek().span));
                 }
@@ -481,7 +447,6 @@ impl<'a> Parser<'a> {
                 self.advance();
                 seen_star = true;
 
-                // Check if it's *args or just *
                 if self.peek().kind == TokenKind::Ident {
                     let name = self.consume_ident()?;
                     let annotation = if self.match_token(TokenKind::Colon) {
@@ -495,18 +460,15 @@ impl<'a> Parser<'a> {
                     }));
                 }
 
-                // Continue parsing keyword-only args after *
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
-                // Allow newlines after comma
+
                 self.consume_newline();
                 continue;
             }
 
-            // Handle **kwargs
             if self.peek().kind == TokenKind::DoubleStar {
-                // Check if we already have a kwarg
                 if kwarg.is_some() {
                     return Err(error(ErrorKind::InvalidParameterOrder, self.peek().span));
                 }
@@ -523,25 +485,22 @@ impl<'a> Parser<'a> {
                     annotation,
                 }));
 
-                // **kwargs must be last, but allow trailing comma
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
-                // Allow newlines after comma
+
                 self.consume_newline();
-                // If there's more after comma and it's not ), that's an error
+
                 if self.peek().kind != TokenKind::RightParen {
                     return Err(error(ErrorKind::InvalidParameterOrder, self.peek().span));
                 }
                 continue;
             }
 
-            // Check if we're trying to add a parameter after **kwargs
             if kwarg.is_some() {
                 return Err(error(ErrorKind::InvalidParameterOrder, self.peek().span));
             }
 
-            // Regular argument
             let name = self.consume_ident()?;
             let annotation = if self.match_token(TokenKind::Colon) {
                 Some(Box::new(self.parse_expression()?))
@@ -554,34 +513,26 @@ impl<'a> Parser<'a> {
                 annotation,
             };
 
-            // Check for default value
             let has_default = self.peek().kind == TokenKind::Equal;
             if has_default {
                 self.advance(); // consume =
                 let default_expr = self.parse_expression()?;
 
                 if seen_star {
-                    // Keyword-only argument with default
                     kw_defaults.push(Some(default_expr));
                 } else {
-                    // Positional or positional-or-keyword with default
                     defaults.push(default_expr);
                 }
             } else {
-                // Check for non-default parameter after default parameter
-                // This is only an error for positional parameters (not keyword-only after *)
                 if !seen_star && !defaults.is_empty() {
-                    // We have a non-default parameter following a default parameter
                     return Err(error(ErrorKind::InvalidParameterOrder, self.prev().span));
                 }
 
                 if seen_star {
-                    // Keyword-only argument without default
                     kw_defaults.push(None);
                 }
             }
 
-            // Add to appropriate list
             if seen_star {
                 kwonlyargs.push(arg);
             } else {
@@ -591,19 +542,15 @@ impl<'a> Parser<'a> {
             if !self.match_token(TokenKind::Comma) {
                 break;
             }
-            // Allow newlines after comma
+
             self.consume_newline();
         }
 
-        // Combine positional-only defaults with regular defaults
-        // In the AST, all defaults are stored together, aligned to the right
         let mut all_defaults = posonly_defaults;
         all_defaults.extend(defaults);
 
-        // Validate no duplicate parameter names
         let mut seen_names = std::collections::HashSet::new();
 
-        // Check all parameter types for duplicates
         for arg in posonlyargs
             .iter()
             .chain(args.iter())
@@ -619,7 +566,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Also check vararg and kwarg
         if let Some(ref va) = vararg
             && !seen_names.insert(va.arg)
         {
@@ -666,21 +612,18 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenKind::LeftBracket)?;
 
-        // Allow newlines after opening bracket
         self.consume_newline();
 
         while self.peek().kind != TokenKind::RightBracket && !self.is_at_end() {
             let start = self.peek().span.start();
             let name = self.consume_ident()?;
 
-            // Parse bound: T: int or T: (int, str)
             let bound = if self.match_token(TokenKind::Colon) {
                 Some(self.parse_expression()?)
             } else {
                 None
             };
 
-            // Parse default: T = int
             let default = if self.match_token(TokenKind::Equal) {
                 Some(self.parse_expression()?)
             } else {
@@ -703,7 +646,7 @@ impl<'a> Parser<'a> {
             if !self.match_token(TokenKind::Comma) {
                 break;
             }
-            // Allow newlines after comma
+
             self.consume_newline();
         }
 
@@ -711,8 +654,6 @@ impl<'a> Parser<'a> {
 
         Ok(self.arena.alloc_slice_vec(type_params))
     }
-
-    // Delimiter tracking methods
 
     /// Push an opening delimiter onto the stack
     pub(super) fn push_delimiter(&mut self, kind: char, span: TextRange) {
@@ -726,7 +667,6 @@ impl<'a> Parser<'a> {
         closing_span: TextRange,
     ) -> ParseResult<()> {
         if let Some(opening) = self.delimiter_stack.pop() {
-            // Map opening to expected closing
             let expected_for_opening = match opening.kind {
                 '(' => ')',
                 '[' => ']',
@@ -737,7 +677,6 @@ impl<'a> Parser<'a> {
             if expected_for_opening == expected_closing {
                 Ok(())
             } else {
-                // Mismatched delimiter - put it back on the stack
                 self.delimiter_stack.push(opening);
                 Err(error(
                     ErrorKind::UnclosedDelimiter {
@@ -748,7 +687,6 @@ impl<'a> Parser<'a> {
                 ))
             }
         } else {
-            // No matching opening delimiter
             Err(error(
                 ErrorKind::UnmatchedClosing {
                     delimiter: expected_closing,
@@ -779,8 +717,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ===== Error Recovery Methods =====
-
     /// Record an error and continue parsing (error recovery mode).
     pub(super) fn record_error(&mut self, error: Error) {
         if !self.recovery_manager.limit_reached() {
@@ -796,13 +732,10 @@ impl<'a> Parser<'a> {
         let max_skip = self.recovery_manager.max_skip_tokens();
         let mut tokens_skipped = 0;
 
-        // Skip tokens until we find a synchronization point or reach limit
         while !self.is_at_end() && tokens_skipped < max_skip {
             let token = self.peek();
 
-            // Check if current token is a sync point
             if SyncPoint::Statement.is_sync_token(&token.kind) {
-                // Record the recovery action
                 let action = RecoveryAction::with_skip_count(
                     RecoveryStrategy::SkipToNextStatement,
                     TextRange::new(start_span.start(), token.span.start()),
@@ -814,7 +747,6 @@ impl<'a> Parser<'a> {
                 );
                 self.recovery_manager.record(action);
 
-                // If we stopped at a newline or dedent, consume it to move to the next statement
                 if matches!(token.kind, TokenKind::Newline | TokenKind::Dedent) {
                     self.advance();
                 }
@@ -822,7 +754,6 @@ impl<'a> Parser<'a> {
                 return;
             }
 
-            // Also stop at closing delimiters if we're inside a bracketed context
             if !self.delimiter_stack.is_empty()
                 && matches!(
                     token.kind,
@@ -843,7 +774,6 @@ impl<'a> Parser<'a> {
             tokens_skipped += 1;
         }
 
-        // If we hit the limit or EOF without finding a sync point
         if tokens_skipped > 0 {
             let end_span = if self.current > start_pos {
                 self.tokens[self.current - 1].span
@@ -866,7 +796,6 @@ impl<'a> Parser<'a> {
     pub(super) fn recover_missing_colon(&mut self, context: &str) -> ParseResult<()> {
         let error_span = self.peek().span;
 
-        // Record the missing colon error
         self.record_error(*error(
             ErrorKind::MissingColon {
                 context: context.to_string(),
@@ -874,7 +803,6 @@ impl<'a> Parser<'a> {
             error_span,
         ));
 
-        // Record recovery action
         let action = RecoveryAction::new(
             RecoveryStrategy::InsertToken,
             error_span,
@@ -882,7 +810,6 @@ impl<'a> Parser<'a> {
         );
         self.recovery_manager.record(action);
 
-        // Consume any following newlines to position at block start
         self.consume_newline();
 
         Ok(())
@@ -901,7 +828,6 @@ impl<'a> Parser<'a> {
 
             let error_span = self.peek().span;
 
-            // Record the error
             self.record_error(*error(
                 ErrorKind::UnclosedDelimiter {
                     expected: expected_closing,
@@ -910,7 +836,6 @@ impl<'a> Parser<'a> {
                 error_span,
             ));
 
-            // Record recovery action
             let action = RecoveryAction::new(
                 RecoveryStrategy::InsertToken,
                 error_span,
@@ -918,7 +843,6 @@ impl<'a> Parser<'a> {
             );
             self.recovery_manager.record(action);
 
-            // Pop the delimiter from the stack
             self.delimiter_stack.pop();
         }
 
@@ -929,13 +853,10 @@ impl<'a> Parser<'a> {
     /// This helps prevent reporting multiple errors for a single root cause.
     #[allow(dead_code)]
     pub(super) fn is_cascading_error(&self) -> bool {
-        // If we've recently recorded an error (within last 3 tokens),
-        // consider subsequent errors as potentially cascading
         if !self.errors.is_empty() && !self.recovery_manager.actions().is_empty() {
             let last_action = self.recovery_manager.actions().last().unwrap();
             let current_pos = self.peek().span.start();
 
-            // If we're within a short distance of the last error, it might be cascading
             let distance = u32::from(current_pos) - u32::from(last_action.span.start());
             distance < 50 // Within 50 characters is likely cascading
         } else {
@@ -976,22 +897,17 @@ impl<'a> Parser<'a> {
     fn extract_comments(tokens: &[Token], source: &str, comment_map: &mut CommentMap) {
         for token in tokens {
             if token.kind == TokenKind::Comment {
-                // Extract the comment text from source (includes the '#')
                 let comment_text = &source[token.span];
 
-                // Remove the '#' prefix and trim whitespace
                 let text = comment_text
                     .strip_prefix('#')
                     .unwrap_or(comment_text)
                     .trim();
 
-                // Determine if this is a trailing comment (on same line as previous code)
-                // Check if there's only whitespace (no newline) between the start of line and this comment
                 let kind = if token.span.start() > TextSize::from(0) {
                     let before_text = &source[..token.span.start().into()];
-                    // Find the last newline in the text before this comment
+
                     if let Some(last_newline_pos) = before_text.rfind('\n') {
-                        // Check if there's only whitespace between the last newline and the comment
                         let between_newline_and_comment = &before_text[last_newline_pos + 1..];
                         if between_newline_and_comment.trim().is_empty() {
                             CommentKind::Line
@@ -999,7 +915,6 @@ impl<'a> Parser<'a> {
                             CommentKind::Trailing
                         }
                     } else {
-                        // No newline found, so it's at the start of the input
                         CommentKind::Line
                     }
                 } else {
@@ -1019,24 +934,19 @@ impl<'a> Parser<'a> {
         arena: &'a Arena,
     ) -> Option<&'a str> {
         if let Some(Stmt::Expr(expr_stmt)) = body.first() {
-            // Check if the expression is a string literal (constant expression)
             match &expr_stmt.value {
                 Expr::Constant(constant_expr) => {
-                    // Extract the string content from source
                     let string_span = constant_expr.span;
                     let string_text = &source[string_span];
 
-                    // Remove quotes
                     let content = if (string_text.starts_with('"') && string_text.ends_with('"'))
                         || (string_text.starts_with('\'') && string_text.ends_with('\''))
                     {
                         &string_text[1..string_text.len() - 1]
                     } else {
-                        // Shouldn't happen for properly parsed strings
                         string_text
                     };
 
-                    // Interpret escapes and allocate in arena
                     Some(arena.alloc_str(&Self::interpret_string_escapes(content)))
                 }
                 _ => None,
@@ -1067,7 +977,6 @@ impl<'a> Parser<'a> {
                     Some('a') => result.push('\x07'), // bell
                     Some('v') => result.push('\x0b'), // vertical tab
                     Some(ch) => {
-                        // Unknown escape, keep as-is
                         result.push('\\');
                         result.push(ch);
                     }

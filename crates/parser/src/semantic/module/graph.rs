@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use text_size::TextRange;
 
 /// Analysis state of a module
@@ -21,6 +22,8 @@ pub enum ModuleState {
 pub struct ModuleNode {
     /// Module name/path
     pub name: String,
+    /// File path to the module source file (for diagnostics and loading)
+    pub file_path: Option<PathBuf>,
     /// Current analysis state
     pub state: ModuleState,
     /// Source code span (for error reporting)
@@ -50,8 +53,19 @@ impl ModuleGraph {
 
     /// Add a module to the graph
     pub fn add_module(&mut self, name: String, span: TextRange) {
+        self.add_module_with_path(name, span, None);
+    }
+
+    /// Add a module to the graph with an optional file path
+    pub fn add_module_with_path(
+        &mut self,
+        name: String,
+        span: TextRange,
+        file_path: Option<PathBuf>,
+    ) {
         let node = ModuleNode {
             name: name.clone(),
+            file_path,
             state: ModuleState::Unparsed,
             span,
             dependencies: HashSet::new(),

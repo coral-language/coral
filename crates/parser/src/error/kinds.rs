@@ -8,7 +8,6 @@ use text_size::TextRange;
 /// Comprehensive error kind enum covering all compiler errors.
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
-    // ===== Lexical Errors (E1xxx) =====
     /// Invalid character in source code
     InvalidCharacter,
 
@@ -24,7 +23,6 @@ pub enum ErrorKind {
     /// Invalid escape sequence in string
     InvalidEscapeSequence,
 
-    // ===== Syntax Errors (E2xxx) =====
     /// Unexpected token encountered during parsing
     UnexpectedToken {
         expected: Option<String>,
@@ -118,7 +116,6 @@ pub enum ErrorKind {
     /// Unindent does not match any outer indentation level
     UnindentMismatch,
 
-    // ===== Name Resolution Errors (E3xxx) =====
     /// Name is used before being defined
     UndefinedName { name: String },
 
@@ -134,7 +131,6 @@ pub enum ErrorKind {
     /// Name is used before definition
     UsedBeforeDefinition { name: String },
 
-    // ===== Control Flow Errors (E3100-E3199) =====
     /// Code is unreachable
     UnreachableCode { reason: String },
 
@@ -156,7 +152,6 @@ pub enum ErrorKind {
     /// Unreachable exception handler
     UnreachableExceptionHandler { exception_type: String },
 
-    // ===== Definite Assignment Errors (E3150-E3169) =====
     /// Variable used before being initialized
     UninitializedVariable { var_name: String },
 
@@ -169,7 +164,6 @@ pub enum ErrorKind {
     /// Variable used in its own initialization
     SelfReferentialInitialization { var_name: String },
 
-    // ===== Constant Propagation Warnings (E3170-E3189) =====
     /// Constant condition always evaluates to the same value
     ConstantCondition { value: bool, suggestion: String },
 
@@ -182,7 +176,6 @@ pub enum ErrorKind {
         simplified: String,
     },
 
-    // ===== Type System Errors (E4xxx) =====
     /// Type mismatch between expected and actual types
     TypeMismatch { expected: String, found: String },
 
@@ -239,7 +232,16 @@ pub enum ErrorKind {
     /// Invalid type annotation
     InvalidTypeAnnotation { annotation: String },
 
-    // ===== Protocol Errors (E4100-E4199) =====
+    /// Attempt to assign to read-only property
+    ReadOnlyProperty { name: String, class_name: String },
+
+    /// Property setter type mismatch
+    PropertySetterTypeMismatch {
+        property_name: String,
+        expected: String,
+        found: String,
+    },
+
     /// Class doesn't implement required protocol method
     MissingProtocolMethod {
         class_name: String,
@@ -291,7 +293,6 @@ pub enum ErrorKind {
     /// Runtime checkable protocol violation
     RuntimeCheckableProtocolViolation { protocol_name: String },
 
-    // ===== Import Errors (E5xxx) =====
     /// Module could not be found or loaded
     ModuleNotFound { module_name: String },
 
@@ -310,7 +311,6 @@ pub enum ErrorKind {
     /// Relative import in non-package
     RelativeImportInNonPackage,
 
-    // ===== Module System Errors (E5100-E5199) =====
     /// Exporting undefined name
     ExportUndefined { name: String },
 
@@ -335,7 +335,6 @@ pub enum ErrorKind {
     /// Circular re-export detected
     CircularReExport { cycle: Vec<String> },
 
-    // ===== Async/Await Errors (E6xxx) =====
     /// Blocking call detected in async context
     BlockingCallInAsync { call: String },
     /// Invalid Future type for await
@@ -343,7 +342,6 @@ pub enum ErrorKind {
     /// Variable lifetime doesn't span await point
     AsyncLifetimeViolation { var: String },
 
-    // ===== Memory Safety Errors (E7xxx) =====
     /// Variable used after being freed/deallocated
     UseAfterFree {
         var_name: String,
@@ -377,7 +375,6 @@ pub enum ErrorKind {
     /// Moved value used
     MovedValueUsed { var_name: String },
 
-    // ===== Pattern Matching Errors (E8xxx) =====
     /// Match statement is not exhaustive
     NonExhaustiveMatch { missing_patterns: Vec<String> },
 
@@ -393,7 +390,6 @@ pub enum ErrorKind {
     /// Duplicate pattern binding
     DuplicatePatternBinding { name: String },
 
-    // ===== Decorator Errors (E9xxx) =====
     /// Decorator not found
     DecoratorNotFound { name: String },
 

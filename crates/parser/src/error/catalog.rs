@@ -58,7 +58,6 @@ impl ErrorKind {
     /// Get comprehensive metadata for this error kind.
     pub fn metadata(&self) -> ErrorMetadata {
         match self {
-            // Lexical errors
             ErrorKind::InvalidCharacter => ErrorMetadata {
                 code: ErrorCode::E1001,
                 severity: Severity::Error,
@@ -113,7 +112,6 @@ impl ErrorKind {
                 suggestion: Some("Use valid escape sequences like \\n, \\t, \\r, \\\\, \\', \\\""),
             },
 
-            // Syntax errors
             ErrorKind::UnexpectedToken { .. } => ErrorMetadata {
                 code: ErrorCode::E2001,
                 severity: Severity::Error,
@@ -406,7 +404,6 @@ impl ErrorKind {
                 ),
             },
 
-            // Name Resolution errors
             ErrorKind::UndefinedName { .. } => ErrorMetadata {
                 code: ErrorCode::E3001,
                 severity: Severity::Error,
@@ -558,7 +555,6 @@ impl ErrorKind {
                 suggestion: Some("Simplify the expression to improve readability"),
             },
 
-            // Type System errors
             ErrorKind::TypeMismatch { .. } => ErrorMetadata {
                 code: ErrorCode::E4001,
                 severity: Severity::Error,
@@ -715,11 +711,25 @@ impl ErrorKind {
                 description: "The type annotation is not valid",
                 suggestion: Some("Use a valid type annotation"),
             },
+            ErrorKind::ReadOnlyProperty { .. } => ErrorMetadata {
+                code: ErrorCode::E4016,
+                severity: Severity::Error,
+                category: ErrorCategory::Type,
+                error_type: "TypeError",
+                title: "Cannot assign to read-only property",
+                description: "Property does not have a setter and cannot be modified",
+                suggestion: Some("Add a @property.setter method or use a different attribute"),
+            },
+            ErrorKind::PropertySetterTypeMismatch { .. } => ErrorMetadata {
+                code: ErrorCode::E4017,
+                severity: Severity::Error,
+                category: ErrorCategory::Type,
+                error_type: "TypeError",
+                title: "Property setter type mismatch",
+                description: "The value type does not match the property setter parameter type",
+                suggestion: Some("Ensure the assigned value matches the setter's expected type"),
+            },
 
-            // Protocol errors
-            // For brevity, I'll include a few more key ones and add a macro for the rest
-
-            // Protocol errors
             ErrorKind::MissingProtocolMethod { .. } => ErrorMetadata {
                 code: ErrorCode::E4100,
                 severity: Severity::Error,
@@ -793,7 +803,6 @@ impl ErrorKind {
                 suggestion: Some("Ensure the value implements all required protocol methods"),
             },
 
-            // Import errors
             ErrorKind::ModuleNotFound { .. } => ErrorMetadata {
                 code: ErrorCode::E5001,
                 severity: Severity::Error,
@@ -849,7 +858,6 @@ impl ErrorKind {
                 suggestion: Some("Use absolute imports or convert to a package"),
             },
 
-            // Module System errors
             ErrorKind::ExportUndefined { .. } => ErrorMetadata {
                 code: ErrorCode::E5100,
                 severity: Severity::Error,
@@ -914,7 +922,6 @@ impl ErrorKind {
                 suggestion: Some("Break the circular dependency by removing one of the re-exports"),
             },
 
-            // Async/Await errors
             ErrorKind::BlockingCallInAsync { .. } => ErrorMetadata {
                 code: ErrorCode::E6001,
                 severity: Severity::Warning,
@@ -949,7 +956,6 @@ impl ErrorKind {
                 ),
             },
 
-            // Memory Safety errors
             ErrorKind::UseAfterFree { .. } => ErrorMetadata {
                 code: ErrorCode::E7001,
                 severity: Severity::Error,
@@ -1018,7 +1024,6 @@ impl ErrorKind {
                 suggestion: Some("Don't use a variable after moving its value"),
             },
 
-            // Pattern Matching errors
             ErrorKind::NonExhaustiveMatch { .. } => ErrorMetadata {
                 code: ErrorCode::E8001,
                 severity: Severity::Error,
@@ -1065,7 +1070,6 @@ impl ErrorKind {
                 suggestion: Some("Use unique names for pattern bindings"),
             },
 
-            // Decorator errors
             ErrorKind::DecoratorNotFound { .. } => ErrorMetadata {
                 code: ErrorCode::E9001,
                 severity: Severity::Error,
@@ -1155,7 +1159,6 @@ impl ErrorKind {
     /// Format a human-readable message for this error kind.
     pub fn format_message(&self) -> String {
         match self {
-            // Lexical errors
             ErrorKind::InvalidCharacter => "Invalid character in source code".to_string(),
             ErrorKind::UnterminatedString => {
                 "String literal is not properly terminated".to_string()
@@ -1164,7 +1167,6 @@ impl ErrorKind {
             ErrorKind::InvalidIdentifier => "Identifier name is not valid".to_string(),
             ErrorKind::InvalidEscapeSequence => "Invalid escape sequence in string".to_string(),
 
-            // Syntax errors
             ErrorKind::UnexpectedToken { expected, found } => {
                 if let Some(expected) = expected {
                     format!("Unexpected token '{}', expected '{}'", found, expected)
@@ -1221,7 +1223,6 @@ impl ErrorKind {
                 "Unindent does not match any outer indentation level".to_string()
             }
 
-            // Name resolution errors
             ErrorKind::UndefinedName { name } => format!("Name '{}' is not defined", name),
             ErrorKind::DuplicateDefinition { name, .. } => {
                 format!("Name '{}' is already defined", name)
@@ -1233,7 +1234,6 @@ impl ErrorKind {
                 format!("Name '{}' used before definition", name)
             }
 
-            // Control flow errors
             ErrorKind::UnreachableCode { reason } => {
                 format!("Unreachable code: {}", reason)
             }
@@ -1297,7 +1297,6 @@ impl ErrorKind {
                 )
             }
 
-            // Type system errors
             ErrorKind::TypeMismatch { expected, found } => {
                 format!("Type mismatch: expected '{}', found '{}'", expected, found)
             }
@@ -1362,8 +1361,23 @@ impl ErrorKind {
             ErrorKind::InvalidTypeAnnotation { annotation } => {
                 format!("Invalid type annotation: '{}'", annotation)
             }
+            ErrorKind::ReadOnlyProperty { name, class_name } => {
+                format!(
+                    "Cannot assign to read-only property '{}' of class '{}'",
+                    name, class_name
+                )
+            }
+            ErrorKind::PropertySetterTypeMismatch {
+                property_name,
+                expected,
+                found,
+            } => {
+                format!(
+                    "Property '{}' setter expects type '{}', but got '{}'",
+                    property_name, expected, found
+                )
+            }
 
-            // Protocol errors
             ErrorKind::MissingProtocolMethod {
                 class_name,
                 protocol_name,
@@ -1436,7 +1450,6 @@ impl ErrorKind {
                 format!("Runtime checkable protocol '{}' violation", protocol_name)
             }
 
-            // Import errors
             ErrorKind::ModuleNotFound { module_name } => {
                 format!("No module named '{}'", module_name)
             }
@@ -1456,7 +1469,6 @@ impl ErrorKind {
                 "Attempted relative import in non-package".to_string()
             }
 
-            // Module system errors
             ErrorKind::ExportUndefined { name } => {
                 format!("Exporting undefined name '{}'", name)
             }
@@ -1495,7 +1507,6 @@ impl ErrorKind {
                 format!("Circular re-export detected: {}", cycle.join(" -> "))
             }
 
-            // Async/Await errors
             ErrorKind::BlockingCallInAsync { call } => {
                 format!("Blocking call '{}' in async context", call)
             }
@@ -1509,7 +1520,6 @@ impl ErrorKind {
                 format!("Variable '{}' may not be valid across await point", var)
             }
 
-            // Memory safety errors
             ErrorKind::UseAfterFree { var_name, .. } => {
                 format!("Variable '{}' used after being freed", var_name)
             }
@@ -1538,7 +1548,6 @@ impl ErrorKind {
                 format!("Value '{}' used after move", var_name)
             }
 
-            // Pattern matching errors
             ErrorKind::NonExhaustiveMatch { missing_patterns } => {
                 format!(
                     "Non-exhaustive match, missing: {}",
@@ -1561,7 +1570,6 @@ impl ErrorKind {
                 format!("Duplicate pattern binding '{}'", name)
             }
 
-            // Decorator errors
             ErrorKind::DecoratorNotFound { name } => {
                 format!("Decorator '{}' not found", name)
             }

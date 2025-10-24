@@ -210,63 +210,40 @@ pub enum LogosToken {
     Async,
     #[token("await")]
     Await,
-    // Note: match, case, and type are soft keywords - handled as identifiers in lexer,
-    // then checked in parser based on context
 
-    // #[token("match")]
-    // Match,
-    // #[token("case")]
-    // Case,
-    // #[token("type")]
-    // Type,
     #[token("constructor")]
     Constructor,
 
-    // Identifiers support Unicode
-    // XID_Start for first char (or underscore), XID_Continue for rest
-    // This regex is broad to catch candidates, validation happens in parser if needed
     #[regex(r"[\p{XID_Start}_][\p{XID_Continue}]*")]
     Ident, // Complex numbers must be checked before regular numbers
-    // Supports underscores and all number formats
+
     #[regex(r"(0[bB][01][01]*(_?[01])*|0[oO][0-7][0-7]*(_?[0-7])*|0[xX][0-9a-fA-F][0-9a-fA-F]*(_?[0-9a-fA-F])*|[0-9](_?[0-9])*(\.[0-9](_?[0-9])*)?([eE][+-]?[0-9](_?[0-9])*)?)[jJ]")]
     Complex,
 
-    // Binary, octal, hex, decimal with underscores and scientific notation
-    // Require at least one digit after base prefixes (0b, 0o, 0x)
     #[regex(r"0[bB][01][01]*(_?[01])*|0[oO][0-7][0-7]*(_?[0-7])*|0[xX][0-9a-fA-F][0-9a-fA-F]*(_?[0-9a-fA-F])*|[0-9](_?[0-9])*(\.[0-9](_?[0-9])*)?([eE][+-]?[0-9](_?[0-9])*)?")]
     Number,
 
-    // Bytes literals must be checked before regular strings
     #[regex(r#"[bB]"(?:[^"\n\\]|\\.)*"|[bB]'(?:[^'\n\\]|\\.)*'"#)]
     Bytes,
 
-    // Raw bytes literals - backslashes are literal, no escape processing
     #[regex(r#"[rR][bB]"[^"\n]*"|[rR][bB]'[^'\n]*'|[bB][rR]"[^"\n]*"|[bB][rR]'[^'\n]*'"#)]
     RawBytes,
 
-    // Raw strings - must come before regular strings to match first
-    // Backslashes are literal, no escape processing
     #[regex(r#"[rR]"[^"\n]*"|[rR]'[^'\n]*'"#)]
     RawString,
 
-    // Regular strings (single and double quoted)
     #[regex(r#""(?:[^"\n\\]|\\.)*"|'(?:[^'\n\\]|\\.)*'"#)]
     String,
 
-    // F-strings (single and double quoted)
     #[regex(r#"[fF]"(?:[^"\n\\]|\\.|(\{[^}]*\}))*"|[fF]'(?:[^'\n\\]|\\.|(\{[^}]*\}))*'"#)]
     FString,
 
-    // Raw F-strings (rf"...", fr"...", RF"...", etc.)
-    // In raw f-strings, backslashes are literal but braces still work for interpolation
     #[regex(r#"[rR][fF]"(?:[^"\n]|(\{[^}]*\}))*"|[rR][fF]'(?:[^'\n]|(\{[^}]*\}))*'|[fF][rR]"(?:[^"\n]|(\{[^}]*\}))*"|[fF][rR]'(?:[^'\n]|(\{[^}]*\}))*'"#)]
     RawFString,
 
-    // T-strings (template strings) - single and double quoted
     #[regex(r#"[tT]"(?:[^"\n\\]|\\.|(\{[^}]*\}))*"|[tT]'(?:[^'\n\\]|\\.|(\{[^}]*\}))*'"#)]
     TString,
 
-    // Raw t-strings
     #[regex(r#"[rR][tT]"[^"\n]*"|[rR][tT]'[^'\n]*'|[tT][rR]"[^"\n]*"|[tT][rR]'[^'\n]*'"#)]
     RawTString,
 

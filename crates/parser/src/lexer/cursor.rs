@@ -27,7 +27,6 @@ impl LineCursor {
             let local_start = lexer.span().start;
             let local_end = lexer.span().end;
 
-            // Adjust positions to be relative to full input
             let start = TextSize::from((self.line_start_offset + local_start) as u32);
             let end = TextSize::from((self.line_start_offset + local_end) as u32);
             let span = TextRange::new(start, end);
@@ -35,14 +34,12 @@ impl LineCursor {
             match tok_result {
                 Ok(tok) => {
                     let kind = self.convert_logos_token(tok);
-                    // Filter out Newline tokens from line tokenization (we handle them separately)
-                    // Comment tokens are now preserved for documentation and IDE support
+
                     if kind != TokenKind::Newline {
                         tokens.push(Token::new(kind, span));
                     }
                 }
                 Err(()) => {
-                    // Create a lexical error for invalid characters
                     let error = error(ErrorKind::InvalidCharacter, span);
                     errors.push(*error);
                 }
@@ -92,7 +89,7 @@ impl LineCursor {
             LogosToken::Async => TokenKind::Async,
             LogosToken::Await => TokenKind::Await,
             LogosToken::Constructor => TokenKind::Constructor,
-            // match, case, type are soft keywords - handled as Ident
+
             LogosToken::Ident => TokenKind::Ident,
             LogosToken::Number => TokenKind::Number,
             LogosToken::Complex => TokenKind::Complex,

@@ -287,7 +287,7 @@ def foo():
        y = 2  # Irregular indent increase
 "#;
     let (errors, _warnings) = parse_and_get_diagnostics(source);
-    // Irregular indentation produces syntax errors, which is expected behavior
+
     assert!(
         !errors.is_empty(),
         "Irregular indent increase should produce errors: {:?}",

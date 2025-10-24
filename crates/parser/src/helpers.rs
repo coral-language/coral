@@ -9,83 +9,77 @@ use crate::semantic::passes::name_resolution::NameResolver;
 use crate::semantic::passes::type_inference::{TypeInference, TypeInferenceContext};
 use crate::{Arena, Lexer, Parser};
 
-/// Helper to format diagnostics into strings.
-#[inline]
-fn format_diagnostics<D>(diagnostics: &[D], source: &str) -> Vec<String>
-where
-    D: HasDiagnostic,
-{
-    diagnostics
-        .iter()
-        .map(|d| {
-            let diagnostic = d.to_diagnostic(source);
-            format!("{}: {}", d.get_code_string(), diagnostic.message)
-        })
-        .collect()
-}
-
-/// Trait for types that can be converted to diagnostics.
-trait HasDiagnostic {
-    fn to_diagnostic(&self, source: &str) -> crate::error::diagnostic::Diagnostic;
-    fn get_code_string(&self) -> String;
-}
-
-impl HasDiagnostic for crate::error::types::Error {
-    fn to_diagnostic(&self, source: &str) -> crate::error::diagnostic::Diagnostic {
-        self.to_diagnostic(source)
-    }
-
-    fn get_code_string(&self) -> String {
-        format!("{}", self.code())
-    }
-}
-
-impl HasDiagnostic for crate::error::warnings::Warning {
-    fn to_diagnostic(&self, source: &str) -> crate::error::diagnostic::Diagnostic {
-        self.to_diagnostic(source)
-    }
-
-    fn get_code_string(&self) -> String {
-        format!("{}", self.code())
-    }
-}
-
 /// Parse source and return (errors, warnings) as formatted strings.
+/// This runs the FULL semantic analysis pipeline, not just syntax parsing.
 pub fn parse_and_get_diagnostics(source: &str) -> (Vec<String>, Vec<String>) {
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
+    match crate::parse(source) {
+        Ok(result) => {
+            let errors = result
+                .errors()
+                .iter()
+                .map(|d| {
+                    let code_str = d
+                        .code
+                        .map(|c| format!("{}", c))
+                        .unwrap_or_else(|| "E0000".to_string());
+                    format!("{}: {}", code_str, d.message)
+                })
+                .collect();
 
-    let mut parser = Parser::new(lexer, &arena);
-    let _ = parser.parse_module();
+            let warnings = result
+                .warnings()
+                .iter()
+                .map(|d| {
+                    let code_str = d
+                        .code
+                        .map(|c| format!("{}", c))
+                        .unwrap_or_else(|| "W0000".to_string());
+                    format!("{}: {}", code_str, d.message)
+                })
+                .collect();
 
-    let errors = format_diagnostics(parser.errors(), source);
-    let warnings = format_diagnostics(parser.warnings(), source);
-
-    (errors, warnings)
+            (errors, warnings)
+        }
+        Err(_) => (vec![], vec![]), // Fatal errors handled separately
+    }
 }
 
 /// Parse source and return only formatted error strings.
 /// Optimized to avoid formatting unused warnings.
 fn parse_and_get_errors(source: &str) -> Vec<String> {
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-
-    let mut parser = Parser::new(lexer, &arena);
-    let _ = parser.parse_module();
-
-    format_diagnostics(parser.errors(), source)
+    match crate::parse(source) {
+        Ok(result) => result
+            .errors()
+            .iter()
+            .map(|d| {
+                let code_str = d
+                    .code
+                    .map(|c| format!("{}", c))
+                    .unwrap_or_else(|| "E0000".to_string());
+                format!("{}: {}", code_str, d.message)
+            })
+            .collect(),
+        Err(_) => vec![], // Fatal errors handled separately
+    }
 }
 
 /// Parse source and return only formatted warning strings.
 /// Optimized to avoid formatting unused errors.
 fn parse_and_get_warnings(source: &str) -> Vec<String> {
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-
-    let mut parser = Parser::new(lexer, &arena);
-    let _ = parser.parse_module();
-
-    format_diagnostics(parser.warnings(), source)
+    match crate::parse(source) {
+        Ok(result) => result
+            .warnings()
+            .iter()
+            .map(|d| {
+                let code_str = d
+                    .code
+                    .map(|c| format!("{}", c))
+                    .unwrap_or_else(|| "W0000".to_string());
+                format!("{}: {}", code_str, d.message)
+            })
+            .collect(),
+        Err(_) => vec![],
+    }
 }
 
 /// Check if a collection of messages contains a specific code.

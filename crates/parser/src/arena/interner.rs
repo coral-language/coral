@@ -11,7 +11,6 @@ use std::sync::Arc;
 
 /// Common keywords and built-ins to pre-intern.
 const COMMON_STRINGS: &[&str] = &[
-    // Keywords
     "and",
     "as",
     "assert",
@@ -47,11 +46,9 @@ const COMMON_STRINGS: &[&str] = &[
     "while",
     "with",
     "yield",
-    // Soft keywords
     "match",
     "case",
     "type",
-    // Common built-ins
     "int",
     "float",
     "str",
@@ -118,7 +115,7 @@ impl Interner {
             strings: Vec::new(),
             stats: InternerStats::default(),
         };
-        // Pre-intern common strings for faster lookups
+
         interner.pre_intern_common();
         interner
     }
@@ -199,7 +196,6 @@ impl Interner {
         self.stats.total_interns = 0;
         self.stats.cache_hits = 0;
         self.stats.cache_misses = 0;
-        // Keep unique_strings and memory_usage as they reflect current state
     }
 }
 
@@ -224,7 +220,6 @@ impl ThreadSafeInterner {
 
     /// Intern a string, returning its symbol.
     pub fn intern(&self, s: &str) -> Symbol {
-        // Try read lock first for fast path
         {
             let mut interner = self.inner.write();
             interner.stats.total_interns += 1;
@@ -234,7 +229,6 @@ impl ThreadSafeInterner {
                 return sym;
             }
 
-            // Not found, so insert it
             interner.stats.cache_misses += 1;
             let symbol = Symbol::new(interner.strings.len() as u32);
             let string = s.to_string();

@@ -110,8 +110,6 @@ pub struct MetricsConfig {
     pub enable_allocation_tracking: bool,
 }
 
-// Note: Metrics collection is now handled through PassManager to avoid global state
-
 /// Thread-safe metrics collector
 #[derive(Debug)]
 pub struct MetricsCollector {

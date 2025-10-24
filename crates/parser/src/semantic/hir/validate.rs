@@ -80,10 +80,8 @@ impl<'a> HirValidator<'a> {
     pub fn validate(&mut self) -> Result<(), Vec<HirValidationError>> {
         self.errors.clear();
 
-        // Validate all statements in the module
         self.validate_statements(self.context.module_body());
 
-        // Validate class hierarchies
         self.validate_class_hierarchies();
 
         if self.errors.is_empty() {
@@ -203,9 +201,7 @@ impl<'a> HirValidator<'a> {
             TypedStmt::TypeAlias(type_alias) => {
                 self.validate_expression(&type_alias.value);
             }
-            _ => {
-                // Other statements don't need validation
-            }
+            _ => {}
         }
     }
 
@@ -213,14 +209,7 @@ impl<'a> HirValidator<'a> {
     #[allow(clippy::only_used_in_recursion)]
     fn validate_expression(&mut self, expr: &TypedExpr<'a>) {
         match expr {
-            TypedExpr::Name(name_expr) => {
-                // Validate typed name expression
-                // Symbol resolution handled by name resolution pass
-                // Type inference assigns types to resolved symbols
-                if name_expr.ty == Type::Unknown {
-                    // Unknown type is acceptable for gradual typing
-                }
-            }
+            TypedExpr::Name(name_expr) => if name_expr.ty == Type::Unknown {},
             TypedExpr::Call(call_expr) => {
                 self.validate_expression(call_expr.func);
                 for arg in call_expr.args {
@@ -329,9 +318,7 @@ impl<'a> HirValidator<'a> {
             TypedExpr::YieldFrom(yield_from_expr) => {
                 self.validate_expression(yield_from_expr.value);
             }
-            _ => {
-                // Other expressions don't need validation
-            }
+            _ => {}
         }
     }
 
@@ -373,23 +360,18 @@ impl<'a> HirValidator<'a> {
                     self.validate_pattern(p);
                 }
             }
-            TypedPattern::MatchSingleton(_) => {
-                // No validation needed for singletons
-            }
+            TypedPattern::MatchSingleton(_) => {}
         }
     }
 
     /// Validate a function definition
     fn validate_function_definition(&mut self, func: &super::typed_stmt::TypedFuncDefStmt<'a>) {
-        // Validate function body
         self.validate_statements(func.body);
 
-        // Validate return type annotation if present
         if let Some(returns) = func.returns {
             self.validate_expression(returns);
         }
 
-        // Validate decorators
         for decorator in func.decorators {
             self.validate_expression(decorator);
         }
@@ -397,20 +379,16 @@ impl<'a> HirValidator<'a> {
 
     /// Validate a class definition
     fn validate_class_definition(&mut self, class: &super::typed_stmt::TypedClassDefStmt<'a>) {
-        // Validate class body
         self.validate_statements(class.body);
 
-        // Validate base classes
         for base in class.bases {
             self.validate_expression(base);
         }
 
-        // Validate decorators
         for decorator in class.decorators {
             self.validate_expression(decorator);
         }
 
-        // Validate MRO
         if let Some(mro) = self.context.get_class_mro(class.name)
             && mro.is_empty()
         {

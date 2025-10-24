@@ -8,37 +8,57 @@ use std::collections::HashMap;
 use text_size::TextRange;
 
 /// Type checker context
-pub struct TypeCheckContext {
-    /// Type inference context with inferred types
-    inference_ctx: TypeInferenceContext,
+pub struct TypeCheckContext<'a> {
+    /// Type inference context with inferred types (borrowed)
+    inference_ctx: &'a TypeInferenceContext,
     /// Errors collected during type checking
     errors: Vec<Error>,
     /// Current function return type (for checking return statements)
     current_return_type: Option<Type>,
     /// Class attributes for validation (class_name, attr_name) -> attr_type
     class_attributes: HashMap<(String, String), Type>,
+    /// Enable strict attribute checking
+    strict_attribute_checking: bool,
 }
 
-impl TypeCheckContext {
-    pub fn new(inference_ctx: TypeInferenceContext) -> Self {
+impl<'a> TypeCheckContext<'a> {
+    pub fn new(inference_ctx: &'a TypeInferenceContext) -> Self {
+        Self::with_config(inference_ctx, false)
+    }
+
+    pub fn with_config(
+        inference_ctx: &'a TypeInferenceContext,
+        strict_attribute_checking: bool,
+    ) -> Self {
         Self {
             inference_ctx,
             errors: Vec::new(),
             current_return_type: None,
             class_attributes: HashMap::new(),
+            strict_attribute_checking,
         }
     }
 
     /// Create a new context with class metadata for attribute validation
     pub fn with_class_metadata(
-        inference_ctx: TypeInferenceContext,
+        inference_ctx: &'a TypeInferenceContext,
         class_attributes: HashMap<(String, String), Type>,
+    ) -> Self {
+        Self::with_class_metadata_and_config(inference_ctx, class_attributes, false)
+    }
+
+    /// Create a new context with class metadata and configuration
+    pub fn with_class_metadata_and_config(
+        inference_ctx: &'a TypeInferenceContext,
+        class_attributes: HashMap<(String, String), Type>,
+        strict_attribute_checking: bool,
     ) -> Self {
         Self {
             inference_ctx,
             errors: Vec::new(),
             current_return_type: None,
             class_attributes,
+            strict_attribute_checking,
         }
     }
 
@@ -76,11 +96,6 @@ impl TypeCheckContext {
         &self.errors
     }
 
-    /// Consume the context and return the inference context
-    pub fn into_inference_context(self) -> TypeInferenceContext {
-        self.inference_ctx
-    }
-
     /// Add an error
     fn add_error(&mut self, error: Error) {
         self.errors.push(error);
@@ -98,12 +113,12 @@ impl TypeCheckContext {
 }
 
 /// Type checker visitor
-pub struct TypeChecker<'a> {
-    context: &'a mut TypeCheckContext,
+pub struct TypeChecker<'a, 'b> {
+    context: &'a mut TypeCheckContext<'b>,
 }
 
-impl<'a> TypeChecker<'a> {
-    pub fn new(context: &'a mut TypeCheckContext) -> Self {
+impl<'a, 'b> TypeChecker<'a, 'b> {
+    pub fn new(context: &'a mut TypeCheckContext<'b>) -> Self {
         Self { context }
     }
 
@@ -420,9 +435,20 @@ impl<'a> TypeChecker<'a> {
                             true
                         } else {
                             // Attribute not found - could be dynamic or error
-                            // For now, accept it (conservative approach)
-                            // TODO: Add configuration to make this stricter
-                            true
+                            if self.context.strict_attribute_checking {
+                                // Strict mode: reject unknown attributes
+                                self.context.add_error(*error(
+                                    ErrorKind::InvalidAttribute {
+                                        obj_type: class_name.clone(),
+                                        attribute: attr.attr.to_string(),
+                                    },
+                                    attr.span,
+                                ));
+                                false
+                            } else {
+                                // Lenient mode: allow dynamic attributes (Python compatibility)
+                                true
+                            }
                         }
                     }
                     Type::Module(_) => {
@@ -573,14 +599,52 @@ impl<'a> TypeChecker<'a> {
                 let obj_type = self.context.get_expr_type(attr.value.span());
 
                 // For user-defined class instances, check if attribute is a read-only property
-                // This requires ClassAnalyzer integration to detect properties without setters
-                // For now, we validate the value type matches the property type if known
-                if !matches!(obj_type, Type::Unknown | Type::Any) {
-                    // TODO: Integrate ClassAnalyzer to:
-                    // 1. Check if attribute is a property
-                    // 2. If property, check if it has a setter
-                    // 3. If no setter, error: "Cannot assign to read-only property"
-                    // 4. If has setter, validate value_type matches setter parameter type
+                if let Type::Instance(class_name) = &obj_type {
+                    // Look up the attribute in class metadata to check if it's a property
+                    let attr_key = (class_name.clone(), attr.attr.to_string());
+
+                    if let Some(Type::AttributeDescriptor {
+                        kind: crate::semantic::types::AttributeKind::Property,
+                        getter_type: _,
+                        setter_type,
+                    }) = self.context.inference_ctx.class_attributes.get(&attr_key)
+                    {
+                        // This is a property - check if it has a setter
+                        if setter_type.is_none() {
+                            // Property without setter - read-only
+                            self.context.add_error(*error(
+                                ErrorKind::ReadOnlyProperty {
+                                    name: attr.attr.to_string(),
+                                    class_name: class_name.clone(),
+                                },
+                                attr.span,
+                            ));
+                        } else if let Some(setter_ty) = setter_type {
+                            // Property has setter - validate value type
+                            // Setter type is a function: (self, value: T) -> None
+                            if let Type::Function { params, .. } = setter_ty.as_ref() {
+                                // Second parameter is the value parameter (first is self)
+                                if params.len() >= 2 {
+                                    let (_self_param, value_param_type) = &params[1];
+
+                                    // Check if assigned value matches setter parameter type
+                                    if !value_type.is_subtype_of(value_param_type)
+                                        && !matches!(value_type, Type::Unknown)
+                                        && !matches!(value_param_type, Type::Unknown)
+                                    {
+                                        self.context.add_error(*error(
+                                            ErrorKind::PropertySetterTypeMismatch {
+                                                property_name: attr.attr.to_string(),
+                                                expected: value_param_type.to_string(),
+                                                found: value_type.to_string(),
+                                            },
+                                            attr.span,
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             _ => {}
@@ -886,7 +950,7 @@ mod tests {
         inference.infer_module(module);
 
         // Finally run type checking
-        let mut check_ctx = TypeCheckContext::new(infer_ctx);
+        let mut check_ctx = TypeCheckContext::new(&infer_ctx);
         let mut checker = TypeChecker::new(&mut check_ctx);
         checker.check_module(module);
 

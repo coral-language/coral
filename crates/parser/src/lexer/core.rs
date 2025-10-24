@@ -47,14 +47,11 @@ impl Lexer {
             let mut line = lines[line_idx].to_string();
             let mut line_len = line.len();
 
-            // Handle explicit line continuation with backslash
-            // Join lines that end with \ (but not \\)
             let mut continuation_lines = vec![line_idx];
             while line.trim_end().ends_with('\\')
                 && !line.trim_end().ends_with("\\\\")
                 && line_idx + 1 < lines.len()
             {
-                // Remove the trailing backslash and whitespace
                 line = line
                     .trim_end()
                     .strip_suffix('\\')
@@ -63,7 +60,6 @@ impl Lexer {
                 line_idx += 1;
                 continuation_lines.push(line_idx);
 
-                // Append the next line (with a space to separate tokens)
                 if line_idx < lines.len() {
                     line.push(' ');
                     line.push_str(lines[line_idx]);
@@ -71,9 +67,7 @@ impl Lexer {
                 }
             }
 
-            // Skip blank lines and lines with only whitespace
             if line.trim().is_empty() {
-                // Still emit newline for blank lines if not at end (but only when not inside brackets)
                 if line_idx < lines.len() - 1 && self.bracket_depth == 0 {
                     let newline_pos = TextSize::from((line_start_pos + line_len) as u32);
                     tokens.push(Token::new(
@@ -86,19 +80,13 @@ impl Lexer {
                 continue;
             }
 
-            // Check if this line contains only whitespace and comments
-            // If so, don't process indentation for it
             let line_content = line.trim_start();
             let is_comment_only_line = line_content.starts_with('#') || line_content.is_empty();
 
-            // Calculate indentation and process indentation changes
-            // BUT: Skip indentation processing if we're inside brackets (implicit line joining)
-            // OR if the line contains only comments/whitespace
             if self.bracket_depth == 0 && !is_comment_only_line {
                 let indent_analysis = IndentationTracker::analyze_indent_level(&line);
                 let indent_pos = TextSize::from(line_start_pos as u32);
 
-                // Check for indentation warnings
                 let line_span = TextRange::new(
                     indent_pos,
                     indent_pos + TextSize::from(indent_analysis.raw_indent.len() as u32),
@@ -115,12 +103,10 @@ impl Lexer {
                 errors.extend(indent_errors);
             }
 
-            // Tokenize the actual line content (now potentially combined from multiple physical lines)
             let cursor = LineCursor::new(line_start_pos);
             let (line_tokens, line_errors) = cursor.tokenize_line(&line);
             errors.extend(line_errors);
 
-            // Update bracket depth based on tokens in this line
             for token in &line_tokens {
                 match token.kind {
                     TokenKind::LeftParen | TokenKind::LeftBracket | TokenKind::LeftBrace => {
@@ -137,8 +123,6 @@ impl Lexer {
 
             tokens.extend(line_tokens);
 
-            // Add newline at end of line (except last line)
-            // BUT: Skip newlines inside brackets (implicit line joining)
             if line_idx < lines.len() - 1 && self.bracket_depth == 0 {
                 let newline_pos = TextSize::from((line_start_pos + line_len) as u32);
                 tokens.push(Token::new(
@@ -147,7 +131,6 @@ impl Lexer {
                 ));
             }
 
-            // Account for all the lines we consumed (original + continuations)
             for idx in continuation_lines {
                 line_start_pos += lines.get(idx).map(|l| l.len() + 1).unwrap_or(0);
             }
@@ -155,7 +138,6 @@ impl Lexer {
             line_idx += 1;
         }
 
-        // Emit remaining DEDENTs at end of file
         let eof_pos = TextSize::from(self.input.len() as u32);
         tokens.extend(self.indentation.finalize(eof_pos));
 

@@ -65,6 +65,8 @@ pub struct BasicBlock {
     pub defs: HashSet<String>,
     /// All variables used in this block (union of all statement uses)
     pub uses: HashSet<String>,
+    /// Variables defined with constant values in this block
+    pub constant_defs: HashSet<String>,
 }
 
 /// Statement information for CFG
@@ -159,6 +161,7 @@ impl Default for ControlFlowGraph {
                 terminator: None,
                 defs: HashSet::new(),
                 uses: HashSet::new(),
+                constant_defs: HashSet::new(),
             },
         );
 
@@ -187,6 +190,7 @@ impl ControlFlowGraph {
                 terminator: None,
                 defs: HashSet::new(),
                 uses: HashSet::new(),
+                constant_defs: HashSet::new(),
             },
         );
 
@@ -209,6 +213,18 @@ impl ControlFlowGraph {
         defs: Vec<String>,
         uses: Vec<String>,
     ) {
+        self.add_statement_with_constants(block, span, kind, defs, uses, Vec::new())
+    }
+
+    fn add_statement_with_constants(
+        &mut self,
+        block: BlockId,
+        span: TextRange,
+        kind: StmtKind,
+        defs: Vec<String>,
+        uses: Vec<String>,
+        constant_defs: Vec<String>,
+    ) {
         if let Some(b) = self.blocks.get_mut(&block) {
             // Add to block's def/use sets
             for def in &defs {
@@ -216,6 +232,9 @@ impl ControlFlowGraph {
             }
             for use_var in &uses {
                 b.uses.insert(use_var.clone());
+            }
+            for const_def in &constant_defs {
+                b.constant_defs.insert(const_def.clone());
             }
 
             b.statements.push(StmtInfo {
@@ -441,6 +460,35 @@ impl ControlFlowAnalyzer {
                     nonlocal.names.iter().map(|n| n.to_string()).collect(),
                     Vec::new(),
                 )
+            }
+            Stmt::FuncDef(func) => {
+                // Function definitions define the function name
+                // Decorators and parameters are analyzed separately within the function
+                let defs = vec![func.name.to_string()];
+                let uses = func
+                    .decorators
+                    .iter()
+                    .flat_map(|dec| self.extract_expr_vars(dec))
+                    .collect();
+                (defs, uses)
+            }
+            Stmt::ClassDef(class) => {
+                // Class definitions define the class name
+                // Base classes and decorators are uses
+                let defs = vec![class.name.to_string()];
+                let mut uses: Vec<String> = Vec::new();
+
+                // Extract variables from base classes
+                for base in class.bases {
+                    uses.extend(self.extract_expr_vars(base));
+                }
+
+                // Extract variables from decorators
+                for decorator in class.decorators {
+                    uses.extend(self.extract_expr_vars(decorator));
+                }
+
+                (defs, uses)
             }
             // Other statements don't define or use variables directly
             _ => (Vec::new(), Vec::new()),
@@ -902,10 +950,13 @@ impl ControlFlowAnalyzer {
             let name_start = func.span.start() + def_offset;
             let signature_span = TextRange::new(name_start, name_start + name_len);
 
+            // Extract return type name from the annotation expression
+            let expected_type = self.extract_type_name(returns);
+
             self.errors.push(*error(
                 ErrorKind::MissingReturn {
                     function: func.name.to_string(),
-                    expected_type: "int".to_string(), // TODO: get actual return type
+                    expected_type,
                 },
                 signature_span,
             ));
@@ -920,6 +971,58 @@ impl ControlFlowAnalyzer {
     /// Check if an expression represents the None type
     fn is_none_type(&self, expr: &Expr) -> bool {
         matches!(expr, Expr::Name(name) if name.id == "None")
+    }
+
+    /// Extract a human-readable type name from a type annotation expression
+    fn extract_type_name(&self, expr: &Expr) -> String {
+        match expr {
+            Expr::Name(name) => name.id.to_string(),
+            Expr::Attribute(attr) => {
+                format!("{}.{}", self.extract_type_name(attr.value), attr.attr)
+            }
+            Expr::Subscript(sub) => {
+                // Handle generic types like List[int], Optional[str]
+                let base = self.extract_type_name(sub.value);
+                let param = self.extract_type_name(sub.slice);
+                format!("{}[{}]", base, param)
+            }
+            Expr::Tuple(tup) => {
+                // Handle tuple types like tuple[int, str]
+                let types: Vec<String> = tup.elts.iter().map(|e| self.extract_type_name(e)).collect();
+                format!("({})", types.join(", "))
+            }
+            Expr::BinOp(binop) if binop.op == "|" => {
+                // Handle union types like int | str
+                format!("{} | {}", self.extract_type_name(binop.left), self.extract_type_name(binop.right))
+            }
+            Expr::Constant(c) => c.value.to_string(),
+            _ => "unknown".to_string(),
+        }
+    }
+
+    /// Check if an expression is a compile-time constant
+    /// This is used for constant propagation analysis
+    fn is_constant_expr(&self, expr: &Expr) -> bool {
+        match expr {
+            // Literal constants
+            Expr::Constant(_) | Expr::Complex(_) | Expr::Bytes(_) => true,
+            // True, False, None
+            Expr::Name(name) if matches!(name.id, "True" | "False" | "None") => true,
+            // Constant tuples, lists, sets (if all elements are constant)
+            Expr::Tuple(tup) => tup.elts.iter().all(|e| self.is_constant_expr(e)),
+            Expr::List(list) => list.elts.iter().all(|e| self.is_constant_expr(e)),
+            Expr::Set(set) => set.elts.iter().all(|e| self.is_constant_expr(e)),
+            // Constant dicts
+            Expr::Dict(dict) => {
+                dict.keys.iter().all(|k| k.as_ref().map(|e| self.is_constant_expr(e)).unwrap_or(false))
+                    && dict.values.iter().all(|v| self.is_constant_expr(v))
+            }
+            // Binary operations on constants
+            Expr::BinOp(binop) => self.is_constant_expr(binop.left) && self.is_constant_expr(binop.right),
+            // Unary operations on constants
+            Expr::UnaryOp(unop) => self.is_constant_expr(unop.operand),
+            _ => false,
+        }
     }
 
     // ===== CFG Builder Methods =====
@@ -957,10 +1060,46 @@ impl ControlFlowAnalyzer {
         let (defs, uses) = self.extract_defs_uses(stmt);
 
         match stmt {
+            // Assignment statements - track constant assignments
+            Stmt::Assign(assign) => {
+                // Check if RHS is a constant expression
+                let constant_defs = if self.is_constant_expr(&assign.value) {
+                    defs.clone()
+                } else {
+                    Vec::new()
+                };
+                cfg.add_statement_with_constants(
+                    current.clone(),
+                    stmt.span(),
+                    StmtKind::Normal,
+                    defs,
+                    uses,
+                    constant_defs,
+                );
+                current
+            }
+            Stmt::AnnAssign(ann_assign) => {
+                // Check if RHS is a constant expression (if value exists)
+                let constant_defs = if let Some(ref value) = ann_assign.value
+                    && self.is_constant_expr(value)
+                {
+                    defs.clone()
+                } else {
+                    Vec::new()
+                };
+                cfg.add_statement_with_constants(
+                    current.clone(),
+                    stmt.span(),
+                    StmtKind::Normal,
+                    defs,
+                    uses,
+                    constant_defs,
+                );
+                current
+            }
+
             // Sequential statements - just add to current block
             Stmt::Expr(_)
-            | Stmt::Assign(_)
-            | Stmt::AnnAssign(_)
             | Stmt::AugAssign(_)
             | Stmt::Pass(_)
             | Stmt::Import(_)
@@ -1792,11 +1931,10 @@ impl DataflowAnalysis for AvailableExpressionsAnalysis {
             input.remove(def);
         }
 
-        // Gen: add variables that get constant values (simplified - would need actual values)
-        // In a real implementation, we'd track which assignments are to constants
-        for def in &block.defs {
-            // For now, just add all defs (in reality, check if RHS is constant)
-            input.insert(def.clone());
+        // Gen: add variables that get constant values
+        // Only track actual constant assignments (literals, True/False/None, etc.)
+        for const_def in &block.constant_defs {
+            input.insert(const_def.clone());
         }
 
         input

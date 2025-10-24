@@ -131,7 +131,6 @@ impl ModuleExportRegistry {
         let mut current_name = name;
 
         loop {
-            // Check depth limit
             if chain.len() > max_depth {
                 return Err(ReexportError::ChainTooDeep {
                     max_depth,
@@ -139,22 +138,18 @@ impl ModuleExportRegistry {
                 });
             }
 
-            // Check for circular chains
             if !visited.insert(current_module.to_string()) {
                 return Err(ReexportError::CircularChain {
                     chain: chain.clone(),
                 });
             }
 
-            // Look up current export
             if let Some(info) = self.get_export(current_module, current_name) {
                 if let Some(source) = &info.source_module {
-                    // This is a re-export, follow the chain
                     chain.push(source.clone());
                     current_module = source;
                     current_name = &info.original_name;
                 } else {
-                    // Found the original export
                     let mut final_info = info.clone();
                     final_info.reexport_chain = chain.clone();
                     return Ok((current_module.to_string(), final_info, chain));
@@ -233,9 +228,8 @@ mod tests {
 
         registry.register_export("mymodule", "public_name".to_string(), info);
 
-        // Should be accessible by the public name
         assert!(registry.is_exported("mymodule", "public_name"));
-        // But not by the original name
+
         assert!(!registry.is_exported("mymodule", "internal_name"));
 
         let export = registry.get_export("mymodule", "public_name").unwrap();

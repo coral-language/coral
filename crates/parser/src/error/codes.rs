@@ -18,7 +18,6 @@ pub enum Severity {
 /// Error code categories.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ErrorCode {
-    // ===== Lexical Errors (E1xxx) =====
     E1001, // Invalid character
     E1002, // Unterminated string literal
     E1003, // Invalid number literal
@@ -27,7 +26,6 @@ pub enum ErrorCode {
     E1006, // Invalid escape sequence
     W1005, // Mixed tabs and spaces (warning)
 
-    // ===== Syntax Errors (E2xxx) =====
     E2001, // Unexpected token
     E2002, // Expected token not found
     E2003, // Unexpected EOF
@@ -58,13 +56,11 @@ pub enum ErrorCode {
     E2028, // Expected indent
     E2029, // Unindent mismatch
 
-    // ===== Name Resolution Errors (E3xxx) =====
     E3001, // Undefined name
     E3002, // Duplicate definition
     E3003, // Nonlocal without enclosing scope
     E3004, // Used before definition
 
-    // ===== Control Flow Errors (E3100-E3199) =====
     W3100, // Unreachable code (warning)
     W3101, // Infinite loop detected (warning)
     E3102, // Missing return statement
@@ -77,7 +73,6 @@ pub enum ErrorCode {
     W3171, // Dead branch (warning)
     W3172, // Simplifiable expression (warning)
 
-    // ===== Type System Errors (E4xxx) =====
     E4001, // Type mismatch
     E4002, // Invalid binary operation
     E4003, // Invalid unary operation
@@ -93,8 +88,9 @@ pub enum ErrorCode {
     E4013, // Ambiguous type
     E4014, // Type annotation required
     E4015, // Invalid type annotation
+    E4016, // Read-only property assignment
+    E4017, // Property setter type mismatch
 
-    // ===== Protocol Errors (E4100-E4199) =====
     E4100, // Missing protocol method
     E4101, // Method signature mismatch
     E4102, // Protocol with implementation
@@ -102,7 +98,6 @@ pub enum ErrorCode {
     E4104, // Protocol not satisfied
     E4105, // Runtime checkable protocol violation
 
-    // ===== Import Errors (E5xxx) =====
     E5001, // Module not found
     E5002, // Circular import
     E5003, // Invalid import syntax
@@ -110,7 +105,6 @@ pub enum ErrorCode {
     E5005, // Cannot import name
     E5006, // Relative import in non-package
 
-    // ===== Module System Errors (E5100-E5199) =====
     E5100, // Export undefined name
     E5101, // Duplicate export
     E5102, // Invalid module introspection
@@ -119,12 +113,10 @@ pub enum ErrorCode {
     E5105, // Exported name not in source module
     E5106, // Circular re-export
 
-    // ===== Async/Await Errors (E6xxx) =====
     E6001, // Blocking call in async context
     E6002, // Invalid Future type
     E6003, // Async lifetime violation
 
-    // ===== Memory Safety Errors (E7xxx) =====
     E7001, // Use after free
     E7002, // Double free
     E7003, // Resource leak
@@ -133,24 +125,20 @@ pub enum ErrorCode {
     E7006, // Invalid lifetime
     E7007, // Moved value used
 
-    // ===== Pattern Matching Errors (E8xxx) =====
     E8001, // Non-exhaustive match
     E8002, // Unreachable pattern
     E8003, // Pattern type mismatch
     E8004, // Invalid pattern syntax
     E8005, // Duplicate pattern binding
 
-    // ===== Decorator Errors (E9xxx) =====
     E9001, // Decorator not found
     E9002, // Invalid decorator target
     E9003, // Decorator signature mismatch
     E9004, // Decorator application failed
     E9005, // Invalid decorator composition
 
-    // ===== Deprecation Warnings (W2xxx) =====
     W2001, // Deprecated feature
 
-    // ===== Code Quality Warnings (W3xxx) =====
     W3001, // Unused variable
     W3002, // Unused function
     W3003, // Unused import (currently used)
@@ -163,7 +151,6 @@ impl ErrorCode {
     /// Get the numeric code.
     pub fn code(&self) -> u32 {
         match self {
-            // Lexical
             ErrorCode::E1001 => 1001,
             ErrorCode::E1002 => 1002,
             ErrorCode::E1003 => 1003,
@@ -172,7 +159,6 @@ impl ErrorCode {
             ErrorCode::E1006 => 1006,
             ErrorCode::W1005 => 1005,
 
-            // Syntax
             ErrorCode::E2001 => 2001,
             ErrorCode::E2002 => 2002,
             ErrorCode::E2003 => 2003,
@@ -203,13 +189,11 @@ impl ErrorCode {
             ErrorCode::E2028 => 2028,
             ErrorCode::E2029 => 2029,
 
-            // Name Resolution
             ErrorCode::E3001 => 3001,
             ErrorCode::E3002 => 3002,
             ErrorCode::E3003 => 3003,
             ErrorCode::E3004 => 3004,
 
-            // Control Flow
             ErrorCode::W3100 => 3100,
             ErrorCode::W3101 => 3101,
             ErrorCode::E3102 => 3102,
@@ -222,7 +206,6 @@ impl ErrorCode {
             ErrorCode::W3171 => 3171,
             ErrorCode::W3172 => 3172,
 
-            // Type System
             ErrorCode::E4001 => 4001,
             ErrorCode::E4002 => 4002,
             ErrorCode::E4003 => 4003,
@@ -238,8 +221,9 @@ impl ErrorCode {
             ErrorCode::E4013 => 4013,
             ErrorCode::E4014 => 4014,
             ErrorCode::E4015 => 4015,
+            ErrorCode::E4016 => 4016,
+            ErrorCode::E4017 => 4017,
 
-            // Protocols
             ErrorCode::E4100 => 4100,
             ErrorCode::E4101 => 4101,
             ErrorCode::E4102 => 4102,
@@ -247,7 +231,6 @@ impl ErrorCode {
             ErrorCode::E4104 => 4104,
             ErrorCode::E4105 => 4105,
 
-            // Import
             ErrorCode::E5001 => 5001,
             ErrorCode::E5002 => 5002,
             ErrorCode::E5003 => 5003,
@@ -255,7 +238,6 @@ impl ErrorCode {
             ErrorCode::E5005 => 5005,
             ErrorCode::E5006 => 5006,
 
-            // Module System
             ErrorCode::E5100 => 5100,
             ErrorCode::E5101 => 5101,
             ErrorCode::E5102 => 5102,
@@ -264,12 +246,10 @@ impl ErrorCode {
             ErrorCode::E5105 => 5105,
             ErrorCode::E5106 => 5106,
 
-            // Async/Await
             ErrorCode::E6001 => 6001,
             ErrorCode::E6002 => 6002,
             ErrorCode::E6003 => 6003,
 
-            // Memory Safety
             ErrorCode::E7001 => 7001,
             ErrorCode::E7002 => 7002,
             ErrorCode::E7003 => 7003,
@@ -278,24 +258,20 @@ impl ErrorCode {
             ErrorCode::E7006 => 7006,
             ErrorCode::E7007 => 7007,
 
-            // Pattern Matching
             ErrorCode::E8001 => 8001,
             ErrorCode::E8002 => 8002,
             ErrorCode::E8003 => 8003,
             ErrorCode::E8004 => 8004,
             ErrorCode::E8005 => 8005,
 
-            // Decorators
             ErrorCode::E9001 => 9001,
             ErrorCode::E9002 => 9002,
             ErrorCode::E9003 => 9003,
             ErrorCode::E9004 => 9004,
             ErrorCode::E9005 => 9005,
 
-            // Deprecation Warnings
             ErrorCode::W2001 => 2001,
 
-            // Code Quality Warnings
             ErrorCode::W3001 => 3001,
             ErrorCode::W3002 => 3002,
             ErrorCode::W3003 => 3003,
@@ -323,8 +299,6 @@ impl ErrorCode {
 
     /// Get the default severity for this error code.
     pub fn default_severity(&self) -> Severity {
-        // Determine severity based on the variant name prefix
-        // W-prefixed codes are warnings, E-prefixed are errors, I-prefixed are info
         let variant_name = format!("{:?}", self);
 
         if variant_name.starts_with('W') {
@@ -332,7 +306,6 @@ impl ErrorCode {
         } else if variant_name.starts_with('I') {
             Severity::Info
         } else {
-            // E-prefixed or any other prefix defaults to Error
             Severity::Error
         }
     }

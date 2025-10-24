@@ -12,7 +12,6 @@ impl TypoSuggester {
     pub fn new() -> Self {
         let mut keyword_corrections = HashMap::new();
 
-        // Common keyword typos
         keyword_corrections.insert("elseif", "elif");
         keyword_corrections.insert("else if", "elif");
         keyword_corrections.insert("elsif", "elif");
@@ -57,7 +56,6 @@ impl TypoSuggester {
 
         let mut operator_corrections = HashMap::new();
 
-        // Common operator mistakes
         operator_corrections.insert("&&", "and");
         operator_corrections.insert("||", "or");
         operator_corrections.insert("!", "not");
@@ -131,7 +129,7 @@ impl TypoSuggester {
 
         for keyword in valid_keywords {
             let distance = Self::levenshtein_distance(input, keyword);
-            // Only suggest if distance is small (1-2 characters different)
+
             if distance > 0 && distance <= 2 && distance < best_distance {
                 best_distance = distance;
                 best_match = Some(keyword.to_string());
@@ -143,7 +141,6 @@ impl TypoSuggester {
 
     /// Suggest correction for common assignment vs comparison mistake
     pub fn suggest_assignment_vs_comparison(&self, context: &str) -> Option<&'static str> {
-        // If we see = in a condition context, suggest ==
         if context.contains("if") || context.contains("while") || context.contains("elif") {
             Some("Did you mean '==' for comparison instead of '=' for assignment?")
         } else {
@@ -162,7 +159,6 @@ impl TypoSuggester {
 
     /// Suggest adding missing parentheses for function calls
     pub fn suggest_missing_parens(&self, name: &str, context: &str) -> Option<&'static str> {
-        // Common functions that need parentheses
         let function_names = [
             "print", "len", "range", "str", "int", "float", "list", "dict", "set", "tuple",
         ];
@@ -224,7 +220,6 @@ impl TypoSuggester {
     pub fn detect_missing_syntax(&self, line: &str) -> Vec<String> {
         let mut suggestions = Vec::new();
 
-        // Missing colon after keywords
         let keywords_needing_colon = [
             "if ", "elif ", "else", "for ", "while ", "def ", "class ", "try", "except", "finally",
             "with ",
@@ -237,7 +232,6 @@ impl TypoSuggester {
             }
         }
 
-        // Unclosed parentheses, brackets, braces
         let open_parens = line.chars().filter(|&c| c == '(').count();
         let close_parens = line.chars().filter(|&c| c == ')').count();
         if open_parens > close_parens {
@@ -262,7 +256,6 @@ impl TypoSuggester {
             suggestions.push("Extra closing '}' - no matching opening brace".to_string());
         }
 
-        // Unclosed quotes
         let single_quotes = line.chars().filter(|&c| c == '\'').count();
         let double_quotes = line.chars().filter(|&c| c == '"').count();
         if single_quotes % 2 == 1 {
@@ -295,7 +288,7 @@ impl TypoSuggester {
 
         for attr in available_attrs {
             let distance = Self::levenshtein_distance(typo, attr);
-            // Only suggest if distance is small (1-2 characters different)
+
             if distance > 0 && distance <= 2 && distance < best_distance {
                 best_distance = distance;
                 best_match = Some(attr.clone());

@@ -23,18 +23,13 @@ pub use context::ErrorContext;
 pub use diagnostic::{Diagnostic, DiagnosticCollector};
 pub use formatter::DiagnosticFormatter;
 pub use kinds::ErrorKind as UnifiedErrorKind;
+pub use kinds::ErrorKind;
 pub use recovery::{
     RecoveryAction, RecoveryConfig, RecoveryManager, RecoveryStats, RecoveryStrategy, SyncPoint,
 };
 pub use suggestions::TypoSuggester;
+pub use types::Error as ParseError;
 pub use types::{Error as UnifiedError, ErrorContextExt, RelatedInformation, error};
 pub use warnings::{Warning, WarningCategory, WarningCollector, WarningKind};
 
-// Legacy re-exports for backward compatibility with parser
-// TODO: Migrate parser to use UnifiedError directly and remove these
-pub use kinds::ErrorKind;
-pub use types::Error as ParseError;
-
-/// Legacy type alias for backward compatibility
-/// TODO: Migrate to Result<T, UnifiedError>
 pub type ParseResult<T> = Result<T, ParseError>;

@@ -157,7 +157,7 @@ impl<'a> AsyncValidator<'a> {
         if !self.is_awaitable_type(&expr_type) && !matches!(expr_type, Type::Unknown) {
             self.errors.push(*error(
                 ErrorKind::InvalidFutureType {
-                    expr: format!("{:?}", expr), // TODO: better expression formatting
+                    expr: crate::ast::expr_to_string(expr),
                     actual_type: expr_type.display_name(),
                 },
                 span,

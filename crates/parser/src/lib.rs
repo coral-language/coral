@@ -75,7 +75,6 @@ pub use lexer::{Lexer, Token};
 pub use parser::{Mode, Parser};
 pub use visitor::Visitor;
 
-// Re-export key semantic analysis components
 pub use semantic::module::ModuleExportRegistry;
 pub use semantic::passes::manager::{PassManager, PassManagerConfig, PassPriority, PassStatistics};
 pub use semantic::symbol::table::SymbolTable;
@@ -281,12 +280,11 @@ fn parse_with_config(
     let lexer = Lexer::new(source);
     let mut parser = Parser::with_mode(lexer, arena, config.mode);
 
-    // Parse according to mode
     let module = match config.mode {
         Mode::Module => parser.parse_module()?,
         Mode::Eval => {
             let expr = parser.parse_eval()?;
-            // Wrap expression in module for analysis
+
             let expr_span = expr.span();
             let stmt = ast::nodes::Stmt::Expr(ast::nodes::ExprStmt {
                 value: expr,
@@ -301,7 +299,7 @@ fn parse_with_config(
         }
         Mode::Interactive => {
             let stmt = parser.parse_interactive()?;
-            // Wrap statement in module for analysis
+
             let stmt_span = stmt.span();
             let body = arena.alloc_slice_vec(vec![stmt]);
             arena.alloc(Module {
@@ -312,7 +310,6 @@ fn parse_with_config(
         }
     };
 
-    // Create PassManager with configuration
     let mut manager = PassManager::with_config(
         config.project_root.clone(),
         PassManagerConfig {
@@ -325,20 +322,17 @@ fn parse_with_config(
         },
     );
 
-    // Enable optional safety passes if requested
     if config.enable_safety_passes {
         manager.enable_pass("ownership_check");
         manager.enable_pass("concurrency_check");
         manager.enable_pass("protocol_checking");
     }
 
-    // Run all passes with file path from config
     let diagnostics = match manager.run_all_passes(module, source, config.file_path.clone()) {
         Ok(_) => Vec::new(),
         Err(diagnostics) => diagnostics,
     };
 
-    // Extract results from PassManager
     let symbol_table = manager.take_symbol_table();
     let exports = manager.take_export_registry();
     let statistics = if config.collect_statistics {

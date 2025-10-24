@@ -154,6 +154,10 @@ pub struct TypeInferenceContext {
     generator_yields: HashMap<String, Vec<Type>>,
     /// Module exports for cross-module type resolution (module_name -> export_name -> type)
     pub(crate) module_exports: HashMap<String, HashMap<String, Type>>,
+    /// Class attributes for user-defined classes (class_name, attr_name) -> attr_type
+    pub(crate) class_attributes: HashMap<(String, String), Type>,
+    /// Method resolution order for each class (class_name -> [base classes in order])
+    pub(crate) class_mro: HashMap<String, Vec<String>>,
 }
 
 impl TypeInferenceContext {
@@ -164,12 +168,24 @@ impl TypeInferenceContext {
             expected_type_stack: vec![None], // Start with no expectation
             generator_yields: HashMap::new(),
             module_exports: HashMap::new(),
+            class_attributes: HashMap::new(),
+            class_mro: HashMap::new(),
         }
     }
 
     /// Set module exports for cross-module type resolution
     pub fn set_module_exports(&mut self, exports: HashMap<String, HashMap<String, Type>>) {
         self.module_exports = exports;
+    }
+
+    /// Set class attributes for user-defined class attribute resolution
+    pub fn set_class_attributes(&mut self, attributes: HashMap<(String, String), Type>) {
+        self.class_attributes = attributes;
+    }
+
+    /// Set class MRO (method resolution order) for inheritance lookups
+    pub fn set_class_mro(&mut self, mro: HashMap<String, Vec<String>>) {
+        self.class_mro = mro;
     }
 
     /// Get the inferred type for an expression by span
@@ -251,15 +267,25 @@ impl<'a> TypeInference<'a> {
     #[allow(clippy::only_used_in_recursion)]
     fn resolve_attribute_type(&mut self, base_ty: &Type, attr_name: &str) -> Type {
         match base_ty {
-            Type::Instance(_class_name) => {
-                // For user-defined class instances, resolve using ClassAnalyzer
-                // ClassAnalyzer integration requires passing analyzer state through context
-                // Full implementation would:
-                // 1. Get ClassAnalyzer from context
-                // 2. Call analyzer.resolve_attribute_type(class_name, attr_name)
-                // 3. Walk MRO for attribute lookup
-                // 4. Return property descriptor types for @property methods
-                // 5. Return method types for @operator decorated methods
+            Type::Instance(class_name) => {
+                // For user-defined class instances, look up attribute in class metadata
+                // First try direct attribute lookup
+                let key = (class_name.to_string(), attr_name.to_string());
+                if let Some(attr_type) = self.context.class_attributes.get(&key) {
+                    return attr_type.clone();
+                }
+
+                // If not found directly, walk the MRO (method resolution order)
+                if let Some(mro) = self.context.class_mro.get(class_name.as_str()) {
+                    for base_class in mro {
+                        let base_key = (base_class.clone(), attr_name.to_string());
+                        if let Some(attr_type) = self.context.class_attributes.get(&base_key) {
+                            return attr_type.clone();
+                        }
+                    }
+                }
+
+                // Attribute not found in class hierarchy
                 Type::Unknown
             }
             Type::Class(_class_name) => {
@@ -1086,6 +1112,45 @@ impl<'a> TypeInference<'a> {
                     .mark_current_function_as_generator(elem_ty.clone());
                 Type::generator(elem_ty)
             }
+
+            // String expressions
+            Expr::TString(_) => Type::Str,
+            Expr::JoinedStr(_) => Type::Str,
+            Expr::FormattedValue(_) => Type::Str,
+
+            // Starred expressions - type depends on context
+            Expr::Starred(starred) => self.infer_expr(starred.value),
+
+            // Await expressions - unwrap the awaited type
+            Expr::Await(await_expr) => {
+                let awaited_type = self.infer_expr(await_expr.value);
+
+                // Unwrap coroutine/future types to get the yielded value type
+                match awaited_type {
+                    // Coroutine(T) -> T
+                    Type::Coroutine(inner) => *inner,
+                    // Handle common async library types (Future, Task, Coroutine instances)
+                    Type::Instance(ref name) if name == "Future" || name == "Task" || name == "Coroutine" => {
+                        // Without generic type info, we can't determine the inner type
+                        Type::Unknown
+                    }
+                    // Generic types might have the awaited type as a parameter
+                    Type::Generic { base, params } if matches!(*base, Type::Instance(ref n) if n == "Future" || n == "Task" || n == "Coroutine") => {
+                        // First parameter is typically the return type
+                        params.first().cloned().unwrap_or(Type::Unknown)
+                    }
+                    // Unknown types are conservatively treated as awaitable
+                    Type::Unknown => Type::Unknown,
+                    // For any other type, assume it's the awaited value (validation happens elsewhere)
+                    other => other,
+                }
+            }
+
+            // Slice expressions - used in subscripts
+            Expr::Slice(_) => Type::Unknown, // Slices don't have a direct type
+
+            // Named expressions (walrus operator :=)
+            Expr::NamedExpr(named) => self.infer_expr(named.value),
 
             _ => Type::Unknown,
         };

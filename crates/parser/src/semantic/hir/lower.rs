@@ -9,7 +9,6 @@ use crate::arena::Arena;
 use crate::arena::interner::Interner;
 use crate::arena::symbol::Symbol;
 use crate::ast::*;
-use crate::semantic::symbol::SymbolTable;
 use crate::semantic::types::Type;
 use text_size::TextRange;
 
@@ -56,8 +55,6 @@ pub struct HirLowerer<'a> {
     arena: &'a Arena,
     /// String interner for symbol resolution
     interner: &'a mut Interner,
-    /// Symbol table for name resolution
-    symbol_table: SymbolTable,
     /// Class analyzer for MRO computation
     class_analyzer: ClassAnalyzer<'a>,
     /// Errors collected during lowering
@@ -66,14 +63,15 @@ pub struct HirLowerer<'a> {
 
 impl<'a> HirLowerer<'a> {
     /// Create a new HIR lowerer
+    ///
+    /// Note: HIR lowering assumes name resolution has already validated all names.
+    /// It doesn't perform name validation - that's the job of the name_resolution pass.
     pub fn new(arena: &'a Arena, interner: &'a mut Interner) -> Self {
-        let symbol_table = SymbolTable::new();
         let class_analyzer = ClassAnalyzer::new();
 
         Self {
             arena,
             interner,
-            symbol_table,
             class_analyzer,
             errors: Vec::new(),
         }
@@ -687,25 +685,20 @@ impl<'a> HirLowerer<'a> {
         }
     }
 
-    /// Lower a name expression with symbol resolution
+    /// Lower a name expression
+    ///
+    /// Note: Name validation is done by the name_resolution pass before HIR lowering.
+    /// We assume all names are valid and just create the HIR node.
     fn lower_name_expression(&mut self, name: &NameExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Look up the symbol in the symbol table
-        if let Some((symbol, _)) = self.symbol_table.lookup(name.id) {
-            let ty = symbol.get_type().cloned().unwrap_or(Type::Unknown);
-            // Create a symbol ID based on the symbol's name hash for consistency
-            let symbol_id = crate::arena::symbol::Symbol::new(name.id.len() as u32);
-            Some(TypedExpr::Name(TypedNameExpr {
-                symbol: symbol_id,
-                ty,
-                span: name.span,
-            }))
-        } else {
-            self.errors.push(HirLoweringError::UndefinedName {
-                name: name.id.to_string(),
-                span: name.span,
-            });
-            None
-        }
+        // Create a symbol ID for this name
+        let symbol_id = crate::arena::symbol::Symbol::new(name.id.len() as u32);
+
+        // Type will be inferred by the type inference pass
+        Some(TypedExpr::Name(TypedNameExpr {
+            symbol: symbol_id,
+            ty: Type::Unknown,
+            span: name.span,
+        }))
     }
 
     /// Infer type for a literal value

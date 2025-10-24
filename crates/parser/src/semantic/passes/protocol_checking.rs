@@ -472,8 +472,111 @@ impl<'a> ProtocolChecker<'a> {
             }
         }
 
-        // TODO: Validate default arguments compatibility
-        // TODO: Handle *args/**kwargs matching
+        // Validate default arguments compatibility
+        // Default arguments should match or class can have more defaults than protocol
+        let protocol_defaults = protocol_sig.args.defaults;
+        let class_defaults = class_sig.args.defaults;
+
+        // Class must provide at least as many defaults as protocol requires
+        if class_defaults.len() < protocol_defaults.len() {
+            return false;
+        }
+
+        // Check that overlapping defaults are compatible types
+        let protocol_required_params = protocol_sig.args.args.len() - protocol_defaults.len();
+        let class_required_params = class_sig.args.args.len() - class_defaults.len();
+
+        // Class cannot require more parameters than protocol
+        if class_required_params > protocol_required_params {
+            return false;
+        }
+
+        // Handle *args matching (varargs)
+        match (&protocol_sig.args.vararg, &class_sig.args.vararg) {
+            (Some(protocol_vararg), Some(class_vararg)) => {
+                // Both have varargs - check type compatibility
+                if let (Some(protocol_annotation), Some(class_annotation)) = (
+                    protocol_vararg.annotation.as_ref(),
+                    class_vararg.annotation.as_ref(),
+                ) {
+                    let protocol_type = self.expr_to_type(protocol_annotation);
+                    let class_type = self.expr_to_type(class_annotation);
+
+                    // Varargs are contravariant (like parameters)
+                    if !protocol_type.is_subtype_of(&class_type) {
+                        return false;
+                    }
+                }
+            }
+            (Some(_), None) => {
+                // Protocol requires varargs but class doesn't provide it
+                return false;
+            }
+            (None, Some(_)) => {
+                // Class provides varargs but protocol doesn't require it - OK (more flexible)
+            }
+            (None, None) => {
+                // Neither has varargs - OK
+            }
+        }
+
+        // Handle **kwargs matching (keyword arguments)
+        match (&protocol_sig.args.kwarg, &class_sig.args.kwarg) {
+            (Some(protocol_kwarg), Some(class_kwarg)) => {
+                // Both have kwargs - check type compatibility
+                if let (Some(protocol_annotation), Some(class_annotation)) = (
+                    protocol_kwarg.annotation.as_ref(),
+                    class_kwarg.annotation.as_ref(),
+                ) {
+                    let protocol_type = self.expr_to_type(protocol_annotation);
+                    let class_type = self.expr_to_type(class_annotation);
+
+                    // Kwargs are contravariant (like parameters)
+                    if !protocol_type.is_subtype_of(&class_type) {
+                        return false;
+                    }
+                }
+            }
+            (Some(_), None) => {
+                // Protocol requires kwargs but class doesn't provide it
+                return false;
+            }
+            (None, Some(_)) => {
+                // Class provides kwargs but protocol doesn't require it - OK (more flexible)
+            }
+            (None, None) => {
+                // Neither has kwargs - OK
+            }
+        }
+
+        // Check keyword-only arguments
+        let protocol_kwonly = protocol_sig.args.kwonlyargs;
+        let class_kwonly = class_sig.args.kwonlyargs;
+
+        // All protocol keyword-only args must be present in class
+        for protocol_kwonly_arg in protocol_kwonly {
+            let found = class_kwonly.iter().any(|class_arg| {
+                if class_arg.arg == protocol_kwonly_arg.arg {
+                    // Check type compatibility if both have annotations
+                    if let (Some(protocol_ann), Some(class_ann)) =
+                        (&protocol_kwonly_arg.annotation, &class_arg.annotation)
+                    {
+                        let protocol_type = self.expr_to_type(protocol_ann);
+                        let class_type = self.expr_to_type(class_ann);
+                        // Contravariant like regular parameters
+                        protocol_type.is_subtype_of(&class_type)
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            });
+
+            if !found {
+                return false;
+            }
+        }
 
         true
     }

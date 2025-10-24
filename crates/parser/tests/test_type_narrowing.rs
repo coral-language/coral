@@ -17,7 +17,6 @@ def process(value):
         pass
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -32,7 +31,6 @@ def check_value(value):
     x = value
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -48,7 +46,6 @@ def check_value(value):
         pass
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -64,7 +61,6 @@ def check_value(value):
         pass
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -78,7 +74,6 @@ def process(value):
             x = value
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -98,7 +93,6 @@ def process(value):
         x = value
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }
 
@@ -114,6 +108,5 @@ def process(value):
     return 0
 "#;
 
-    // Test that parsing completes without panicking
     let _ = DiagnosticTestBuilder::errors(source);
 }

@@ -3,7 +3,7 @@
 use crate::arena::symbol::Symbol;
 use crate::semantic::symbol::SymbolTable;
 use crate::semantic::types::Type;
-// TypedExpr is used in the module
+
 use super::class_analysis::ClassAnalyzer;
 use super::typed_stmt::TypedStmt;
 use text_size::TextRange;
@@ -257,5 +257,4 @@ impl<'a> HirContext<'a> {
     }
 }
 
-// Use the types from typed_stmt module
 pub use super::typed_stmt::{TypedClassDefStmt, TypedFuncDefStmt};

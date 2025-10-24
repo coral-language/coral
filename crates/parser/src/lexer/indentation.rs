@@ -61,14 +61,12 @@ impl IndentationTracker {
         let current_indent = *self.indent_stack.last().unwrap();
 
         if indent_level > current_indent {
-            // Increased indentation
             self.indent_stack.push(indent_level);
             tokens.push(Token::new(
                 TokenKind::Indent,
                 TextRange::new(position, position),
             ));
         } else if indent_level < current_indent {
-            // Check if this is a valid unindent level (must match some level in stack)
             let mut is_valid_unindent = false;
             for &level in &self.indent_stack {
                 if level == indent_level {
@@ -78,7 +76,6 @@ impl IndentationTracker {
             }
 
             if is_valid_unindent {
-                // Valid unindent - generate DEDENTs until we reach the target level
                 while let Some(&level) = self.indent_stack.last() {
                     if level <= indent_level {
                         break;
@@ -90,7 +87,6 @@ impl IndentationTracker {
                     ));
                 }
             } else {
-                // Invalid unindent - generate error but don't change stack or generate tokens
                 let error = error(
                     ErrorKind::UnindentMismatch,
                     TextRange::new(position, position),
@@ -135,7 +131,7 @@ impl IndentationTracker {
                 }
                 '\t' => {
                     has_tabs = true;
-                    // Standard: 1 tab = 8 spaces for indentation calculation
+
                     level += 8;
                 }
                 _ => break,
@@ -168,7 +164,6 @@ impl IndentationTracker {
     ) -> Vec<Warning> {
         let mut warnings = Vec::new();
 
-        // Always warn about mixed tabs and spaces in a single line
         if analysis.has_mixed {
             warnings.push(Warning::new(
                 WarningKind::MixedTabsAndSpaces {
@@ -179,24 +174,16 @@ impl IndentationTracker {
             ));
         }
 
-        // Establish or check indentation style consistency
-        // Only check consistency for lines that actually have indentation
         if analysis.level > 0 {
             match (&self.indentation_style, analysis.style) {
                 (None, IndentStyle::Spaces) => {
-                    // First indented line uses spaces - establish this as the style
                     self.indentation_style = Some(IndentStyle::Spaces);
                 }
                 (None, IndentStyle::Tabs) => {
-                    // First indented line uses tabs - establish this as the style
                     self.indentation_style = Some(IndentStyle::Tabs);
                 }
-                (None, IndentStyle::Mixed) => {
-                    // First indented line is mixed - this is already warned about above
-                    // Don't establish a style since it's inconsistent
-                }
+                (None, IndentStyle::Mixed) => {}
                 (Some(IndentStyle::Spaces), IndentStyle::Tabs) => {
-                    // Previously established spaces, but now seeing tabs
                     warnings.push(Warning::new(
                         WarningKind::InconsistentIndentation {
                             expected_style: IndentStyle::Spaces.as_str().to_string(),
@@ -207,7 +194,6 @@ impl IndentationTracker {
                     ));
                 }
                 (Some(IndentStyle::Tabs), IndentStyle::Spaces) => {
-                    // Previously established tabs, but now seeing spaces
                     warnings.push(Warning::new(
                         WarningKind::InconsistentIndentation {
                             expected_style: IndentStyle::Tabs.as_str().to_string(),
@@ -217,9 +203,7 @@ impl IndentationTracker {
                         line_span,
                     ));
                 }
-                _ => {
-                    // Consistent usage or already established mixed style - no warning needed
-                }
+                _ => {}
             }
         }
 

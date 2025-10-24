@@ -64,6 +64,8 @@ def check(x: int) -> str:
         return "positive"
     elif x < 0:
         return "negative"
+    else:
+        return "zero"
 "#;
 
     DiagnosticTestBuilder::errors(source).assert_none();
@@ -301,6 +303,8 @@ def check_bool(value: bool) -> str:
             return "yes"
         case False:
             return "no"
+        case _:
+            return "unknown"
 "#;
 
     DiagnosticTestBuilder::errors(source).assert_none();

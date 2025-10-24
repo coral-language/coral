@@ -13,6 +13,8 @@ use std::collections::{HashMap, HashSet};
 pub struct DefiniteAssignmentPass {
     errors: Vec<Error>,
     current_function: Option<String>,
+    /// Module-level definitions (classes, functions, global variables)
+    module_level_defs: HashSet<String>,
 }
 
 impl Default for DefiniteAssignmentPass {
@@ -27,6 +29,30 @@ impl DefiniteAssignmentPass {
         DefiniteAssignmentPass {
             errors: Vec::new(),
             current_function: None,
+            module_level_defs: HashSet::new(),
+        }
+    }
+
+    /// Collect module-level definitions (class names, function names, global variables)
+    fn collect_module_defs(&mut self, module: &Module) {
+        for stmt in module.body {
+            match stmt {
+                Stmt::ClassDef(class) => {
+                    self.module_level_defs.insert(class.name.to_string());
+                }
+                Stmt::FuncDef(func) => {
+                    self.module_level_defs.insert(func.name.to_string());
+                }
+                Stmt::Assign(assign) => {
+                    // Add module-level assignments
+                    for target in assign.targets {
+                        if let crate::ast::expr::Expr::Name(name) = target {
+                            self.module_level_defs.insert(name.id.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -36,6 +62,10 @@ impl DefiniteAssignmentPass {
         module: &Module,
         function_cfgs: &HashMap<String, ControlFlowGraph>,
     ) -> Vec<Error> {
+        // First, collect all module-level definitions
+        self.collect_module_defs(module);
+
+        // Then analyze each statement
         for stmt in module.body {
             self.analyze_stmt(stmt, function_cfgs);
         }
@@ -113,64 +143,37 @@ impl DefiniteAssignmentPass {
     fn get_initial_defs(&self, func: &crate::ast::nodes::FuncDefStmt) -> HashSet<String> {
         let mut defs = HashSet::new();
 
+        // Positional-only arguments (Python 3.8+)
+        for arg in func.args.posonlyargs {
+            defs.insert(arg.arg.to_string());
+        }
+
+        // Regular positional arguments
         for arg in func.args.args {
             defs.insert(arg.arg.to_string());
         }
 
+        // *args
         if let Some(ref vararg) = func.args.vararg {
             defs.insert(vararg.arg.to_string());
         }
 
-        if let Some(ref kwarg) = func.args.kwarg {
-            defs.insert(kwarg.arg.to_string());
-        }
-
+        // Keyword-only arguments
         for kwonly in func.args.kwonlyargs {
             defs.insert(kwonly.arg.to_string());
+        }
+
+        // **kwargs
+        if let Some(ref kwarg) = func.args.kwarg {
+            defs.insert(kwarg.arg.to_string());
         }
 
         defs
     }
 
     fn is_builtin_or_global(&self, name: &str) -> bool {
-        matches!(
-            name,
-            "True"
-                | "False"
-                | "None"
-                | "print"
-                | "len"
-                | "range"
-                | "str"
-                | "int"
-                | "float"
-                | "bool"
-                | "list"
-                | "dict"
-                | "set"
-                | "tuple"
-                | "abs"
-                | "min"
-                | "max"
-                | "sum"
-                | "isinstance"
-                | "issubclass"
-                | "type"
-                | "enumerate"
-                | "zip"
-                | "map"
-                | "filter"
-                | "open"
-                | "input"
-                | "Exception"
-                | "ValueError"
-                | "TypeError"
-                | "KeyError"
-                | "IndexError"
-                | "AttributeError"
-                | "NameError"
-                | "RuntimeError"
-        )
+        // Check if it's a builtin type/function OR a module-level definition
+        crate::semantic::builtins::is_builtin(name) || self.module_level_defs.contains(name)
     }
 
     /// Get the collected errors

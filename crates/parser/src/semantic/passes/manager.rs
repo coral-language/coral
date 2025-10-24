@@ -275,6 +275,9 @@ pub struct PassManagerConfig {
     pub pass_timeout_seconds: Option<u64>,
     /// Maximum depth for re-export chain resolution (prevents infinite loops)
     pub max_reexport_depth: usize,
+    /// Enable strict attribute checking (reject dynamic/unknown attributes)
+    /// When false (default), allows Python-style dynamic attributes
+    pub strict_attribute_checking: bool,
 }
 
 impl Default for PassManagerConfig {
@@ -289,8 +292,9 @@ impl Default for PassManagerConfig {
             enable_persistent_cache: false, // Disabled by default for compatibility
             cache_config: Some(CacheConfig::default()),
             metrics_config: MetricsConfig::default(),
-            pass_timeout_seconds: None, // No timeout by default
-            max_reexport_depth: 10,     // Default to 10 levels
+            pass_timeout_seconds: None,       // No timeout by default
+            max_reexport_depth: 10,           // Default to 10 levels
+            strict_attribute_checking: false, // Lenient by default for Python compatibility
         }
     }
 }
@@ -915,17 +919,23 @@ impl PassManager {
     }
 
     /// Run name resolution pass
-    fn run_name_resolution(&mut self, module: &Module, _source: &str) -> PassResult {
+    fn run_name_resolution(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::name_resolution::NameResolver;
 
         let mut resolver = NameResolver::new();
         resolver.resolve_module(module);
 
         // Store symbol table in analysis context for subsequent passes
-        let (symbol_table, _errors) = resolver.into_symbol_table();
+        let (symbol_table, errors) = resolver.into_symbol_table();
         *self.analysis_context.symbol_table.write().unwrap() = symbol_table;
 
-        Ok(())
+        // Collect and return errors
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            let diagnostics: Vec<_> = errors.iter().map(|e| e.to_diagnostic(source)).collect();
+            Err(diagnostics)
+        }
     }
 
     /// Run import resolution pass
@@ -1138,6 +1148,19 @@ impl PassManager {
         };
         type_context.set_module_exports(module_exports);
 
+        // Populate class attributes and MRO for user-defined class resolution
+        let class_attributes = {
+            let attrs = self.analysis_context.class_attributes.read().unwrap();
+            attrs.clone()
+        };
+        type_context.set_class_attributes(class_attributes);
+
+        let class_mro = {
+            let mro = self.analysis_context.class_mro.read().unwrap();
+            mro.clone()
+        };
+        type_context.set_class_mro(class_mro);
+
         // Run inference
         let mut inferrer = TypeInference::new(&mut type_context);
         inferrer.infer_module(module);
@@ -1153,13 +1176,8 @@ impl PassManager {
         use crate::semantic::passes::type_checking::TypeChecker;
 
         // Use the shared type context from type_inference
-        // We need to read it to create a TypeCheckContext, then check types
-        let inference_context = {
-            let type_ctx = self.analysis_context.type_context.read().unwrap();
-            // Clone the context for type checking
-            // TODO: Refactor TypeCheckContext to work with &TypeInferenceContext
-            type_ctx.clone()
-        };
+        // Borrow the context instead of cloning for better performance
+        let type_ctx_guard = self.analysis_context.type_context.read().unwrap();
 
         // Get class metadata for attribute validation
         let class_attributes = {
@@ -1167,8 +1185,11 @@ impl PassManager {
             attrs.clone()
         };
 
-        let mut type_context =
-            TypeCheckContext::with_class_metadata(inference_context, class_attributes);
+        let mut type_context = TypeCheckContext::with_class_metadata_and_config(
+            &type_ctx_guard,
+            class_attributes,
+            self.config.strict_attribute_checking,
+        );
 
         let mut checker = TypeChecker::new(&mut type_context);
         checker.check_module(module);
@@ -1427,8 +1448,14 @@ impl PassManager {
                     // Create a temporary pass manager for this module
                     let mut temp_manager =
                         PassManager::with_config(self.root_dir.clone(), self.config.clone());
-                    // TODO: Thread through actual file path for each module
-                    let result = temp_manager.run_all_passes(module, source, None);
+
+                    // Get file path from module graph if available
+                    let file_path = self
+                        .module_graph()
+                        .and_then(|graph| graph.get_module(module_name))
+                        .and_then(|node| node.file_path.clone());
+
+                    let result = temp_manager.run_all_passes(module, source, file_path);
                     (module_name.clone(), result)
                 } else {
                     (
@@ -1827,8 +1854,13 @@ impl PassManager {
         let mut all_diagnostics = Vec::new();
 
         for (module_name, (module, source)) in modules {
-            // TODO: Thread through actual file path for each module
-            match self.run_all_passes(module, source, None) {
+            // Get file path from module graph if available
+            let file_path = self
+                .module_graph()
+                .and_then(|graph| graph.get_module(module_name))
+                .and_then(|node| node.file_path.clone());
+
+            match self.run_all_passes(module, source, file_path) {
                 Ok(()) => {
                     if let Some(graph) = self.module_graph_mut() {
                         graph.set_module_state(
@@ -1959,6 +1991,7 @@ mod tests {
             pass_timeout_seconds: Some(30),
             disabled_passes: HashSet::new(),
             verbose: true,
+            strict_attribute_checking: false,
         };
 
         let manager = PassManager::with_config(PathBuf::from("/test"), config);

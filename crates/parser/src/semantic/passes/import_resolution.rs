@@ -2,121 +2,10 @@ use crate::ast::expr::Expr;
 use crate::ast::nodes::{FromStmt, ImportStmt, Module, Stmt};
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
 use crate::error::{Warning, WarningKind};
+use crate::semantic::builtins::is_builtin;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use text_size::TextRange;
-
-/// Common builtin names that shouldn't be shadowed
-const BUILTINS: &[&str] = &[
-    // Types
-    "int",
-    "float",
-    "str",
-    "bool",
-    "bytes",
-    "list",
-    "tuple",
-    "dict",
-    "set",
-    "frozenset",
-    "range",
-    "slice",
-    "complex",
-    "bytearray",
-    "memoryview",
-    "object",
-    "type",
-    // Functions
-    "print",
-    "len",
-    "range",
-    "sum",
-    "min",
-    "max",
-    "abs",
-    "round",
-    "pow",
-    "sorted",
-    "reversed",
-    "enumerate",
-    "zip",
-    "map",
-    "filter",
-    "any",
-    "all",
-    "open",
-    "input",
-    "iter",
-    "next",
-    "hash",
-    "id",
-    "chr",
-    "ord",
-    "hex",
-    "oct",
-    "bin",
-    "repr",
-    "ascii",
-    "format",
-    "vars",
-    "dir",
-    "callable",
-    "isinstance",
-    "issubclass",
-    "hasattr",
-    "getattr",
-    "setattr",
-    "delattr",
-    // Exceptions
-    "Exception",
-    "BaseException",
-    "StopIteration",
-    "GeneratorExit",
-    "ValueError",
-    "TypeError",
-    "KeyError",
-    "IndexError",
-    "AttributeError",
-    "NameError",
-    "RuntimeError",
-    "NotImplementedError",
-    "ImportError",
-    "ModuleNotFoundError",
-    "SyntaxError",
-    "IndentationError",
-    "TabError",
-    "SystemError",
-    "SystemExit",
-    "KeyboardInterrupt",
-    "OSError",
-    "IOError",
-    "ZeroDivisionError",
-    "AssertionError",
-    "MemoryError",
-    "RecursionError",
-    "Warning",
-    "UserWarning",
-    "DeprecationWarning",
-    "SyntaxWarning",
-    "RuntimeWarning",
-    "FutureWarning",
-    "PendingDeprecationWarning",
-    "ImportWarning",
-    "UnicodeWarning",
-    "BytesWarning",
-    "ResourceWarning",
-    // Constants
-    "True",
-    "False",
-    "None",
-    "Ellipsis",
-    "NotImplemented",
-    // Other
-    "classmethod",
-    "staticmethod",
-    "property",
-    "super",
-];
 
 /// Import resolution pass - validates import statements and detects circular dependencies.
 ///
@@ -327,7 +216,7 @@ impl ImportResolver {
         let span_range = TextRange::new(span.0.into(), span.1.into());
 
         // Check if it shadows a builtin
-        if BUILTINS.contains(&name) {
+        if is_builtin(name) {
             self.warnings.push(Warning::new(
                 WarningKind::ShadowsBuiltin {
                     name: name.to_string(),

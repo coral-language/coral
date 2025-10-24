@@ -2,6 +2,7 @@
 
 pub mod concurrency;
 pub mod decorators;
+pub mod display;
 pub mod expr;
 pub mod node_id;
 pub mod nodes;
@@ -9,9 +10,9 @@ pub mod ops;
 pub mod patterns;
 pub mod protocols;
 
-// Re-export commonly used types
 pub use concurrency::{AsyncContext, AsyncFor, AsyncFunction, AsyncMarker, AsyncWith, AwaitHelper};
 pub use decorators::{Decorator, DecoratorList};
+pub use display::expr_to_string;
 pub use expr::*;
 pub use node_id::{NodeId, NodeIdGenerator};
 pub use nodes::*;

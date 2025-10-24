@@ -2,6 +2,7 @@
 
 use crate::ast::*;
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
+use crate::semantic::builtins::is_builtin;
 use crate::semantic::symbol::{BindingKind, ScopeType, Symbol, SymbolTable};
 use text_size::TextRange;
 
@@ -180,8 +181,10 @@ impl NameResolver {
     }
 
     fn visit_ann_assign(&mut self, ann: &AnnAssignStmt) {
-        // Visit the annotation
-        self.visit_expr_val(&ann.annotation);
+        // Note: We intentionally DO NOT visit the annotation here.
+        // Type annotations can contain forward references (e.g., class attributes
+        // referencing classes defined later in the file). Name resolution happens
+        // before type checking, so we defer annotation checking to type inference.
 
         // Visit the value if present
         if let Some(ref value) = ann.value {
@@ -315,12 +318,15 @@ impl NameResolver {
             Expr::Name(name) => {
                 // Record usage of this name
                 if self.symbol_table.record_usage(name.id, name.span).is_err() {
-                    self.errors.push(*error(
-                        ErrorKind::UndefinedName {
-                            name: name.id.to_string(),
-                        },
-                        name.span,
-                    ));
+                    // Only report error if it's not a builtin
+                    if !is_builtin(name.id) {
+                        self.errors.push(*error(
+                            ErrorKind::UndefinedName {
+                                name: name.id.to_string(),
+                            },
+                            name.span,
+                        ));
+                    }
                 }
             }
             Expr::BinOp(binop) => {
@@ -454,12 +460,15 @@ impl NameResolver {
             Expr::Name(name) => {
                 // Record usage of this name
                 if self.symbol_table.record_usage(name.id, name.span).is_err() {
-                    self.errors.push(*error(
-                        ErrorKind::UndefinedName {
-                            name: name.id.to_string(),
-                        },
-                        name.span,
-                    ));
+                    // Only report error if it's not a builtin
+                    if !is_builtin(name.id) {
+                        self.errors.push(*error(
+                            ErrorKind::UndefinedName {
+                                name: name.id.to_string(),
+                            },
+                            name.span,
+                        ));
+                    }
                 }
             }
             Expr::BinOp(binop) => {

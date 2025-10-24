@@ -10,8 +10,6 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_stmt(&mut self) -> ParseResult<Stmt<'a>> {
         let result = match self.peek().kind {
             TokenKind::Comment => {
-                // Skip comments - they should have been handled at a higher level
-                // If we encounter a comment here, it means the caller didn't skip them properly
                 return Err(error(
                     ErrorKind::UnexpectedToken {
                         expected: None,
@@ -46,7 +44,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Break => {
                 let span = self.peek().span;
-                // Validate context: break can only be used in loops
+
                 if !self.context.in_loop {
                     return Err(error(ErrorKind::BreakOutsideLoop, span));
                 }
@@ -56,7 +54,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Continue => {
                 let span = self.peek().span;
-                // Validate context: continue can only be used in loops
+
                 if !self.context.in_loop {
                     return Err(error(ErrorKind::ContinueOutsideLoop, span));
                 }
@@ -66,14 +64,9 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Yield => self.parse_yield_stmt(),
             TokenKind::Ident => {
-                // Check for soft keywords in statement context
                 let ident_text = self.get_ident_text();
                 match ident_text {
                     "match" => {
-                        // Look ahead to determine if this is a match statement or assignment
-                        // match statement: `match expr:`
-                        // assignment: `match = ...`
-                        // We need to check if there's an assignment operator
                         if self.current + 1 < self.tokens.len() {
                             let next_token = &self.tokens[self.current + 1];
                             if matches!(
@@ -94,10 +87,8 @@ impl<'a> Parser<'a> {
                                     | TokenKind::AtEqual
                                     | TokenKind::ColonEqual
                             ) {
-                                // It's an assignment, parse as simple statement
                                 self.parse_simple_stmt()
                             } else {
-                                // It's a match statement
                                 self.parse_match_stmt()
                             }
                         } else {
@@ -105,7 +96,6 @@ impl<'a> Parser<'a> {
                         }
                     }
                     "type" => {
-                        // Similar lookahead for type
                         if self.current + 1 < self.tokens.len() {
                             let next_token = &self.tokens[self.current + 1];
                             if matches!(
@@ -126,10 +116,8 @@ impl<'a> Parser<'a> {
                                     | TokenKind::AtEqual
                                     | TokenKind::ColonEqual
                             ) {
-                                // It's an assignment
                                 self.parse_simple_stmt()
                             } else {
-                                // It's a type alias statement
                                 self.parse_type_alias_stmt()
                             }
                         } else {
@@ -142,7 +130,6 @@ impl<'a> Parser<'a> {
             _ => self.parse_simple_stmt(),
         };
 
-        // Mark that we've seen a non-future statement (import stmts handle this themselves)
         if result.is_ok() {
             self.seen_non_future_statement = true;
         }
@@ -151,11 +138,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_assignment_target(&mut self) -> ParseResult<Expr<'a>> {
-        // Parse assignment targets that can include starred expressions
         if self.peek().kind == TokenKind::Star {
             let start = self.peek().span.start();
             self.advance();
-            // Parse the target after the star (e.g., 'y' in '*y')
+
             let target = if self.peek().kind == TokenKind::Ident {
                 let span = self.peek().span;
                 let name = self.consume_ident()?;
@@ -182,15 +168,12 @@ impl<'a> Parser<'a> {
 
         match self.peek().kind {
             TokenKind::Colon => {
-                // Check if this is a valid annotation target
-                // Valid targets: Name, Attribute, Subscript (but not parenthesized/tuple)
                 let is_valid_target = matches!(
                     expr,
                     Expr::Name(_) | Expr::Attribute(_) | Expr::Subscript(_)
                 );
 
                 if is_valid_target {
-                    // Annotated assignment: x: int = 5 or x: int
                     self.advance();
                     let annotation = self.parse_expression()?;
 
@@ -216,7 +199,6 @@ impl<'a> Parser<'a> {
                         span,
                     }))
                 } else {
-                    // Not a valid annotation target, treat as expression statement
                     self.consume_newline();
                     Ok(Stmt::Expr(ExprStmt {
                         value: expr.clone(),
@@ -225,7 +207,6 @@ impl<'a> Parser<'a> {
                 }
             }
             TokenKind::Comma => {
-                // Tuple assignment: x, y = ...
                 let start = expr.span().start();
                 let mut targets = vec![expr];
 
@@ -235,10 +216,8 @@ impl<'a> Parser<'a> {
 
                 let end = targets.last().map(|e| e.span().end()).unwrap_or(start);
 
-                // After parsing the tuple, we need to consume the equal sign
                 self.consume(TokenKind::Equal)?;
 
-                // Now parse the RHS - it might also be a tuple (e.g., 1, 2)
                 let first_value = self.parse_expression()?;
                 let value = if self.peek().kind == TokenKind::Comma {
                     let mut values = vec![first_value.clone()];
@@ -271,7 +250,6 @@ impl<'a> Parser<'a> {
                 }))
             }
             TokenKind::Equal => {
-                // Regular assignment: x = y or x = y = z
                 let target = expr;
 
                 let mut targets = vec![target];
@@ -344,7 +322,6 @@ impl<'a> Parser<'a> {
         let return_token = self.peek().span;
         self.consume(TokenKind::Return)?;
 
-        // Validate that return is inside a function
         if !self.context.in_function {
             return Err(error(ErrorKind::ReturnOutsideFunction, return_token));
         }
@@ -372,7 +349,6 @@ impl<'a> Parser<'a> {
 
         let test = self.parse_expression()?;
 
-        // Expect colon with recovery
         if self.peek().kind != TokenKind::Colon {
             self.recover_missing_colon("if statement")?;
         } else {
@@ -380,11 +356,9 @@ impl<'a> Parser<'a> {
             self.consume_newline();
         }
 
-        // Check if this is a single-line if statement or a block
         let body = if self.peek().kind == TokenKind::Indent {
             self.parse_block()?
         } else {
-            // Single-line if statement
             vec![self.parse_simple_stmt()?]
         };
         let mut orelse = vec![];
@@ -392,7 +366,6 @@ impl<'a> Parser<'a> {
         while self.match_token(TokenKind::Elif) {
             let _elif_test = self.parse_expression()?;
 
-            // Expect colon with recovery
             if self.peek().kind != TokenKind::Colon {
                 self.recover_missing_colon("elif clause")?;
             } else {
@@ -403,7 +376,6 @@ impl<'a> Parser<'a> {
         }
 
         if self.match_token(TokenKind::Else) {
-            // Expect colon with recovery
             if self.peek().kind != TokenKind::Colon {
                 self.recover_missing_colon("else clause")?;
             } else {
@@ -434,7 +406,6 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         self.consume(TokenKind::Def)?;
 
-        // Allow 'constructor' keyword as a function name
         let name = if self.peek().kind == TokenKind::Constructor {
             self.advance();
             self.arena.alloc_str("constructor")
@@ -442,7 +413,6 @@ impl<'a> Parser<'a> {
             self.consume_ident()?
         };
 
-        // Parse type parameters if present: def func[T, U](...):
         let type_params = if self.peek().kind == TokenKind::LeftBracket {
             self.parse_type_params()?
         } else {
@@ -459,39 +429,31 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::RightParen)?;
         self.pop_delimiter(')', closing_span)?;
 
-        // Parse return type annotation: -> Type
         let returns = if self.match_token(TokenKind::Arrow) {
             Some(Box::new(self.parse_expression()?))
         } else {
             None
         };
 
-        // Expect colon after function signature with recovery
         if self.peek().kind != TokenKind::Colon {
-            // Try to recover by inserting virtual colon
             self.recover_missing_colon("function definition")?;
         } else {
             self.consume(TokenKind::Colon)?;
             self.consume_newline();
         }
 
-        // Enter function context
         let saved_context = self.context;
         self.context = self.context.enter_function(is_async);
 
-        // Check if this is a single-line function or a block
         let body = if self.peek().kind == TokenKind::Indent {
             self.parse_block()?
         } else {
-            // Single-line function definition
             vec![self.parse_stmt()?]
         };
         let body_slice = self.arena.alloc_slice_vec(body);
 
-        // Extract function docstring (first string literal in body, if any)
         let docstring = Parser::extract_docstring_from_body(body_slice, self.source, self.arena);
 
-        // Restore context
         self.context = saved_context;
 
         Ok(Stmt::FuncDef(FuncDefStmt {
@@ -513,7 +475,6 @@ impl<'a> Parser<'a> {
 
         let test = self.parse_expression()?;
 
-        // Expect colon with recovery
         if self.peek().kind != TokenKind::Colon {
             self.recover_missing_colon("while statement")?;
         } else {
@@ -521,19 +482,16 @@ impl<'a> Parser<'a> {
             self.consume_newline();
         }
 
-        // Enter loop context
         let saved_context = self.context;
         self.context = self.context.enter_loop();
 
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
 
-        // Restore context for else block (not in loop)
         self.context = saved_context;
 
         let mut orelse = Vec::new();
         if self.match_token(TokenKind::Else) {
-            // Expect colon with recovery
             if self.peek().kind != TokenKind::Colon {
                 self.recover_missing_colon("else clause")?;
             } else {
@@ -562,13 +520,11 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         self.consume(TokenKind::For)?;
 
-        // Parse the target, which can be a tuple (e.g., "key, value")
         let target = self.parse_for_target()?;
 
         self.consume(TokenKind::In)?;
         let iter = self.parse_expression()?;
 
-        // Expect colon with recovery
         if self.peek().kind != TokenKind::Colon {
             self.recover_missing_colon("for statement")?;
         } else {
@@ -576,19 +532,16 @@ impl<'a> Parser<'a> {
             self.consume_newline();
         }
 
-        // Enter loop context
         let saved_context = self.context;
         self.context = self.context.enter_loop();
 
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
 
-        // Restore context for else block (not in loop)
         self.context = saved_context;
 
         let mut orelse = Vec::new();
         if self.match_token(TokenKind::Else) {
-            // Expect colon with recovery
             if self.peek().kind != TokenKind::Colon {
                 self.recover_missing_colon("else clause")?;
             } else {
@@ -620,12 +573,10 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         let first = self.parse_expression_with_context(false)?;
 
-        // Check if this is a tuple (multiple targets separated by commas)
         if self.peek().kind == TokenKind::Comma {
             let mut elts = vec![first];
 
             while self.match_token(TokenKind::Comma) {
-                // Allow trailing comma
                 if self.peek().kind == TokenKind::In {
                     break;
                 }
@@ -648,7 +599,6 @@ impl<'a> Parser<'a> {
 
         let name = self.consume_ident()?;
 
-        // Parse type parameters if present: class MyClass[T, U]:
         let type_params = if self.peek().kind == TokenKind::LeftBracket {
             self.parse_type_params()?
         } else {
@@ -663,16 +613,12 @@ impl<'a> Parser<'a> {
 
             if self.peek().kind != TokenKind::RightParen {
                 loop {
-                    // Parse base or keyword argument
                     let expr = self.parse_expression()?;
 
-                    // Check if this is a keyword argument (name=value)
                     if self.peek().kind == TokenKind::Equal {
-                        // This is a keyword argument like metaclass=Meta
                         self.advance(); // consume =
                         let value = self.parse_expression()?;
 
-                        // Extract the name from the expression (should be a Name)
                         let name = match expr {
                             Expr::Name(name_expr) => Some(name_expr.id),
                             _ => None, // This shouldn't happen in valid syntax
@@ -687,7 +633,6 @@ impl<'a> Parser<'a> {
                         break;
                     }
 
-                    // Allow trailing comma
                     if self.peek().kind == TokenKind::RightParen {
                         break;
                     }
@@ -707,7 +652,6 @@ impl<'a> Parser<'a> {
             )
         };
 
-        // Expect colon with recovery
         if self.peek().kind != TokenKind::Colon {
             self.recover_missing_colon("class definition")?;
         } else {
@@ -718,7 +662,6 @@ impl<'a> Parser<'a> {
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
 
-        // Extract class docstring (first string literal in body, if any)
         let docstring = Parser::extract_docstring_from_body(body_slice, self.source, self.arena);
 
         let end = body_slice.last().map(|s| s.span().end()).unwrap_or(start);
@@ -739,16 +682,13 @@ impl<'a> Parser<'a> {
     fn parse_dotted_name(&mut self) -> ParseResult<&'a str> {
         let mut parts = Vec::new();
 
-        // First part is required
         parts.push(self.consume_ident()?);
 
-        // Parse additional parts separated by dots
         while self.peek().kind == TokenKind::Dot {
             self.advance(); // consume the dot
             parts.push(self.consume_ident()?);
         }
 
-        // Join all parts with dots
         let full_name = parts.join(".");
         Ok(self.arena.alloc_str(&full_name))
     }
@@ -775,7 +715,6 @@ impl<'a> Parser<'a> {
         self.consume_newline();
         let end = self.peek().span.start();
 
-        // Regular imports mean we've seen a non-future statement
         self.seen_non_future_statement = true;
 
         Ok(Stmt::Import(ImportStmt {
@@ -788,8 +727,6 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         self.consume(TokenKind::From)?;
 
-        // Count leading dots for relative imports
-        // Note: `...` is lexed as Ellipsis (3 dots), so we need to handle both
         let mut level = 0;
         loop {
             match self.peek().kind {
@@ -805,14 +742,12 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Parse optional module name (can be dotted)
         let module = if self.peek().kind == TokenKind::Ident {
             Some(self.parse_dotted_name()?)
         } else {
             None
         };
 
-        // Validate __future__ imports
         let is_future_import = module == Some("__future__");
         if is_future_import && self.seen_non_future_statement {
             return Err(error(
@@ -821,9 +756,6 @@ impl<'a> Parser<'a> {
             ));
         }
 
-        // Validate relative imports don't have too many dots
-        // Note: We can't check actual package depth here without filesystem access,
-        // but we can check for obviously invalid cases (e.g., more than 10 levels)
         if level > 0 && module.is_none() && level > 10 {
             return Err(error(
                 ErrorKind::RelativeImportBeyondTopLevel,
@@ -833,10 +765,8 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenKind::Import)?;
 
-        // Check for parenthesized import list
         let has_parens = self.match_token(TokenKind::LeftParen);
 
-        // If we have parentheses, allow newlines after opening paren
         if has_parens {
             self.consume_newline();
         }
@@ -847,7 +777,6 @@ impl<'a> Parser<'a> {
             names.push(("*", None));
         } else {
             loop {
-                // Skip any newlines, indents, and dedents before parsing each name
                 while matches!(
                     self.peek().kind,
                     TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent
@@ -855,7 +784,6 @@ impl<'a> Parser<'a> {
                     self.advance();
                 }
 
-                // Check if we're at the end of the import list (right paren or EOF)
                 if has_parens && self.peek().kind == TokenKind::RightParen {
                     break;
                 }
@@ -871,7 +799,6 @@ impl<'a> Parser<'a> {
                 };
                 names.push((name, alias));
 
-                // Skip any newlines, indents, and dedents after name
                 while matches!(
                     self.peek().kind,
                     TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent
@@ -885,7 +812,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Skip any newlines, indents, and dedents before closing paren
         if has_parens {
             while matches!(
                 self.peek().kind,
@@ -899,7 +825,6 @@ impl<'a> Parser<'a> {
         self.consume_newline();
         let end = self.peek().span.start();
 
-        // Track that we've seen a non-future statement if this wasn't a future import
         if !is_future_import {
             self.seen_non_future_statement = true;
         }
@@ -918,7 +843,6 @@ impl<'a> Parser<'a> {
 
         let mut names = Vec::new();
 
-        // Parse export list: name [as alias], name [as alias], ...
         loop {
             let name = self.consume_ident()?;
             let alias = if self.match_token(TokenKind::As) {
@@ -933,7 +857,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Check for re-export: `export name, other from module`
         let module = if self.match_token(TokenKind::From) {
             Some(self.parse_dotted_name()?)
         } else {
@@ -954,7 +877,6 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         self.consume(TokenKind::Try)?;
 
-        // Expect colon with recovery
         if self.peek().kind != TokenKind::Colon {
             self.recover_missing_colon("try statement")?;
         } else {
@@ -973,10 +895,8 @@ impl<'a> Parser<'a> {
             let handler_start = self.peek().span.start();
             self.advance();
 
-            // Check for except* (exception groups - PEP 654)
             let is_exception_group = self.match_token(TokenKind::Star);
 
-            // Validate: cannot mix except and except* in same try statement
             if is_exception_group {
                 if has_regular_except {
                     return Err(error(
@@ -996,9 +916,7 @@ impl<'a> Parser<'a> {
             }
 
             let (typ, name) = if self.peek().kind == TokenKind::Colon {
-                // Bare except or bare except*
                 if is_exception_group {
-                    // except* requires a specific exception type
                     return Err(error(
                         ErrorKind::BareExceptStar,
                         TextRange::new(handler_start, self.peek().span.start()),
@@ -1015,7 +933,6 @@ impl<'a> Parser<'a> {
                 (typ, name)
             };
 
-            // Expect colon with recovery
             if self.peek().kind != TokenKind::Colon {
                 self.recover_missing_colon("except clause")?;
             } else {
@@ -1041,7 +958,6 @@ impl<'a> Parser<'a> {
 
         let mut orelse = Vec::new();
         if self.match_token(TokenKind::Else) {
-            // Expect colon with recovery
             if self.peek().kind != TokenKind::Colon {
                 self.recover_missing_colon("else clause")?;
             } else {
@@ -1053,7 +969,6 @@ impl<'a> Parser<'a> {
 
         let mut finalbody = Vec::new();
         if self.match_token(TokenKind::Finally) {
-            // Expect colon with recovery
             if self.peek().kind != TokenKind::Colon {
                 self.recover_missing_colon("finally clause")?;
             } else {
@@ -1101,7 +1016,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Expect colon with recovery
         if self.peek().kind != TokenKind::Colon {
             self.recover_missing_colon("with statement")?;
         } else {
@@ -1241,14 +1155,12 @@ impl<'a> Parser<'a> {
         match self.peek().kind {
             TokenKind::Def => self.parse_func_def(&[], true),
             TokenKind::For => {
-                // Validate that async for is inside an async function
                 if !self.context.in_async_function {
                     return Err(error(ErrorKind::AsyncForOutsideAsync, async_token));
                 }
                 self.parse_for_stmt(true)
             }
             TokenKind::With => {
-                // Validate that async with is inside an async function
                 if !self.context.in_async_function {
                     return Err(error(ErrorKind::AsyncWithOutsideAsync, async_token));
                 }
@@ -1269,19 +1181,16 @@ impl<'a> Parser<'a> {
         let yield_token = self.peek().span;
         self.consume(TokenKind::Yield)?;
 
-        // Validate that yield is inside a function
         if !self.context.in_function {
             return Err(error(ErrorKind::YieldOutsideFunction, yield_token));
         }
 
-        // Check for yield from
         if self.peek().kind == TokenKind::From {
             self.advance(); // consume 'from'
             let value = self.parse_expression()?;
             let end = value.span().end();
             self.consume_newline();
 
-            // Create a YieldFrom expression and wrap it in a YieldStmt
             let yield_from_expr = Expr::YieldFrom(YieldFromExpr {
                 value: self.arena.alloc(value),
                 span: TextRange::new(start, end),
@@ -1292,7 +1201,6 @@ impl<'a> Parser<'a> {
                 span: TextRange::new(start, end),
             }))
         } else {
-            // Regular yield
             let value = if self.peek().kind != TokenKind::Newline && !self.is_at_end() {
                 Some(self.arena.alloc(self.parse_expression()?))
             } else {
@@ -1315,7 +1223,7 @@ impl<'a> Parser<'a> {
 
     pub(super) fn parse_type_alias_stmt(&mut self) -> ParseResult<Stmt<'a>> {
         let start = self.peek().span.start();
-        // Consume 'type' as a soft keyword (it's now an Ident)
+
         if self.peek().kind == TokenKind::Ident && self.get_ident_text() == "type" {
             self.advance();
         } else {
@@ -1330,7 +1238,6 @@ impl<'a> Parser<'a> {
 
         let name = self.consume_ident()?;
 
-        // Parse type parameters if present: type Vector[T] = list[T]
         let type_params = if self.peek().kind == TokenKind::LeftBracket {
             self.parse_type_params()?
         } else {
@@ -1354,7 +1261,7 @@ impl<'a> Parser<'a> {
 
     pub(super) fn parse_match_stmt(&mut self) -> ParseResult<Stmt<'a>> {
         let start = self.peek().span.start();
-        // Consume 'match' as a soft keyword (it's now an Ident)
+
         if self.peek().kind == TokenKind::Ident && self.get_ident_text() == "match" {
             self.advance();
         } else {
@@ -1369,7 +1276,6 @@ impl<'a> Parser<'a> {
 
         let subject = self.parse_expression()?;
 
-        // Expect colon with recovery
         if self.peek().kind != TokenKind::Colon {
             self.recover_missing_colon("match statement")?;
         } else {
@@ -1397,7 +1303,7 @@ impl<'a> Parser<'a> {
 
     fn parse_match_case(&mut self) -> ParseResult<crate::ast::patterns::MatchCase<'a>> {
         let start = self.peek().span.start();
-        // Consume 'case' as a soft keyword (it's now an Ident)
+
         if self.peek().kind == TokenKind::Ident && self.get_ident_text() == "case" {
             self.advance();
         } else {
@@ -1418,7 +1324,6 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Expect colon with recovery
         if self.peek().kind != TokenKind::Colon {
             self.recover_missing_colon("case clause")?;
         } else {
@@ -1446,7 +1351,6 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         let first = self.parse_as_pattern()?;
 
-        // Check for | (or patterns)
         if self.peek().kind == TokenKind::Pipe {
             let mut patterns = vec![first];
 
@@ -1454,7 +1358,6 @@ impl<'a> Parser<'a> {
                 patterns.push(self.parse_as_pattern()?);
             }
 
-            // Validate that wildcard patterns don't appear in or-patterns
             for pattern in &patterns {
                 if self.is_wildcard_pattern(pattern) {
                     return Err(error(
@@ -1483,7 +1386,6 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         let pattern = self.parse_primary_pattern()?;
 
-        // Check for 'as' keyword
         if self.peek().kind == TokenKind::As {
             self.advance();
             let name = self.consume_ident()?;
@@ -1505,7 +1407,6 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
 
         match self.peek().kind {
-            // Wildcard pattern: _
             TokenKind::Ident => {
                 let name_str = self.source
                     [self.peek().span.start().into()..self.peek().span.end().into()]
@@ -1522,15 +1423,12 @@ impl<'a> Parser<'a> {
                     ));
                 }
 
-                // Check if it's a class pattern: ClassName(...) or a capture pattern
                 let name = self.consume_ident()?;
 
                 if self.peek().kind == TokenKind::LeftParen {
-                    // Class pattern
                     return self.parse_class_pattern(name, start);
                 }
 
-                // Simple capture pattern (bind to name)
                 let end = self.prev().span.end();
                 Ok(crate::ast::patterns::Pattern::MatchAs(
                     crate::ast::patterns::MatchAsPattern {
@@ -1541,7 +1439,6 @@ impl<'a> Parser<'a> {
                 ))
             }
 
-            // Literal patterns: True, False, None
             TokenKind::True => {
                 let span = self.peek().span;
                 self.advance();
@@ -1575,7 +1472,6 @@ impl<'a> Parser<'a> {
                 ))
             }
 
-            // Number and String literals - treat as value patterns
             TokenKind::Number | TokenKind::String => {
                 let expr = self.parse_expression()?;
                 let span = expr.span();
@@ -1584,7 +1480,6 @@ impl<'a> Parser<'a> {
                 ))
             }
 
-            // Sequence patterns: [a, b, c] or (a, b, c)
             TokenKind::LeftBracket => {
                 self.advance();
                 let patterns = self.parse_pattern_sequence(TokenKind::RightBracket)?;
@@ -1610,7 +1505,6 @@ impl<'a> Parser<'a> {
             TokenKind::LeftParen => {
                 self.advance();
 
-                // Empty tuple pattern
                 if self.peek().kind == TokenKind::RightParen {
                     let end = self.peek().span.end();
                     self.consume(TokenKind::RightParen)?;
@@ -1634,7 +1528,6 @@ impl<'a> Parser<'a> {
                 }
                 self.consume(TokenKind::RightParen)?;
 
-                // Single pattern in parens is just that pattern, not a sequence
                 if patterns.len() == 1 {
                     Ok(patterns.into_iter().next().unwrap())
                 } else {
@@ -1647,11 +1540,9 @@ impl<'a> Parser<'a> {
                 }
             }
 
-            // Mapping patterns: {key: pattern, ...}
             TokenKind::LeftBrace => {
                 self.advance();
 
-                // Empty mapping pattern
                 if self.peek().kind == TokenKind::RightBrace {
                     let end = self.peek().span.end();
                     self.consume(TokenKind::RightBrace)?;
@@ -1670,7 +1561,6 @@ impl<'a> Parser<'a> {
                 let mut rest = None;
 
                 loop {
-                    // Check for **rest pattern
                     if self.peek().kind == TokenKind::DoubleStar {
                         self.advance();
                         rest = Some(self.consume_ident()?);
@@ -1683,7 +1573,6 @@ impl<'a> Parser<'a> {
                             break;
                         }
                     } else {
-                        // key: pattern
                         let key = self.parse_expression()?;
                         if self.peek().kind != TokenKind::Colon {
                             return Err(error(
@@ -1731,7 +1620,6 @@ impl<'a> Parser<'a> {
                 ))
             }
 
-            // Unary minus for negative numbers
             TokenKind::Minus | TokenKind::Plus => {
                 let expr = self.parse_expression()?;
                 let span = expr.span();
@@ -1740,29 +1628,20 @@ impl<'a> Parser<'a> {
                 ))
             }
 
-            _ => {
-                // Try parsing as a value pattern (dotted name, etc.)
-                match self.parse_expression() {
-                    Ok(expr) => {
-                        let span = expr.span();
-                        Ok(crate::ast::patterns::Pattern::MatchValue(
-                            crate::ast::patterns::MatchValuePattern { value: expr, span },
-                        ))
-                    }
-                    Err(_) => {
-                        // Provide better error message for malformed patterns
-                        Err(error(
-                            ErrorKind::InvalidPatternSyntax {
-                                pattern: format!(
-                                    "Invalid pattern starting with '{:?}'",
-                                    self.peek().kind
-                                ),
-                            },
-                            self.peek().span,
-                        ))
-                    }
+            _ => match self.parse_expression() {
+                Ok(expr) => {
+                    let span = expr.span();
+                    Ok(crate::ast::patterns::Pattern::MatchValue(
+                        crate::ast::patterns::MatchValuePattern { value: expr, span },
+                    ))
                 }
-            }
+                Err(_) => Err(error(
+                    ErrorKind::InvalidPatternSyntax {
+                        pattern: format!("Invalid pattern starting with '{:?}'", self.peek().kind),
+                    },
+                    self.peek().span,
+                )),
+            },
         }
     }
 
@@ -1774,7 +1653,6 @@ impl<'a> Parser<'a> {
         let mut star_pattern_count = 0;
 
         while self.peek().kind != end_token && !self.is_at_end() {
-            // Check for star pattern: *rest
             if self.peek().kind == TokenKind::Star {
                 let star_start = self.peek().span.start();
                 self.advance();
@@ -1792,7 +1670,6 @@ impl<'a> Parser<'a> {
                     ));
                 }
 
-                // Star pattern is represented as MatchAs with a capture name
                 patterns.push(crate::ast::patterns::Pattern::MatchAs(
                     crate::ast::patterns::MatchAsPattern {
                         pattern: None,
@@ -1808,7 +1685,6 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            // Allow trailing comma
             if self.peek().kind == end_token {
                 break;
             }
@@ -1822,7 +1698,6 @@ impl<'a> Parser<'a> {
         class_name: &'a str,
         start: text_size::TextSize,
     ) -> ParseResult<crate::ast::patterns::Pattern<'a>> {
-        // class_name already consumed
         self.consume(TokenKind::LeftParen)?;
 
         let mut positional_patterns = Vec::new();
@@ -1831,11 +1706,9 @@ impl<'a> Parser<'a> {
         let mut seen_keyword = false;
 
         while self.peek().kind != TokenKind::RightParen && !self.is_at_end() {
-            // Check if it's a keyword pattern: name=pattern
             if self.peek().kind == TokenKind::Ident {
                 let next_pos = self.current + 1;
                 if next_pos < self.tokens.len() && self.tokens[next_pos].kind == TokenKind::Equal {
-                    // Keyword pattern
                     seen_keyword = true;
                     let attr_name = self.consume_ident()?;
                     self.consume(TokenKind::Equal)?;
@@ -1860,7 +1733,6 @@ impl<'a> Parser<'a> {
                 ));
             }
 
-            // Positional pattern
             positional_patterns.push(self.parse_pattern()?);
 
             if !self.match_token(TokenKind::Comma) {
@@ -1871,7 +1743,6 @@ impl<'a> Parser<'a> {
         let end = self.peek().span.end();
         self.consume(TokenKind::RightParen)?;
 
-        // Create a Name expression for the class
         let cls_expr = Expr::Name(crate::ast::expr::NameExpr {
             id: class_name,
             span: TextRange::new(

@@ -54,20 +54,16 @@ impl Error {
     pub fn to_diagnostic(&self, source: &str) -> Diagnostic {
         let metadata = self.kind.metadata();
 
-        // Use metadata description as the message (detailed)
-        // Use metadata title as the title (short)
         let mut diagnostic = Diagnostic::new(metadata.severity, metadata.description.to_string())
             .with_code(metadata.code)
             .with_error_type(metadata.error_type.to_string())
             .with_title(metadata.title.to_string())
             .with_context(ErrorContext::new(source.to_string(), self.span));
 
-        // Add suggestion from metadata if available
         if let Some(suggestion) = metadata.suggestion {
             diagnostic = diagnostic.with_suggestion(suggestion.to_string());
         }
 
-        // Add related information as additional context
         for related in &self.related_info {
             let context = ErrorContext::new(source.to_string(), related.span)
                 .with_message(related.message.clone());
