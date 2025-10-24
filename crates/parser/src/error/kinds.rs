@@ -253,6 +253,13 @@ pub enum ErrorKind {
         protocol_name: String,
         attribute_name: String,
     },
+    IncompatibleProtocolAttribute {
+        class_name: String,
+        protocol_name: String,
+        attribute_name: String,
+        expected: String,
+        found: String,
+    },
 
     /// Method signature doesn't match protocol
     MethodSignatureMismatch {

@@ -738,8 +738,17 @@ impl ErrorKind {
                 description: "The class is missing an attribute required by the protocol",
                 suggestion: Some("Add all attributes required by the protocol"),
             },
-            ErrorKind::MethodSignatureMismatch { .. } => ErrorMetadata {
+            ErrorKind::IncompatibleProtocolAttribute { .. } => ErrorMetadata {
                 code: ErrorCode::E4102,
+                severity: Severity::Error,
+                category: ErrorCategory::Protocol,
+                error_type: "ProtocolError",
+                title: "Incompatible protocol attribute type",
+                description: "The attribute type doesn't match the protocol requirement",
+                suggestion: Some("Change the attribute type to match the protocol"),
+            },
+            ErrorKind::MethodSignatureMismatch { .. } => ErrorMetadata {
+                code: ErrorCode::E4103,
                 severity: Severity::Error,
                 category: ErrorCategory::Protocol,
                 error_type: "ProtocolError",
@@ -1373,6 +1382,18 @@ impl ErrorKind {
                 format!(
                     "Class '{}' doesn't have protocol '{}' attribute '{}'",
                     class_name, protocol_name, attribute_name
+                )
+            }
+            ErrorKind::IncompatibleProtocolAttribute {
+                class_name,
+                protocol_name,
+                attribute_name,
+                expected,
+                found,
+            } => {
+                format!(
+                    "Class '{}' protocol '{}' attribute '{}' has incompatible type: expected '{}', found '{}'",
+                    class_name, protocol_name, attribute_name, expected, found
                 )
             }
             ErrorKind::MethodSignatureMismatch {

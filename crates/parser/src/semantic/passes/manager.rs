@@ -1237,7 +1237,14 @@ impl PassManager {
     fn run_async_validation(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::async_validation::AsyncValidator;
 
-        let mut validator = AsyncValidator::new();
+        // Get type context for better type inference
+        let type_context_ref = self.analysis_context.type_context.read().unwrap();
+        let type_context = Some(&*type_context_ref);
+
+        // Get CFG cache for flow-sensitive analysis
+        let cfg_cache_ref = self.analysis_context.cfg_cache.read().unwrap();
+
+        let mut validator = AsyncValidator::new(type_context, &cfg_cache_ref);
         let errors = validator.validate_module(module);
 
         if errors.is_empty() {

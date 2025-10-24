@@ -11,6 +11,8 @@ use crate::ast::Expr;
 use crate::ast::nodes::{Module, Stmt};
 use crate::error::types::Error;
 use crate::error::{ErrorKind, error};
+use crate::semantic::passes::control_flow::ControlFlowGraph;
+use crate::semantic::passes::type_inference::TypeInferenceContext;
 use crate::semantic::types::Type;
 use std::collections::{HashMap, HashSet};
 use text_size::TextRange;
@@ -40,7 +42,7 @@ struct VariableLifetime {
 }
 
 /// Validator for async/await usage in Coral programs
-pub struct AsyncValidator {
+pub struct AsyncValidator<'a> {
     /// Stack of async contexts (for nested async functions)
     async_context_stack: Vec<AsyncContextInfo>,
     /// Variable lifetime tracking (for async lifetime validation)
@@ -49,12 +51,22 @@ pub struct AsyncValidator {
     /// Set of variables that are live at await points
     /// Used to validate that variables are still valid after await
     variables_before_await: HashMap<TextRange, HashSet<String>>,
+    /// Type inference context for getting actual expression types
+    type_context: Option<&'a TypeInferenceContext>,
+    /// Control flow graphs for flow-sensitive analysis
+    cfg_cache: &'a HashMap<String, ControlFlowGraph>,
+    /// Current function name for CFG lookup
+    current_function: Option<String>,
     /// Accumulated errors during validation
     errors: Vec<Error>,
 }
 
-impl Default for AsyncValidator {
-    fn default() -> Self {
+impl<'a> AsyncValidator<'a> {
+    /// Create a new async validator with type context and CFG cache
+    pub fn new(
+        type_context: Option<&'a TypeInferenceContext>,
+        cfg_cache: &'a HashMap<String, ControlFlowGraph>,
+    ) -> Self {
         Self {
             async_context_stack: vec![AsyncContextInfo {
                 in_async_function: false,
@@ -63,15 +75,11 @@ impl Default for AsyncValidator {
             }],
             variable_lifetimes: HashMap::new(),
             variables_before_await: HashMap::new(),
+            type_context,
+            cfg_cache,
+            current_function: None,
             errors: Vec::new(),
         }
-    }
-}
-
-impl AsyncValidator {
-    /// Create a new async validator
-    pub fn new() -> Self {
-        Self::default()
     }
 
     /// Check if currently inside an async function
@@ -157,14 +165,35 @@ impl AsyncValidator {
         }
     }
 
-    /// Basic type inference for expressions (simplified for await validation)
+    /// Infer expression type using the type inference context
     fn infer_expr_type(&self, expr: &Expr) -> Type {
+        // Try to get the actual inferred type from the type context
+        if let Some(type_ctx) = self.type_context {
+            let span = expr.span();
+            if let Some(inferred_ty) =
+                type_ctx.get_type_by_span(span.start().into(), span.end().into())
+            {
+                return inferred_ty.clone();
+            }
+        }
+
+        // Fallback to pattern-based inference for known async patterns
         match expr {
             // Async function calls return coroutines
-            Expr::Call(_call) => {
-                // Check if the called function is async
-                // For now, we conservatively return Unknown to avoid false positives
-                // A full type system integration would query the type table here
+            Expr::Call(call) => {
+                // If we have type context, we should have gotten the type above
+                // This is a fallback for when type inference hasn't run yet
+                if let Some(type_ctx) = self.type_context {
+                    let func_span = call.func.span();
+                    if let Some(func_ty) =
+                        type_ctx.get_type_by_span(func_span.start().into(), func_span.end().into())
+                    {
+                        // If it's a coroutine-returning function, return Coroutine type
+                        if matches!(func_ty, Type::Coroutine(_)) {
+                            return func_ty.clone();
+                        }
+                    }
+                }
                 Type::Unknown
             }
             // Attribute access on known async libraries
@@ -184,7 +213,7 @@ impl AsyncValidator {
         }
     }
 
-    /// Validate variable lifetimes across an await point
+    /// Validate variable lifetimes across an await point using flow analysis
     fn validate_lifetime_across_await(&mut self, await_span: TextRange) {
         // Record which variables are live before this await
         let live_vars: HashSet<String> = self
@@ -197,29 +226,73 @@ impl AsyncValidator {
         self.variables_before_await
             .insert(await_span, live_vars.clone());
 
-        // Check for variables that might not be valid across await
-        // In Coral, we need to be careful about variables that hold resources
-        // or have limited lifetimes
-        for (var_name, lifetime) in &self.variable_lifetimes {
-            if lifetime.in_scope {
-                // Check if this variable was last used before this await
-                // and if it might be invalidated by the await
-                if let Some(last_use) = lifetime.last_use_span {
-                    // If the variable is a local reference or resource,
-                    // it might not be valid after await
-                    // For now, we do a conservative check
-                    if self.is_potentially_unsafe_across_await(var_name) {
-                        // Only report if the variable is used after the await
-                        // This would require flow analysis, so for now we're conservative
-                        // Compare spans by their start position
-                        if last_use.end() < await_span.start() {
-                            // Variable might be used after await, check if it's safe
-                            // This is a simplified check - full implementation would need
-                            // control flow analysis
+        // Use CFG for flow-sensitive analysis if available
+        if let Some(func_name) = &self.current_function
+            && let Some(cfg) = self.cfg_cache.get(func_name)
+        {
+            // Find all variables that are used after this await point
+            let vars_used_after_await = self.find_variables_used_after_span(cfg, await_span);
+
+            // Check if any resource-holding variables are used after await
+            for var_name in &vars_used_after_await {
+                if let Some(lifetime) = self.variable_lifetimes.get(var_name)
+                    && lifetime.in_scope
+                    && self.is_potentially_unsafe_across_await(var_name)
+                {
+                    // Check if the variable was defined before the await
+                    if lifetime.declaration_span.end() < await_span.start() {
+                        // Variable defined before await and used after - check if it's safe
+                        if let Some(type_ctx) = self.type_context {
+                            // Try to get the variable's type from the type context
+                            // by looking up its definition span
+                            let span = lifetime.declaration_span;
+                            if let Some(var_ty) =
+                                type_ctx.get_type_by_span(span.start().into(), span.end().into())
+                                && self.is_type_unsafe_across_await(var_ty)
+                            {
+                                // This would be a warning about potential issues
+                                // For now, we're conservative and don't emit this
+                                // as it requires more sophisticated lifetime analysis
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+
+    /// Find variables used after a given span using CFG
+    fn find_variables_used_after_span(
+        &self,
+        cfg: &ControlFlowGraph,
+        span: TextRange,
+    ) -> HashSet<String> {
+        let mut used_vars = HashSet::new();
+
+        // Iterate through all blocks in the CFG
+        for block in cfg.blocks.values() {
+            // Check each statement in the block
+            for stmt_info in &block.statements {
+                // If the statement comes after the await span, collect its uses
+                if stmt_info.span.start() > span.end() {
+                    for var in &stmt_info.uses {
+                        used_vars.insert(var.clone());
+                    }
+                }
+            }
+        }
+
+        used_vars
+    }
+
+    /// Check if a type is unsafe to hold across await points
+    fn is_type_unsafe_across_await(&self, ty: &Type) -> bool {
+        match ty {
+            // File handles, network streams, locks are unsafe across await
+            Type::Class(name) => {
+                ["File", "Lock", "Mutex", "RwLock", "Socket"].contains(&name.as_str())
+            }
+            _ => false,
         }
     }
 
@@ -414,23 +487,37 @@ impl AsyncValidator {
     fn validate_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::FuncDef(func_def) => {
+                let func_name = func_def.name.to_string();
+
                 if func_def.is_async {
                     // Enter async context for async functions
-                    let name = Some(func_def.name.to_string());
+                    let name = Some(func_name.clone());
                     self.enter_async_context(name, func_def.span);
+
+                    // Set current function for CFG lookup
+                    let old_function = self.current_function.replace(func_name);
 
                     // Validate function body
                     for stmt in func_def.body {
                         self.validate_stmt(stmt);
                     }
 
+                    // Restore previous function
+                    self.current_function = old_function;
+
                     // Exit async context
                     self.exit_async_context();
                 } else {
                     // Regular function - validate body but don't enter async context
+                    // Set current function for CFG lookup
+                    let old_function = self.current_function.replace(func_name);
+
                     for stmt in func_def.body {
                         self.validate_stmt(stmt);
                     }
+
+                    // Restore previous function
+                    self.current_function = old_function;
                 }
             }
             Stmt::For(for_stmt) => {
@@ -671,7 +758,8 @@ async def fetch_data():
     return "done"
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         assert!(
@@ -690,7 +778,8 @@ async def read_file():
     return f.read()
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         assert!(
@@ -709,7 +798,8 @@ async def fetch_data():
     return response.text()
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         assert!(
@@ -728,7 +818,8 @@ def regular_function():
     return "done"
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         assert!(
@@ -752,7 +843,8 @@ async def outer():
     return await inner()
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         assert!(
@@ -773,7 +865,8 @@ def regular_func():
     time.sleep(1)  # Should NOT be detected
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         assert!(
@@ -792,7 +885,8 @@ async def process():
     return result
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         assert!(
@@ -811,7 +905,8 @@ async def process():
     return results
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         assert!(
@@ -831,7 +926,8 @@ async def level1():
             await operation()
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
         // Stack should still have base context after validation
@@ -855,7 +951,8 @@ async def process():
     return x + y
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
         // Check that variables were tracked
@@ -879,7 +976,8 @@ async def process():
     return final
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
         // Variables should be tracked with usage information
@@ -896,14 +994,15 @@ async def process():
     #[test]
     fn test_await_validates_expression_type() {
         // This test verifies that the await validation type checker is called
-        // For now, it returns Unknown for most expressions to avoid false positives
+        // Type inference integration allows proper validation when context is provided
         let source = r#"
 async def process():
     result = await compute()
     return result
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
         // Should not report InvalidFutureType for unknown types (conservative approach)
@@ -925,7 +1024,8 @@ async def multi_await():
     return x + y + z
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
         // Should track await points
@@ -944,7 +1044,8 @@ async def typed_function():
     return y
 "#;
         let parse_result = parse(source).expect("Failed to parse");
-        let mut validator = AsyncValidator::new();
+        let cfg_cache = HashMap::new();
+        let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
         // Annotated assignments should also be tracked

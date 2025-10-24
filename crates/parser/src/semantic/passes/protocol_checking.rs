@@ -10,12 +10,13 @@ use crate::ast::expr::Expr;
 use crate::ast::nodes::{Arguments, ClassDefStmt, FuncDefStmt, Module, Stmt};
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
 use crate::semantic::passes::type_inference::TypeInferenceContext;
+use crate::semantic::types::Type;
 use std::collections::HashMap;
 use text_size::TextRange;
 
 /// Protocol checker
 pub struct ProtocolChecker<'a> {
-    _context: &'a TypeInferenceContext,
+    context: &'a TypeInferenceContext,
     errors: Vec<Error>,
     protocols: HashMap<String, ProtocolDef<'a>>,
     classes: HashMap<String, ClassInfo<'a>>,
@@ -49,7 +50,7 @@ struct ClassInfo<'a> {
 impl<'a> ProtocolChecker<'a> {
     pub fn new(context: &'a TypeInferenceContext) -> Self {
         Self {
-            _context: context,
+            context,
             errors: Vec::new(),
             protocols: HashMap::new(),
             classes: HashMap::new(),
@@ -327,19 +328,43 @@ impl<'a> ProtocolChecker<'a> {
             }
 
             // Validate attributes
-            for (attr_name, _attr_type) in protocol_attributes {
-                if !class_info.attributes.contains_key(&attr_name) {
-                    self.errors.push(*error(
-                        ErrorKind::MissingProtocolAttribute {
-                            class_name: class_name.clone(),
-                            protocol_name: protocol_name.clone(),
-                            attribute_name: attr_name.clone(),
-                        },
-                        class_span,
-                    ));
+            for (attr_name, protocol_attr_type) in protocol_attributes {
+                match class_info.attributes.get(&attr_name) {
+                    None => {
+                        self.errors.push(*error(
+                            ErrorKind::MissingProtocolAttribute {
+                                class_name: class_name.clone(),
+                                protocol_name: protocol_name.clone(),
+                                attribute_name: attr_name.clone(),
+                            },
+                            class_span,
+                        ));
+                    }
+                    Some(class_attr_type) => {
+                        // Check type compatibility if both have type annotations
+                        if let (Some(protocol_type_expr), Some(class_type_expr)) =
+                            (protocol_attr_type, class_attr_type)
+                        {
+                            let protocol_type = self.expr_to_type(protocol_type_expr);
+                            let class_type = self.expr_to_type(class_type_expr);
+
+                            // Class attribute type must be compatible with protocol attribute type
+                            // (class_type should be a subtype of protocol_type)
+                            if !class_type.is_subtype_of(&protocol_type) {
+                                self.errors.push(*error(
+                                    ErrorKind::IncompatibleProtocolAttribute {
+                                        class_name: class_name.clone(),
+                                        protocol_name: protocol_name.clone(),
+                                        attribute_name: attr_name.clone(),
+                                        expected: protocol_type.display_name(),
+                                        found: class_type.display_name(),
+                                    },
+                                    class_span,
+                                ));
+                            }
+                        }
+                    }
                 }
-                // Note: Full type compatibility checking for attributes would require
-                // type inference integration. For now, we just check presence.
             }
         }
     }
@@ -406,15 +431,113 @@ impl<'a> ProtocolChecker<'a> {
             return false;
         }
 
-        // Basic signature compatibility check
-        // Full implementation requires:
-        // - Parse type annotations from args.annotation
-        // - Check argument type contravariance (protocol more general)
-        // - Check return type covariance (implementation more specific)
-        // - Validate default arguments compatibility
-        // - Handle *args/**kwargs matching
-        // For now: accept matching argument counts as compatible
+        // Check argument type compatibility (contravariance)
+        // For methods, argument types should be contravariant:
+        // protocol requires T -> implementation can accept U where T <: U (more general)
+        for (protocol_arg, class_arg) in protocol_sig
+            .args
+            .args
+            .iter()
+            .zip(class_sig.args.args.iter())
+        {
+            if let (Some(protocol_annotation), Some(class_annotation)) = (
+                protocol_arg.annotation.as_ref(),
+                class_arg.annotation.as_ref(),
+            ) {
+                let protocol_type = self.expr_to_type(protocol_annotation);
+                let class_type = self.expr_to_type(class_annotation);
+
+                // For contravariance: class argument should accept at least what protocol accepts
+                // This means protocol_type should be subtype of class_type
+                // (class can accept more general types)
+                if !protocol_type.is_subtype_of(&class_type) {
+                    return false;
+                }
+            }
+        }
+
+        // Check return type compatibility (covariance)
+        // Return types should be covariant:
+        // protocol returns T -> implementation can return U where U <: T (more specific)
+        if let (Some(protocol_return), Some(class_return)) =
+            (protocol_sig.returns, class_sig.returns)
+        {
+            let protocol_type = self.expr_to_type(protocol_return);
+            let class_type = self.expr_to_type(class_return);
+
+            // For covariance: class return should be subtype of protocol return
+            // (class returns more specific type)
+            if !class_type.is_subtype_of(&protocol_type) {
+                return false;
+            }
+        }
+
+        // TODO: Validate default arguments compatibility
+        // TODO: Handle *args/**kwargs matching
+
         true
+    }
+
+    /// Convert a type annotation expression to a Type
+    fn expr_to_type(&self, expr: &Expr) -> Type {
+        // Try to get inferred type from context first
+        let span = expr.span();
+        if let Some(ty) = self
+            .context
+            .get_type_by_span(span.start().into(), span.end().into())
+        {
+            return ty.clone();
+        }
+
+        // Fallback: parse common type expressions
+        match expr {
+            Expr::Name(name) => match name.id {
+                "int" => Type::Int,
+                "float" => Type::Float,
+                "str" => Type::Str,
+                "bool" => Type::Bool,
+                "None" => Type::None,
+                "Any" => Type::Any,
+                name => Type::Class(name.to_string()),
+            },
+            Expr::Subscript(subscript) => {
+                // Handle generic types like List[int], Dict[str, int]
+                if let Expr::Name(base_name) = subscript.value {
+                    let element_type = self.expr_to_type(subscript.slice);
+                    match base_name.id {
+                        "list" | "List" => Type::List(Box::new(element_type)),
+                        "set" | "Set" => Type::Set(Box::new(element_type)),
+                        "tuple" | "Tuple" => Type::Tuple(vec![element_type]),
+                        _ => Type::Generic {
+                            base: Box::new(Type::Class(base_name.id.to_string())),
+                            params: vec![element_type],
+                        },
+                    }
+                } else {
+                    Type::Unknown
+                }
+            }
+            Expr::Tuple(tuple) => {
+                // Handle Tuple[int, str, ...] or Union[int, str]
+                let types: Vec<Type> = tuple.elts.iter().map(|e| self.expr_to_type(e)).collect();
+                if types.is_empty() {
+                    Type::Unknown
+                } else {
+                    Type::Tuple(types)
+                }
+            }
+            Expr::BinOp(binop) => {
+                // Handle Union types: int | str
+                if binop.op == "|" {
+                    let left = self.expr_to_type(binop.left);
+                    let right = self.expr_to_type(binop.right);
+                    Type::Union(vec![left, right])
+                } else {
+                    Type::Unknown
+                }
+            }
+            _ => Type::Unknown,
+        }
     }
 
     fn signature_to_string(&self, sig: &MethodSignature) -> String {
