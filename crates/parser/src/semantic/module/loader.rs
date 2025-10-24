@@ -14,14 +14,27 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use text_size::TextRange;
 
+/// Cached module analysis results including HIR-derived metadata
+#[derive(Clone, Debug)]
+pub struct ModuleAnalysisCache {
+    /// Parsed AST errors (if any)
+    pub errors: Vec<Error>,
+    /// Module exports (export_name -> type)
+    pub exports: HashMap<String, Type>,
+    /// Class attributes (class_name, attr_name) -> type
+    pub class_attributes: HashMap<(String, String), Type>,
+    /// Class MRO (class_name -> base class list)
+    pub class_mro: HashMap<String, Vec<String>>,
+}
+
 /// Module loader for cross-module validation
 pub struct ModuleLoader<'a> {
     /// Root directory for module resolution
     root_dir: PathBuf,
     /// Arena for allocating AST nodes
     arena: &'a Arena,
-    /// Cache of parsed modules (module_path -> (AST, errors))
-    module_cache: HashMap<PathBuf, (Module<'a>, Vec<Error>)>,
+    /// Cache of parsed modules with full analysis results
+    module_cache: HashMap<PathBuf, (Module<'a>, ModuleAnalysisCache)>,
     /// Export registry tracking all module exports
     export_registry: ModuleExportRegistry,
 }
@@ -43,11 +56,11 @@ impl<'a> ModuleLoader<'a> {
     pub fn load_module(&mut self, module_path: &Path) -> Result<&Module<'a>, Vec<Error>> {
         // Check cache first
         if self.module_cache.contains_key(module_path) {
-            let (module, errors) = self.module_cache.get(module_path).unwrap();
-            if errors.is_empty() {
+            let (module, cache) = self.module_cache.get(module_path).unwrap();
+            if cache.errors.is_empty() {
                 return Ok(module);
             } else {
-                return Err(errors.clone());
+                return Err(cache.errors.clone());
             }
         }
 
@@ -83,15 +96,30 @@ impl<'a> ModuleLoader<'a> {
         // Extract and register exports from this module
         self.extract_and_register_exports(module, &module_name);
 
-        // Cache the result
+        // Create analysis cache with extracted metadata
+        // Note: In a full implementation, this would run HIR lowering to extract
+        // class attributes and MRO. For now, we store empty maps as placeholders.
+        let analysis_cache = ModuleAnalysisCache {
+            errors: errors.clone(),
+            exports: HashMap::new(),          // TODO: Extract from HIR
+            class_attributes: HashMap::new(), // TODO: Extract from HIR
+            class_mro: HashMap::new(),        // TODO: Extract from HIR
+        };
+
+        // Cache the result with analysis metadata
         self.module_cache
-            .insert(module_path.to_path_buf(), (module.clone(), errors.clone()));
+            .insert(module_path.to_path_buf(), (module.clone(), analysis_cache));
 
         if errors.is_empty() {
             Ok(self.module_cache.get(module_path).map(|(m, _)| m).unwrap())
         } else {
             Err(errors)
         }
+    }
+
+    /// Get cached analysis results for a module
+    pub fn get_cached_analysis(&self, module_path: &Path) -> Option<&ModuleAnalysisCache> {
+        self.module_cache.get(module_path).map(|(_, cache)| cache)
     }
 
     /// Extract exports from a module and register them

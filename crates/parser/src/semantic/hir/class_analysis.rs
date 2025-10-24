@@ -1019,6 +1019,87 @@ impl<'a> ClassAnalyzer<'a> {
             _ => {}
         }
     }
+
+    /// Export class attributes for storage in AnalysisContext
+    /// Returns a HashMap mapping (class_name, attr_name) -> attr_type
+    /// This extracts owned data that can be stored without lifetime constraints
+    pub fn export_class_attributes(&self) -> HashMap<(String, String), Type> {
+        let mut result = HashMap::new();
+
+        // Get the interner reference from self
+        let interner = match self.interner {
+            Some(interner) => interner,
+            None => return result, // No interner set, return empty result
+        };
+
+        // Export instance attributes
+        for (class_sym, attrs) in &self.attribute_tables {
+            if let Some(class_name) = interner.resolve(*class_sym) {
+                for (attr_sym, attr_type) in attrs {
+                    if let Some(attr_name) = interner.resolve(*attr_sym) {
+                        result.insert(
+                            (class_name.to_string(), attr_name.to_string()),
+                            attr_type.clone(),
+                        );
+                    }
+                }
+            }
+        }
+
+        // Export class-level attributes
+        for (class_sym, class_attrs) in &self.class_attributes {
+            if let Some(class_name) = interner.resolve(*class_sym) {
+                for (attr_sym, attr_type) in class_attrs {
+                    if let Some(attr_name) = interner.resolve(*attr_sym) {
+                        result.insert(
+                            (class_name.to_string(), attr_name.to_string()),
+                            attr_type.clone(),
+                        );
+                    }
+                }
+            }
+        }
+
+        // Export methods
+        for (class_sym, methods) in &self.method_tables {
+            if let Some(class_name) = interner.resolve(*class_sym) {
+                for (method_sym, method_type) in methods {
+                    if let Some(method_name) = interner.resolve(*method_sym) {
+                        result.insert(
+                            (class_name.to_string(), method_name.to_string()),
+                            method_type.clone(),
+                        );
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Export class MRO (method resolution order) for storage in AnalysisContext
+    /// Returns a HashMap mapping class_name -> list of base classes in MRO order
+    pub fn export_class_mro(&self) -> HashMap<String, Vec<String>> {
+        let mut result = HashMap::new();
+
+        // Get the interner reference from self
+        let interner = match self.interner {
+            Some(interner) => interner,
+            None => return result, // No interner set, return empty result
+        };
+
+        for (class_sym, mro) in &self.mro_cache {
+            if let Some(class_name) = interner.resolve(*class_sym) {
+                let mro_names: Vec<String> = mro
+                    .iter()
+                    .filter_map(|sym| interner.resolve(*sym).map(|s| s.to_string()))
+                    .collect();
+                result.insert(class_name.to_string(), mro_names);
+            }
+        }
+
+        result
+    }
 }
 
 /// Class analysis errors

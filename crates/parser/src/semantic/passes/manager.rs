@@ -11,6 +11,7 @@ use crate::semantic::module::{
 use crate::semantic::passes::control_flow::ControlFlowGraph;
 use crate::semantic::passes::type_inference::TypeInferenceContext;
 use crate::semantic::symbol::table::SymbolTable;
+use crate::semantic::types::Type;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -36,9 +37,16 @@ pub struct AnalysisContext {
     /// Eliminates redundant CFG construction across multiple passes
     pub cfg_cache: Arc<RwLock<HashMap<String, ControlFlowGraph>>>,
 
-    /// Lowered HIR modules (module name -> TypedModule)
-    /// Note: Using String keys temporarily; will use actual TypedModule once available
-    pub hir_modules: Arc<RwLock<HashMap<String, String>>>, // TODO: Replace String with TypedModule<'a>
+    /// Class metadata extracted from HIR for type checking
+    /// Maps (class_name, attribute_name) -> attribute_type
+    pub class_attributes: Arc<RwLock<HashMap<(String, String), Type>>>,
+
+    /// Method resolution order (MRO) for each class
+    pub class_mro: Arc<RwLock<HashMap<String, Vec<String>>>>,
+
+    /// Module exports for cross-module type resolution
+    /// Maps module_name -> (exported_name -> type)
+    pub module_exports: Arc<RwLock<HashMap<String, HashMap<String, Type>>>>,
 }
 
 impl AnalysisContext {
@@ -48,14 +56,62 @@ impl AnalysisContext {
             symbol_table: Arc::new(RwLock::new(SymbolTable::new())),
             type_context: Arc::new(RwLock::new(TypeInferenceContext::new(SymbolTable::new()))),
             cfg_cache: Arc::new(RwLock::new(HashMap::new())),
-            hir_modules: Arc::new(RwLock::new(HashMap::new())),
+            class_attributes: Arc::new(RwLock::new(HashMap::new())),
+            class_mro: Arc::new(RwLock::new(HashMap::new())),
+            module_exports: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     /// Clear all cached state (useful for incremental compilation)
     pub fn clear_caches(&self) {
         self.cfg_cache.write().unwrap().clear();
-        self.hir_modules.write().unwrap().clear();
+        self.class_attributes.write().unwrap().clear();
+        self.class_mro.write().unwrap().clear();
+        self.module_exports.write().unwrap().clear();
+    }
+
+    /// Store class attribute information from HIR analysis
+    pub fn store_class_attribute(&self, class_name: String, attr_name: String, attr_type: Type) {
+        let mut attrs = self.class_attributes.write().unwrap();
+        attrs.insert((class_name, attr_name), attr_type);
+    }
+
+    /// Look up a class attribute type
+    pub fn get_class_attribute(&self, class_name: &str, attr_name: &str) -> Option<Type> {
+        let attrs = self.class_attributes.read().unwrap();
+        attrs
+            .get(&(class_name.to_string(), attr_name.to_string()))
+            .cloned()
+    }
+
+    /// Store class MRO (method resolution order)
+    pub fn store_class_mro(&self, class_name: String, mro: Vec<String>) {
+        let mut mro_map = self.class_mro.write().unwrap();
+        mro_map.insert(class_name, mro);
+    }
+
+    /// Get class MRO
+    pub fn get_class_mro(&self, class_name: &str) -> Option<Vec<String>> {
+        let mro_map = self.class_mro.read().unwrap();
+        mro_map.get(class_name).cloned()
+    }
+
+    /// Store module exports for cross-module type resolution
+    pub fn store_module_export(&self, module_name: String, export_name: String, export_type: Type) {
+        let mut exports = self.module_exports.write().unwrap();
+        exports
+            .entry(module_name)
+            .or_default()
+            .insert(export_name, export_type);
+    }
+
+    /// Get a module export type
+    pub fn get_module_export(&self, module_name: &str, export_name: &str) -> Option<Type> {
+        let exports = self.module_exports.read().unwrap();
+        exports
+            .get(module_name)
+            .and_then(|module_exports| module_exports.get(export_name))
+            .cloned()
     }
 
     /// Get or create a CFG for a function
@@ -157,6 +213,8 @@ pub struct PassCacheResult {
     pub diagnostics: Vec<Diagnostic>,
     /// When this result was cached
     pub timestamp: u64,
+    /// Content hash when this pass was run (for invalidation)
+    pub content_hash: String,
 }
 
 /// Cached results for a module analysis
@@ -635,19 +693,9 @@ impl PassManager {
         }
     }
 
-    /// Run passes in parallel when possible, respecting dependencies
-    ///
-    /// NOTE: Currently disabled - falls back to sequential execution
-    /// TODO: Refactor to work with shared state (requires interior mutability or different architecture)
-    fn run_passes_parallel(
-        &mut self,
-        enabled_passes: &[String],
-        module: &Module,
-        source: &str,
-    ) -> Result<(), Vec<Diagnostic>> {
-        // Fall back to sequential execution for now
-        self.run_passes_sequential(enabled_passes, module, source)
-    }
+    // Parallel execution of passes within a single module is not practical due to
+    // strict dependencies (e.g., name_resolution -> type_inference -> type_checking).
+    // However, parallel module analysis is supported via analyze_modules() using rayon's par_iter().
 
     /// Run all enabled passes on a module
     ///
@@ -687,38 +735,16 @@ impl PassManager {
             enabled_passes.push(pass_id.clone());
         }
 
-        // Use parallel execution if enabled and passes are parallelizable
-        // NOTE: Parallel execution disabled for now when state sharing is enabled
-        // because it requires mutable access to PassManager state
-        // TODO: Refactor parallel execution to work with shared state
-        #[allow(clippy::overly_complex_bool_expr)]
-        if false && self.config.parallel_execution && self.can_run_parallel(&enabled_passes) {
-            self.run_passes_parallel(&enabled_passes, module, source)?;
-        } else {
-            self.run_passes_sequential(&enabled_passes, module, source)?;
-        }
+        // Note: Per-module parallelization is handled in analyze_modules()
+        // Individual passes within a module still run sequentially due to dependencies
+        // (e.g., type_inference must complete before type_checking)
+        self.run_passes_sequential(&enabled_passes, module, source)?;
 
         if self.diagnostics.is_empty() {
             Ok(())
         } else {
             Err(std::mem::take(&mut self.diagnostics))
         }
-    }
-
-    /// Check if passes can benefit from parallel execution
-    fn can_run_parallel(&self, enabled_passes: &[String]) -> bool {
-        // Only use parallel execution if we have multiple parallelizable passes
-        let parallelizable_count = enabled_passes
-            .iter()
-            .filter(|pass_id| {
-                self.passes
-                    .get(*pass_id)
-                    .map(|metadata| metadata.parallelizable)
-                    .unwrap_or(false)
-            })
-            .count();
-
-        parallelizable_count > 1
     }
 
     /// Run passes sequentially with full error handling
@@ -729,6 +755,9 @@ impl PassManager {
         source: &str,
     ) -> Result<(), Vec<Diagnostic>> {
         let mut total_errors = 0;
+
+        // Compute content hash once for cache validation
+        let content_hash = self.compute_source_hash(source);
 
         for pass_id in enabled_passes {
             // Check max errors
@@ -742,6 +771,30 @@ impl PassManager {
             }
 
             let metadata = self.passes.get(pass_id).unwrap();
+
+            // Check per-pass cache first
+            if let Some(cached_result) = self.get_cached_pass_result(pass_id, &content_hash) {
+                if self.config.verbose {
+                    println!(
+                        "Using cached result for pass: {} ({})",
+                        metadata.name, pass_id
+                    );
+                }
+
+                // Use cached diagnostics
+                self.diagnostics.extend(cached_result.diagnostics.clone());
+
+                if !cached_result.success {
+                    let error_count = cached_result
+                        .diagnostics
+                        .iter()
+                        .filter(|d| d.severity == Severity::Error || d.severity == Severity::Fatal)
+                        .count();
+                    total_errors += error_count;
+                }
+
+                continue; // Skip running the pass
+            }
 
             // Run the pass
             if self.config.verbose {
@@ -768,6 +821,26 @@ impl PassManager {
             };
             self.pass_execution_times
                 .insert(pass_id.to_string(), new_avg);
+
+            // Store pass result in cache
+            let pass_success = result.is_ok();
+            let pass_diagnostics = match &result {
+                Ok(()) => Vec::new(),
+                Err(diags) => diags.clone(),
+            };
+
+            self.store_pass_result(
+                pass_id,
+                PassCacheResult {
+                    success: pass_success,
+                    diagnostics: pass_diagnostics.clone(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                    content_hash: content_hash.clone(),
+                },
+            );
 
             // Collect diagnostics
             match result {
@@ -908,6 +981,16 @@ impl PassManager {
             diagnostics.push(warning.to_diagnostic(source));
         }
 
+        // Store CFGs in cache for reuse by subsequent passes
+        // This eliminates redundant CFG construction in definite_assignment and constant_propagation
+        {
+            let mut cfg_cache = self.analysis_context.cfg_cache.write().unwrap();
+            cfg_cache.clear(); // Clear old CFGs from previous module
+            for (func_name, cfg) in &analyzer.function_cfgs {
+                cfg_cache.insert(func_name.clone(), cfg.clone());
+            }
+        }
+
         if diagnostics.is_empty() {
             Ok(())
         } else {
@@ -917,14 +1000,16 @@ impl PassManager {
 
     /// Run definite assignment analysis pass
     fn run_definite_assignment(&mut self, module: &Module, source: &str) -> PassResult {
-        use crate::semantic::passes::control_flow::ControlFlowAnalyzer;
         use crate::semantic::passes::definite_assignment::DefiniteAssignmentPass;
 
-        let mut cf_analyzer = ControlFlowAnalyzer::new();
-        cf_analyzer.analyze_module(module);
+        // Reuse CFGs from cache (built by control_flow pass)
+        let function_cfgs = {
+            let cfg_cache = self.analysis_context.cfg_cache.read().unwrap();
+            cfg_cache.clone()
+        };
 
         let mut pass = DefiniteAssignmentPass::new();
-        let errors = pass.check_module_with_cfgs(module, &cf_analyzer.function_cfgs);
+        let errors = pass.check_module_with_cfgs(module, &function_cfgs);
 
         if errors.is_empty() {
             Ok(())
@@ -937,13 +1022,15 @@ impl PassManager {
     /// Run constant propagation pass
     fn run_constant_propagation(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::constant_propagation::ConstantPropagationPass;
-        use crate::semantic::passes::control_flow::ControlFlowAnalyzer;
 
-        let mut cf_analyzer = ControlFlowAnalyzer::new();
-        cf_analyzer.analyze_module(module);
+        // Reuse CFGs from cache (built by control_flow pass)
+        let function_cfgs = {
+            let cfg_cache = self.analysis_context.cfg_cache.read().unwrap();
+            cfg_cache.clone()
+        };
 
         let mut pass = ConstantPropagationPass::new();
-        let (errors, warnings) = pass.check_module_with_cfgs(module, &cf_analyzer.function_cfgs);
+        let (errors, warnings) = pass.check_module_with_cfgs(module, &function_cfgs);
 
         let mut diagnostics = Vec::new();
         for error in &errors {
@@ -1007,7 +1094,23 @@ impl PassManager {
         match lowerer.lower_module(module) {
             Ok(_hir_module) => {
                 // HIR lowering successful
-                // TODO: Store HIR in pass manager context for subsequent passes
+                // Extract class analyzer from the lowerer (consumes lowerer)
+                let class_analyzer = lowerer.into_class_analyzer();
+
+                // Export class attributes and MRO (uses interner reference stored in ClassAnalyzer)
+                let class_attributes = class_analyzer.export_class_attributes();
+                let class_mro = class_analyzer.export_class_mro();
+
+                // Store in analysis context for type checking and other passes
+                {
+                    let mut attrs = self.analysis_context.class_attributes.write().unwrap();
+                    attrs.extend(class_attributes);
+                }
+                {
+                    let mut mro_map = self.analysis_context.class_mro.write().unwrap();
+                    mro_map.extend(class_mro);
+                }
+
                 Ok(())
             }
             Err(errors) => {
@@ -1027,6 +1130,13 @@ impl PassManager {
 
         // Use the shared type context from analysis context
         let mut type_context = self.analysis_context.type_context.write().unwrap();
+
+        // Populate module exports for cross-module type resolution
+        let module_exports = {
+            let exports = self.analysis_context.module_exports.read().unwrap();
+            exports.clone()
+        };
+        type_context.set_module_exports(module_exports);
 
         // Run inference
         let mut inferrer = TypeInference::new(&mut type_context);
@@ -1051,7 +1161,14 @@ impl PassManager {
             type_ctx.clone()
         };
 
-        let mut type_context = TypeCheckContext::new(inference_context);
+        // Get class metadata for attribute validation
+        let class_attributes = {
+            let attrs = self.analysis_context.class_attributes.read().unwrap();
+            attrs.clone()
+        };
+
+        let mut type_context =
+            TypeCheckContext::with_class_metadata(inference_context, class_attributes);
 
         let mut checker = TypeChecker::new(&mut type_context);
         checker.check_module(module);
@@ -1324,7 +1441,7 @@ impl PassManager {
                 match result {
                     Ok(()) => {
                         let cached_result = ModuleCacheResult {
-                            pass_results: HashMap::new(), // TODO: implement partial caching
+                            pass_results: HashMap::new(), // Per-pass results stored separately via store_pass_result()
                             overall_success: true,
                             all_diagnostics: Vec::new(),
                             analysis_timestamp: std::time::SystemTime::now()
@@ -1336,7 +1453,7 @@ impl PassManager {
                     }
                     Err(diagnostics) => {
                         let cached_result = ModuleCacheResult {
-                            pass_results: HashMap::new(), // TODO: implement partial caching
+                            pass_results: HashMap::new(), // Per-pass results stored separately via store_pass_result()
                             overall_success: false,
                             all_diagnostics: diagnostics.clone(),
                             analysis_timestamp: std::time::SystemTime::now()
@@ -1468,6 +1585,78 @@ impl PassManager {
         hasher.update(&content);
         let hash = hasher.finalize();
         Ok(format!("{:x}", hash))
+    }
+
+    /// Compute hash of source code directly (for per-pass caching)
+    fn compute_source_hash(&self, source: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(source.as_bytes());
+        let hash = hasher.finalize();
+        format!("{:x}", hash)
+    }
+
+    /// Get cached result for a specific pass
+    fn get_cached_pass_result(&self, pass_id: &str, content_hash: &str) -> Option<PassCacheResult> {
+        // Find the most recent cache entry for current file
+        let current_file_key = self.current_file.as_ref()?;
+
+        // Search module cache for matching entry
+        for (cache_key, cache_result) in &self.module_cache {
+            // Check if this is for the current file
+            let current_file_str = current_file_key.to_string_lossy();
+            let file_stem_str = current_file_key.file_stem()?.to_string_lossy();
+            if cache_key.module_name == current_file_str || cache_key.module_name == file_stem_str {
+                // Check if we have a cached result for this pass
+                if let Some(pass_result) = cache_result.pass_results.get(pass_id) {
+                    // Validate content hash matches
+                    if pass_result.content_hash == content_hash {
+                        return Some(pass_result.clone());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Store result for a specific pass in the cache
+    fn store_pass_result(&mut self, pass_id: &str, result: PassCacheResult) {
+        // We need a module cache key to store per-pass results
+        // For now, we'll create a simple in-memory cache that's cleared on module change
+
+        // Create or update cache entry for current module
+        if let Some(current_file) = &self.current_file {
+            let module_name = current_file.to_string_lossy().to_string();
+
+            // Find or create cache entry
+            let cache_key = ModuleCacheKey {
+                module_name: module_name.clone(),
+                mtime: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+                content_hash: Some(result.content_hash.clone()),
+            };
+
+            // Get or create cache result
+            let cache_result =
+                self.module_cache
+                    .entry(cache_key)
+                    .or_insert_with(|| ModuleCacheResult {
+                        pass_results: HashMap::new(),
+                        overall_success: true,
+                        all_diagnostics: Vec::new(),
+                        analysis_timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                    });
+
+            // Store the pass result
+            cache_result
+                .pass_results
+                .insert(pass_id.to_string(), result);
+        }
     }
 
     /// Get file modification time for a module

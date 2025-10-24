@@ -152,6 +152,8 @@ pub struct TypeInferenceContext {
     expected_type_stack: Vec<Option<Type>>,
     /// Track yielded types for generator functions (function name -> yielded types)
     generator_yields: HashMap<String, Vec<Type>>,
+    /// Module exports for cross-module type resolution (module_name -> export_name -> type)
+    pub(crate) module_exports: HashMap<String, HashMap<String, Type>>,
 }
 
 impl TypeInferenceContext {
@@ -161,7 +163,13 @@ impl TypeInferenceContext {
             symbol_table,
             expected_type_stack: vec![None], // Start with no expectation
             generator_yields: HashMap::new(),
+            module_exports: HashMap::new(),
         }
+    }
+
+    /// Set module exports for cross-module type resolution
+    pub fn set_module_exports(&mut self, exports: HashMap<String, HashMap<String, Type>>) {
+        self.module_exports = exports;
     }
 
     /// Get the inferred type for an expression by span
@@ -260,14 +268,17 @@ impl<'a> TypeInference<'a> {
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
-            Type::Module(_module_name) => {
-                // Module-level attributes require module system integration
-                // Full implementation would:
-                // 1. Access module dependency graph from context
-                // 2. Look up exported names using 'export' declarations (Coral syntax)
-                // 3. Return actual types from module exports
-                // 4. Handle re-exports (export X from Y)
-                Type::Unknown
+            Type::Module(module_name) => {
+                // Module-level attributes: look up in module exports
+                // This enables cross-module type checking
+                self.context
+                    .module_exports
+                    .get(module_name.as_str())
+                    .and_then(|exports| exports.get(attr_name))
+                    .cloned()
+                    // Export not found - could be dynamic or missing
+                    // Return Unknown rather than erroring (conservative approach)
+                    .unwrap_or(Type::Unknown)
             }
             Type::Union(types) => {
                 // For union types, resolve attribute on each type and union the results

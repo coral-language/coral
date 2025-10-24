@@ -4,6 +4,7 @@ use crate::ast::*;
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
 use crate::semantic::passes::type_inference::{TypeInferenceContext, parse_annotation};
 use crate::semantic::types::{Type, builtins::BUILTIN_ATTRIBUTE_REGISTRY};
+use std::collections::HashMap;
 use text_size::TextRange;
 
 /// Type checker context
@@ -14,6 +15,8 @@ pub struct TypeCheckContext {
     errors: Vec<Error>,
     /// Current function return type (for checking return statements)
     current_return_type: Option<Type>,
+    /// Class attributes for validation (class_name, attr_name) -> attr_type
+    class_attributes: HashMap<(String, String), Type>,
 }
 
 impl TypeCheckContext {
@@ -22,7 +25,50 @@ impl TypeCheckContext {
             inference_ctx,
             errors: Vec::new(),
             current_return_type: None,
+            class_attributes: HashMap::new(),
         }
+    }
+
+    /// Create a new context with class metadata for attribute validation
+    pub fn with_class_metadata(
+        inference_ctx: TypeInferenceContext,
+        class_attributes: HashMap<(String, String), Type>,
+    ) -> Self {
+        Self {
+            inference_ctx,
+            errors: Vec::new(),
+            current_return_type: None,
+            class_attributes,
+        }
+    }
+
+    /// Validate that an imported name exists in the source module
+    /// Returns the type of the imported symbol if valid
+    pub fn validate_import(
+        &mut self,
+        module_name: &str,
+        import_name: &str,
+        span: TextRange,
+    ) -> Option<Type> {
+        // Look up the export in module exports (from inference context)
+        let export_type = self
+            .inference_ctx
+            .module_exports
+            .get(module_name)
+            .and_then(|exports| exports.get(import_name))
+            .cloned();
+
+        if export_type.is_none() {
+            // Import name doesn't exist in the module
+            self.add_error(*error(
+                ErrorKind::UndefinedName {
+                    name: format!("{}::{}", module_name, import_name),
+                },
+                span,
+            ));
+        }
+
+        export_type
     }
 
     /// Get type checking errors
@@ -63,8 +109,48 @@ impl<'a> TypeChecker<'a> {
 
     /// Check types for a module
     pub fn check_module(&mut self, module: &Module) {
+        // First pass: validate imports to ensure cross-module type safety
+        for stmt in module.body {
+            match stmt {
+                Stmt::Import(import) => {
+                    self.check_import_types(import);
+                }
+                Stmt::From(from) => {
+                    self.check_from_import_types(from);
+                }
+                _ => {}
+            }
+        }
+
+        // Second pass: check all statements including expressions
         for stmt in module.body {
             self.check_stmt(stmt);
+        }
+    }
+
+    /// Validate import statement types
+    fn check_import_types(&mut self, _import: &ImportStmt) {
+        // For "import foo.bar as baz", we validate that foo.bar exists as a module
+        // The actual type of imported modules is Type::Module(name)
+        // Type validation happens when attributes are accessed on the module
+
+        // Currently, we rely on import_resolution pass to validate module existence
+        // Type checking happens when module attributes are accessed
+        // No additional validation needed at import time
+    }
+
+    /// Validate from-import statement types
+    fn check_from_import_types(&mut self, from: &FromStmt) {
+        let module_name = from.module.unwrap_or("");
+
+        // For "from foo import bar", validate that bar is exported from foo
+        for (name, _alias) in from.names {
+            if *name != "*" {
+                // Validate that this name is exported from the module
+                self.context.validate_import(module_name, name, from.span);
+            }
+            // Note: star imports (*) can't be validated at compile time
+            // without loading the entire module
         }
     }
 
@@ -325,16 +411,19 @@ impl<'a> TypeChecker<'a> {
 
                 let has_attr = match &obj_ty {
                     Type::Unknown | Type::Any => true, // Can't verify, assume valid
-                    Type::Instance(_class_name) => {
-                        // For user-defined classes, validate using ClassAnalyzer
-                        // ClassAnalyzer integration requires passing analyzer state through TypeCheckContext
-                        // For now, we accept all instance attribute accesses
-                        // Full implementation would:
-                        // 1. Get ClassAnalyzer from context
-                        // 2. Call analyzer.resolve_attribute_type(class_name, attr.attr)
-                        // 3. Check if attribute exists and validate @operator methods
-                        // 4. Handle property descriptors  @property decorated methods
-                        true
+                    Type::Instance(class_name) => {
+                        // For user-defined classes, validate using class metadata from HIR
+                        // Check if the attribute exists in the class
+                        let key = (class_name.clone(), attr.attr.to_string());
+                        if self.context.class_attributes.contains_key(&key) {
+                            // Attribute exists, validation successful
+                            true
+                        } else {
+                            // Attribute not found - could be dynamic or error
+                            // For now, accept it (conservative approach)
+                            // TODO: Add configuration to make this stricter
+                            true
+                        }
                     }
                     Type::Module(_) => {
                         // Module attributes require module system integration

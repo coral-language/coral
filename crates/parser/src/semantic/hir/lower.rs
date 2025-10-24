@@ -134,6 +134,11 @@ impl<'a> HirLowerer<'a> {
         self.class_analyzer
     }
 
+    /// Get a reference to the class analyzer
+    pub fn class_analyzer(&self) -> &ClassAnalyzer<'a> {
+        &self.class_analyzer
+    }
+
     /// Lower a list of statements
     fn lower_statements(&mut self, statements: &[Stmt<'a>]) -> &'a [TypedStmt<'a>] {
         let mut typed_statements = Vec::new();
