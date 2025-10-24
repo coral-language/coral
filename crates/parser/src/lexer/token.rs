@@ -39,6 +39,9 @@ pub enum TokenKind {
     In,
     Def,
     Class,
+    Protocol,
+    Implements,
+    Owned,
     Return,
     Pass,
     Break,
@@ -160,6 +163,12 @@ pub enum LogosToken {
     Def,
     #[token("class")]
     Class,
+    #[token("protocol")]
+    Protocol,
+    #[token("implements")]
+    Implements,
+    #[token("owned")]
+    Owned,
     #[token("return")]
     Return,
     #[token("pass")]

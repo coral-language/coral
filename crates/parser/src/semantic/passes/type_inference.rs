@@ -67,7 +67,9 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                 "complex" => Type::Complex,
                 "None" => Type::None,
                 "Any" => Type::Any,
-                _ => Type::Unknown, // Custom class or undefined type
+                // For custom class names, assume they refer to class instances
+                // The name resolution pass should have validated that the class exists
+                _ => Type::Instance(name.id.to_string()),
             }
         }
         Expr::Subscript(subscript) => {
@@ -427,13 +429,20 @@ impl<'a> TypeInference<'a> {
                 }
 
                 // Infer return type
-                let return_ty = if let Some(returns) = &func.returns {
+                let declared_return_ty = if let Some(returns) = &func.returns {
                     parse_annotation(returns)
                 } else {
                     // Infer return type from function body
                     // Would require analyzing all return statements
                     // Conservative: Unknown allows any return type
                     Type::Unknown
+                };
+
+                // Wrap return type in Coroutine for async functions
+                let return_ty = if func.is_async {
+                    Type::Coroutine(Box::new(declared_return_ty))
+                } else {
+                    declared_return_ty
                 };
 
                 // Build function type and store parameter types in symbol table
@@ -468,6 +477,12 @@ impl<'a> TypeInference<'a> {
                 self.context.symbol_table_mut().pop_scope();
             }
             Stmt::ClassDef(class) => {
+                // Register the class name as a Class type in the current scope
+                // This allows the class to be referenced as a callable constructor
+                self.context
+                    .symbol_table_mut()
+                    .set_symbol_type(class.name, Type::Class(class.name.to_string()));
+
                 // Enter existing class scope (created by NameResolver)
                 let entered = self
                     .context
@@ -930,9 +945,13 @@ impl<'a> TypeInference<'a> {
                     // Note: Full keyword matching requires parameter names in Type::Function
                 }
 
-                // Return the function's return type
+                // Return the function's return type or instance type for class constructors
                 match func_ty {
                     Type::Function { returns, .. } => *returns,
+                    Type::Class(class_name) => {
+                        // Class instantiation returns an instance of the class
+                        Type::Instance(class_name)
+                    }
                     _ => Type::Unknown,
                 }
             }
@@ -1130,12 +1149,15 @@ impl<'a> TypeInference<'a> {
                     // Coroutine(T) -> T
                     Type::Coroutine(inner) => *inner,
                     // Handle common async library types (Future, Task, Coroutine instances)
-                    Type::Instance(ref name) if name == "Future" || name == "Task" || name == "Coroutine" => {
+                    Type::Instance(ref name)
+                        if name == "Future" || name == "Task" || name == "Coroutine" =>
+                    {
                         // Without generic type info, we can't determine the inner type
                         Type::Unknown
                     }
                     // Generic types might have the awaited type as a parameter
-                    Type::Generic { base, params } if matches!(*base, Type::Instance(ref n) if n == "Future" || n == "Task" || n == "Coroutine") => {
+                    Type::Generic { base, params } if matches!(*base, Type::Instance(ref n) if n == "Future" || n == "Task" || n == "Coroutine") =>
+                    {
                         // First parameter is typically the return type
                         params.first().cloned().unwrap_or(Type::Unknown)
                     }
@@ -1291,7 +1313,7 @@ impl<'a> TypeInference<'a> {
         args: &crate::ast::Arguments,
         return_ty: Type,
     ) -> Type {
-        let mut param_types = Vec::new();
+        let mut params: Vec<(Option<String>, Type)> = Vec::new();
 
         // Positional-only arguments
         for arg in args.posonlyargs {
@@ -1300,7 +1322,8 @@ impl<'a> TypeInference<'a> {
                 .as_ref()
                 .map(|ann| parse_annotation(ann))
                 .unwrap_or(Type::Unknown);
-            param_types.push(ty.clone());
+            // Include parameter name for keyword argument validation
+            params.push((Some(arg.arg.to_string()), ty.clone()));
             // Store parameter type in symbol table
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
@@ -1312,7 +1335,8 @@ impl<'a> TypeInference<'a> {
                 .as_ref()
                 .map(|ann| parse_annotation(ann))
                 .unwrap_or(Type::Unknown);
-            param_types.push(ty.clone());
+            // Include parameter name for keyword argument validation
+            params.push((Some(arg.arg.to_string()), ty.clone()));
             // Store parameter type in symbol table
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
@@ -1324,7 +1348,8 @@ impl<'a> TypeInference<'a> {
                 .as_ref()
                 .map(|ann| parse_annotation(ann))
                 .unwrap_or(Type::Unknown);
-            param_types.push(ty.clone());
+            // Include parameter name for keyword argument validation
+            params.push((Some(arg.arg.to_string()), ty.clone()));
             // Store parameter type in symbol table
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
@@ -1354,7 +1379,7 @@ impl<'a> TypeInference<'a> {
                 .set_symbol_type(kwarg.arg, dict_type);
         }
 
-        Type::function(param_types, return_ty)
+        Type::function_with_names(params, return_ty)
     }
 
     /// Infer types from match patterns

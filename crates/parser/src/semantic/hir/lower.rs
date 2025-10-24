@@ -67,7 +67,15 @@ impl<'a> HirLowerer<'a> {
     /// Note: HIR lowering assumes name resolution has already validated all names.
     /// It doesn't perform name validation - that's the job of the name_resolution pass.
     pub fn new(arena: &'a Arena, interner: &'a mut Interner) -> Self {
-        let class_analyzer = ClassAnalyzer::new();
+        // Create class analyzer with immutable interner reference
+        // Safety: The interner is borrowed immutably by ClassAnalyzer
+        // while the mutable reference is held by HirLowerer
+        // This is safe because:
+        // 1. ClassAnalyzer only reads from interner (resolve operations)
+        // 2. HirLowerer's intern() is the only mutation point
+        // 3. We never call intern() while ClassAnalyzer is actively using the interner
+        let interner_ref: &'a Interner = unsafe { &*(interner as *const Interner) };
+        let class_analyzer = ClassAnalyzer::new(interner_ref);
 
         Self {
             arena,
@@ -89,27 +97,19 @@ impl<'a> HirLowerer<'a> {
     ) -> Result<TypedModule<'a>, Vec<HirLoweringError>> {
         self.errors.clear();
 
-        // First pass: collect all class definitions for MRO computation
-        self.collect_classes(module);
+        // Lower all statements (this also adds classes to the analyzer)
+        let body = self.lower_statements(module.body);
+        let imports = self.extract_imports(module.body);
+        let exports = self.extract_exports(module.body);
 
-        // Set the interner on the class analyzer for decorator detection
-        // We need to be careful with the borrowing here - first get the interner reference
-        let interner_ptr = self.interner as *const _;
-        let interner_ref = unsafe { &*interner_ptr };
-        self.class_analyzer.set_interner(interner_ref);
-
-        // Compute MRO for all classes
+        // CRITICAL: Analyze all classes after they've been added during lowering
+        // This computes MRO and builds attribute/method tables
         if let Err(_e) = self.class_analyzer.analyze() {
             self.errors.push(HirLoweringError::ClassAnalysisFailed {
                 class: "unknown".to_string(),
                 span: module.span,
             });
         }
-
-        // Lower all statements
-        let body = self.lower_statements(module.body);
-        let imports = self.extract_imports(module.body);
-        let exports = self.extract_exports(module.body);
 
         let typed_module = TypedModule {
             name: self.intern("<module>"), // Default module symbol (will be set by compiler)
@@ -172,10 +172,13 @@ impl<'a> HirLowerer<'a> {
             Stmt::AnnAssign(ann_assign) => {
                 let target = self.lower_expression(&ann_assign.target)?;
                 let annotation = self.lower_expression(&ann_assign.annotation)?;
-                let value = ann_assign
-                    .value
-                    .as_ref()
-                    .map(|v| self.lower_expression(v))?;
+
+                // Lower value if present, but annotation without value is valid
+                let value = match ann_assign.value.as_ref() {
+                    Some(v) => Some(self.lower_expression(v)?),
+                    None => None,
+                };
+
                 Some(TypedStmt::AnnAssign(TypedAnnAssignStmt {
                     target,
                     annotation,
@@ -690,12 +693,12 @@ impl<'a> HirLowerer<'a> {
     /// Note: Name validation is done by the name_resolution pass before HIR lowering.
     /// We assume all names are valid and just create the HIR node.
     fn lower_name_expression(&mut self, name: &NameExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Create a symbol ID for this name
-        let symbol_id = crate::arena::symbol::Symbol::new(name.id.len() as u32);
+        // Intern the name to get its symbol ID
+        let symbol = self.intern(name.id);
 
         // Type will be inferred by the type inference pass
         Some(TypedExpr::Name(TypedNameExpr {
-            symbol: symbol_id,
+            symbol,
             ty: Type::Unknown,
             span: name.span,
         }))
@@ -1234,20 +1237,42 @@ impl<'a> HirLowerer<'a> {
         // Lower type parameters
         let type_params = self.lower_type_parameters(class.type_params).unwrap_or(&[]);
 
-        Some(TypedStmt::ClassDef(TypedClassDefStmt {
+        // Create the typed class definition
+        let typed_class = TypedClassDefStmt {
             name,
             type_params,
             bases,
             keywords,
             body,
             decorators,
+            is_protocol: class.is_protocol,
             mro,
             attributes,
             methods,
             ty: Type::Class(self.interner.resolve(name).unwrap_or("Unknown").to_string()),
             span: class.span,
             docstring: class.docstring,
-        }))
+        };
+
+        // Create a simplified version for ClassAnalyzer (without MRO/attributes/methods)
+        let analyzer_class = crate::semantic::hir::class_analysis::TypedClassDefStmt {
+            name,
+            type_params,
+            bases,
+            keywords,
+            body,
+            decorators,
+            is_protocol: class.is_protocol,
+            span: class.span,
+            docstring: class.docstring,
+        };
+        let analyzer_class_ref = self.arena.alloc(analyzer_class);
+
+        // Add class to analyzer for MRO and attribute/method table computation
+        // CRITICAL: This must happen during lowering so the analyzer can process the class
+        self.class_analyzer.add_class(analyzer_class_ref);
+
+        Some(TypedStmt::ClassDef(typed_class))
     }
 
     /// Lower import statement
@@ -1542,63 +1567,6 @@ impl<'a> HirLowerer<'a> {
         }
 
         Some(self.arena.alloc_slice_vec(typed_patterns))
-    }
-
-    /// Collect classes for MRO computation
-    fn collect_classes(&mut self, module: &Module<'a>) {
-        self.collect_classes_from_statements(module.body);
-    }
-
-    /// Collect classes from a list of statements
-    fn collect_classes_from_statements(&mut self, statements: &[Stmt<'a>]) {
-        for stmt in statements {
-            match stmt {
-                Stmt::ClassDef(class) => {
-                    // Collect class name for analysis
-                    let _name = self.intern(class.name);
-                    // Note: Full class analysis is done during lowering, not here
-                }
-                _ => {
-                    // Recursively check nested statements
-                    self.collect_classes_from_nested_stmt(stmt);
-                }
-            }
-        }
-    }
-
-    /// Collect classes from nested statements
-    fn collect_classes_from_nested_stmt(&mut self, stmt: &Stmt<'a>) {
-        match stmt {
-            Stmt::If(if_stmt) => {
-                self.collect_classes_from_statements(if_stmt.body);
-                self.collect_classes_from_statements(if_stmt.orelse);
-            }
-            Stmt::While(while_stmt) => {
-                self.collect_classes_from_statements(while_stmt.body);
-                self.collect_classes_from_statements(while_stmt.orelse);
-            }
-            Stmt::For(for_stmt) => {
-                self.collect_classes_from_statements(for_stmt.body);
-                self.collect_classes_from_statements(for_stmt.orelse);
-            }
-            Stmt::Try(try_stmt) => {
-                self.collect_classes_from_statements(try_stmt.body);
-                self.collect_classes_from_statements(try_stmt.orelse);
-                self.collect_classes_from_statements(try_stmt.finalbody);
-                for handler in try_stmt.handlers {
-                    self.collect_classes_from_statements(handler.body);
-                }
-            }
-            Stmt::With(with_stmt) => {
-                self.collect_classes_from_statements(with_stmt.body);
-            }
-            Stmt::Match(match_stmt) => {
-                for case in match_stmt.cases {
-                    self.collect_classes_from_statements(case.body);
-                }
-            }
-            _ => {}
-        }
     }
 
     /// Extract imports from module

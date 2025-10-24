@@ -103,19 +103,12 @@ impl<'a> HirContext<'a> {
         self.symbol_table.get_symbol_type(name)
     }
 
-    /// Get the MRO for a class
-    pub fn get_class_mro(&self, class_name: Symbol) -> Option<&[Symbol]> {
-        self.class_analyzer.get_mro(class_name)
-    }
-
-    /// Get the attributes for a class
-    pub fn get_class_attributes(&self, class_name: Symbol) -> Option<&[(Symbol, Type)]> {
-        self.class_analyzer.get_attributes(class_name)
-    }
-
-    /// Get the methods for a class
-    pub fn get_class_methods(&self, class_name: Symbol) -> Option<&[(Symbol, Type)]> {
-        self.class_analyzer.get_methods(class_name)
+    /// Get metadata for a class
+    pub fn get_class_metadata(
+        &self,
+        class_name: Symbol,
+    ) -> Option<&crate::semantic::hir::class_analysis::ClassMetadata> {
+        self.class_analyzer.get_metadata(class_name)
     }
 
     /// Find all function definitions in the module

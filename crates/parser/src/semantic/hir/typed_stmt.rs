@@ -190,6 +190,7 @@ pub struct TypedClassDefStmt<'a> {
     pub keywords: &'a [super::typed_expr::TypedKeyword<'a>],
     pub body: &'a [TypedStmt<'a>],
     pub decorators: &'a [TypedExpr<'a>],
+    pub is_protocol: bool,
     pub mro: &'a [Symbol],                // Method Resolution Order
     pub attributes: &'a [(Symbol, Type)], // Attribute table
     pub methods: &'a [(Symbol, Type)],    // Method table

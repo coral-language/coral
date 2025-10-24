@@ -354,6 +354,8 @@ pub struct ControlFlowAnalyzer {
     try_stack: Vec<TryContext>,
     /// CFGs stored per function name for dataflow analysis
     pub function_cfgs: HashMap<String, ControlFlowGraph>,
+    /// Track if we're currently analyzing a protocol
+    in_protocol: bool,
 }
 
 impl Default for ControlFlowAnalyzer {
@@ -372,6 +374,7 @@ impl ControlFlowAnalyzer {
             loop_stack: Vec::new(),
             try_stack: Vec::new(),
             function_cfgs: HashMap::new(),
+            in_protocol: false,
         }
     }
 
@@ -912,10 +915,13 @@ impl ControlFlowAnalyzer {
                 }
             }
             Stmt::ClassDef(class) => {
+                let prev_protocol = self.in_protocol;
+                self.in_protocol = class.is_protocol;
                 // Analyze class methods
                 for stmt in class.body {
                     self.analyze_stmt(stmt);
                 }
+                self.in_protocol = prev_protocol;
             }
             _ => {
                 // Other statements don't need special control flow analysis
@@ -939,8 +945,16 @@ impl ControlFlowAnalyzer {
         // Analyze using the CFG
         self.check_unreachable_code_cfg(&cfg);
 
-        // Check if all paths return (if function has non-None return type)
-        if let Some(ref returns) = func.returns
+        // Check if all paths return (if function has a return type annotation)
+        // Skip this check for:
+        // 1. Protocol methods (they're just interface definitions)
+        // 2. Functions with only pass/empty body (pass is a valid placeholder for any return type)
+        let is_empty_body =
+            func.body.iter().all(|stmt| matches!(stmt, Stmt::Pass(_))) || func.body.is_empty();
+
+        if !self.in_protocol
+            && !is_empty_body
+            && let Some(ref returns) = func.returns
             && !self.is_none_type(returns)
             && !self.check_all_paths_return_cfg(&cfg)
         {
@@ -988,12 +1002,17 @@ impl ControlFlowAnalyzer {
             }
             Expr::Tuple(tup) => {
                 // Handle tuple types like tuple[int, str]
-                let types: Vec<String> = tup.elts.iter().map(|e| self.extract_type_name(e)).collect();
+                let types: Vec<String> =
+                    tup.elts.iter().map(|e| self.extract_type_name(e)).collect();
                 format!("({})", types.join(", "))
             }
             Expr::BinOp(binop) if binop.op == "|" => {
                 // Handle union types like int | str
-                format!("{} | {}", self.extract_type_name(binop.left), self.extract_type_name(binop.right))
+                format!(
+                    "{} | {}",
+                    self.extract_type_name(binop.left),
+                    self.extract_type_name(binop.right)
+                )
             }
             Expr::Constant(c) => c.value.to_string(),
             _ => "unknown".to_string(),
@@ -1014,11 +1033,16 @@ impl ControlFlowAnalyzer {
             Expr::Set(set) => set.elts.iter().all(|e| self.is_constant_expr(e)),
             // Constant dicts
             Expr::Dict(dict) => {
-                dict.keys.iter().all(|k| k.as_ref().map(|e| self.is_constant_expr(e)).unwrap_or(false))
-                    && dict.values.iter().all(|v| self.is_constant_expr(v))
+                dict.keys.iter().all(|k| {
+                    k.as_ref()
+                        .map(|e| self.is_constant_expr(e))
+                        .unwrap_or(false)
+                }) && dict.values.iter().all(|v| self.is_constant_expr(v))
             }
             // Binary operations on constants
-            Expr::BinOp(binop) => self.is_constant_expr(binop.left) && self.is_constant_expr(binop.right),
+            Expr::BinOp(binop) => {
+                self.is_constant_expr(binop.left) && self.is_constant_expr(binop.right)
+            }
             // Unary operations on constants
             Expr::UnaryOp(unop) => self.is_constant_expr(unop.operand),
             _ => false,
@@ -1561,9 +1585,19 @@ impl ControlFlowAnalyzer {
             }
 
             // If a block has no successors and doesn't terminate with return, it's a problem
+            // UNLESS the block is empty or only contains pass statements (implicit None return)
             if block.successors.is_empty() && block.terminator != Some(Terminator::Return) {
-                has_return_on_all_paths = false;
-                break;
+                // Check if block only has normal statements (pass, expr, etc.) - these can implicitly return
+                // An empty block or block with only pass/non-terminating statements is OK for None returns
+                let has_only_normal_stmts = block
+                    .statements
+                    .iter()
+                    .all(|stmt| matches!(stmt.kind, StmtKind::Normal));
+
+                if !has_only_normal_stmts {
+                    has_return_on_all_paths = false;
+                    break;
+                }
             }
         }
 

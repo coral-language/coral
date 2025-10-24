@@ -158,6 +158,7 @@ pub struct ClassDefStmt<'a> {
     pub keywords: &'a [super::expr::Keyword<'a>],
     pub body: &'a [Stmt<'a>],
     pub decorators: &'a [Expr<'a>],
+    pub is_protocol: bool,
     pub span: TextRange,
     /// The class's docstring (first string literal in the class body, if any).
     pub docstring: Option<&'a str>,

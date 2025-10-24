@@ -30,6 +30,8 @@ pub(super) struct ParserContext {
     pub(super) in_function: bool,
     /// Are we inside an async function?
     pub(super) in_async_function: bool,
+    /// Are we inside a protocol definition?
+    pub(super) in_protocol: bool,
 }
 
 impl ParserContext {
@@ -38,6 +40,7 @@ impl ParserContext {
             in_loop: false,
             in_function: false,
             in_async_function: false,
+            in_protocol: false,
         }
     }
 
@@ -49,6 +52,11 @@ impl ParserContext {
     pub(super) fn enter_function(mut self, is_async: bool) -> Self {
         self.in_function = true;
         self.in_async_function = is_async;
+        self
+    }
+
+    pub(super) fn enter_protocol(mut self) -> Self {
+        self.in_protocol = true;
         self
     }
 }

@@ -263,6 +263,8 @@ pub struct PassManagerConfig {
     pub collect_statistics: bool,
     /// Set of disabled pass IDs
     pub disabled_passes: HashSet<String>,
+    /// Set of explicitly enabled pass IDs (overrides enabled_by_default)
+    pub enabled_passes: HashSet<String>,
     /// Enable verbose output
     pub verbose: bool,
     /// Enable persistent caching
@@ -276,7 +278,7 @@ pub struct PassManagerConfig {
     /// Maximum depth for re-export chain resolution (prevents infinite loops)
     pub max_reexport_depth: usize,
     /// Enable strict attribute checking (reject dynamic/unknown attributes)
-    /// When false (default), allows Python-style dynamic attributes
+    /// When false, allows Python-style dynamic attributes (default: true)
     pub strict_attribute_checking: bool,
 }
 
@@ -288,13 +290,14 @@ impl Default for PassManagerConfig {
             max_errors: None,
             collect_statistics: false,
             disabled_passes: HashSet::new(),
+            enabled_passes: HashSet::new(),
             verbose: false,
             enable_persistent_cache: false, // Disabled by default for compatibility
             cache_config: Some(CacheConfig::default()),
             metrics_config: MetricsConfig::default(),
-            pass_timeout_seconds: None,       // No timeout by default
-            max_reexport_depth: 10,           // Default to 10 levels
-            strict_attribute_checking: false, // Lenient by default for Python compatibility
+            pass_timeout_seconds: None,      // No timeout by default
+            max_reexport_depth: 10,          // Default to 10 levels
+            strict_attribute_checking: true, // Enable strict checking for type safety
         }
     }
 }
@@ -433,7 +436,7 @@ impl PassManager {
             name: "Import Resolution",
             description: "Resolves imports, detects circular dependencies, checks shadowing",
             priority: PassPriority::Critical,
-            dependencies: vec![],
+            dependencies: vec!["name_resolution"],
             parallelizable: false,
             enabled_by_default: true,
         });
@@ -443,7 +446,7 @@ impl PassManager {
             name: "Module System",
             description: "Validates module structure and relationships",
             priority: PassPriority::Critical,
-            dependencies: vec!["import_resolution"],
+            dependencies: vec!["name_resolution", "import_resolution"],
             parallelizable: false,
             enabled_by_default: true,
         });
@@ -727,9 +730,12 @@ impl PassManager {
                 continue;
             }
 
-            // Skip if not enabled by default (unless explicitly enabled)
+            // Check if enabled by default or explicitly enabled
             let metadata = self.passes.get(pass_id).unwrap();
-            if !metadata.enabled_by_default {
+            let is_enabled =
+                metadata.enabled_by_default || self.config.enabled_passes.contains(pass_id);
+
+            if !is_enabled {
                 if self.config.verbose {
                     println!("Skipping optional pass: {}", pass_id);
                 }
@@ -927,7 +933,15 @@ impl PassManager {
 
         // Store symbol table in analysis context for subsequent passes
         let (symbol_table, errors) = resolver.into_symbol_table();
-        *self.analysis_context.symbol_table.write().unwrap() = symbol_table;
+
+        // Update both the standalone symbol table and the type context's symbol table
+        *self.analysis_context.symbol_table.write().unwrap() = symbol_table.clone();
+
+        // CRITICAL: Update the TypeInferenceContext's symbol table
+        // This ensures type inference can access class definitions and other symbols
+        let mut type_ctx = self.analysis_context.type_context.write().unwrap();
+        *type_ctx.symbol_table_mut() = symbol_table;
+        drop(type_ctx); // Release lock
 
         // Collect and return errors
         if errors.is_empty() {
@@ -1107,18 +1121,59 @@ impl PassManager {
                 // Extract class analyzer from the lowerer (consumes lowerer)
                 let class_analyzer = lowerer.into_class_analyzer();
 
-                // Export class attributes and MRO (uses interner reference stored in ClassAnalyzer)
-                let class_attributes = class_analyzer.export_class_attributes();
-                let class_mro = class_analyzer.export_class_mro();
+                // Export comprehensive class metadata
+                let class_metadata_map = class_analyzer.export_metadata();
 
-                // Store in analysis context for type checking and other passes
+                // Store metadata in analysis context with flattened structure for compatibility
                 {
                     let mut attrs = self.analysis_context.class_attributes.write().unwrap();
-                    attrs.extend(class_attributes);
-                }
-                {
                     let mut mro_map = self.analysis_context.class_mro.write().unwrap();
-                    mro_map.extend(class_mro);
+
+                    for (class_name, metadata) in class_metadata_map {
+                        // Store MRO
+                        mro_map.insert(class_name.clone(), metadata.mro.clone());
+
+                        // Flatten and store all attributes with priority-based merging
+                        // Priority: Properties > Methods > Class Attrs > Instance Attrs
+
+                        // Store properties as AttributeDescriptor types
+                        for (prop_name, prop_desc) in &metadata.properties {
+                            let key = (class_name.clone(), prop_name.clone());
+                            let attr_type = Type::AttributeDescriptor {
+                                kind: crate::semantic::types::AttributeKind::Property,
+                                getter_type: Box::new(prop_desc.getter_type.clone()),
+                                setter_type: prop_desc
+                                    .setter_type
+                                    .as_ref()
+                                    .map(|t| Box::new(t.clone())),
+                            };
+                            attrs.insert(key, attr_type);
+                        }
+
+                        // Store methods (don't overwrite properties)
+                        for (method_name, method_type) in &metadata.methods {
+                            let key = (class_name.clone(), method_name.clone());
+                            attrs.entry(key).or_insert_with(|| method_type.clone());
+                        }
+
+                        // Store class attributes (don't overwrite methods or properties)
+                        for (attr_name, attr_type) in &metadata.class_attributes {
+                            let key = (class_name.clone(), attr_name.clone());
+                            attrs.entry(key).or_insert_with(|| attr_type.clone());
+                        }
+
+                        // Store instance attributes (lowest priority)
+                        for (attr_name, attr_type) in &metadata.instance_attributes {
+                            let key = (class_name.clone(), attr_name.clone());
+                            attrs.entry(key).or_insert_with(|| attr_type.clone());
+                        }
+
+                        // Store constructor as a special "constructor" method
+                        if let Some(constructor_type) = &metadata.constructor {
+                            let key = (class_name.clone(), "constructor".to_string());
+                            attrs.insert(key, constructor_type.clone());
+                        }
+                    }
                 }
 
                 Ok(())
@@ -1317,6 +1372,7 @@ impl PassManager {
     /// Enable a pass
     pub fn enable_pass(&mut self, pass_id: &str) {
         self.config.disabled_passes.remove(pass_id);
+        self.config.enabled_passes.insert(pass_id.to_string());
     }
 
     /// Disable a pass
@@ -1990,6 +2046,7 @@ mod tests {
             metrics_config: MetricsConfig::default(),
             pass_timeout_seconds: Some(30),
             disabled_passes: HashSet::new(),
+            enabled_passes: HashSet::new(),
             verbose: true,
             strict_attribute_checking: false,
         };

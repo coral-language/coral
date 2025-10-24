@@ -924,7 +924,7 @@ impl ErrorKind {
 
             ErrorKind::BlockingCallInAsync { .. } => ErrorMetadata {
                 code: ErrorCode::E6001,
-                severity: Severity::Warning,
+                severity: Severity::Error,
                 category: ErrorCategory::Concurrency,
                 error_type: "BlockingCallWarning",
                 title: "Blocking call in async context",

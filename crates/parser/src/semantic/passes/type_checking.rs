@@ -219,7 +219,7 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
 
                     let return_type = self.context.get_expr_type(value.span());
                     if let Some(ref expected) = self.context.current_return_type
-                        && !return_type.is_subtype_of(expected)
+                        && !self.type_satisfies(&return_type, expected)
                     {
                         self.context.add_error(*error(
                             ErrorKind::ReturnTypeMismatch {
@@ -430,6 +430,7 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                         // For user-defined classes, validate using class metadata from HIR
                         // Check if the attribute exists in the class
                         let key = (class_name.clone(), attr.attr.to_string());
+
                         if self.context.class_attributes.contains_key(&key) {
                             // Attribute exists, validation successful
                             true
@@ -540,8 +541,30 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     /// Check assignment target compatibility
     fn check_assignment_target(&mut self, target: &Expr, value_type: &Type) {
         match target {
-            Expr::Name(_) => {
-                // Name assignments are always valid (type can change)
+            Expr::Name(name) => {
+                // Check if the variable already has a declared type
+                // If so, the new value must be compatible with that type
+                if let Some(declared_type) = self
+                    .context
+                    .inference_ctx
+                    .symbol_table()
+                    .get_symbol_type(name.id)
+                {
+                    // Check type compatibility
+                    if !value_type.is_subtype_of(&declared_type)
+                        && !matches!(value_type, Type::Unknown)
+                        && !matches!(declared_type, Type::Unknown)
+                    {
+                        self.context.add_error(*error(
+                            ErrorKind::TypeMismatch {
+                                expected: declared_type.to_string(),
+                                found: value_type.to_string(),
+                            },
+                            target.span(),
+                        ));
+                    }
+                }
+                // Otherwise, name assignments are valid (type can be inferred)
             }
             Expr::Tuple(tuple) => {
                 // Check tuple unpacking
@@ -664,9 +687,29 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                         Type::Int | Type::Float | Type::Complex | Type::Bool
                     ) | (Type::Str, Type::Str)
                         | (Type::List(_), Type::List(_))
-                )
+                ) || self.has_operator_overload(left, "add")
             }
-            "-" | "*" | "/" | "//" | "%" | "**" => {
+            "-" => {
+                // Subtraction works for numbers
+                matches!(
+                    (left, right),
+                    (
+                        Type::Int | Type::Float | Type::Complex | Type::Bool,
+                        Type::Int | Type::Float | Type::Complex | Type::Bool
+                    )
+                ) || self.has_operator_overload(left, "sub")
+            }
+            "*" => {
+                // Multiplication works for numbers
+                matches!(
+                    (left, right),
+                    (
+                        Type::Int | Type::Float | Type::Complex | Type::Bool,
+                        Type::Int | Type::Float | Type::Complex | Type::Bool
+                    )
+                ) || self.has_operator_overload(left, "mul")
+            }
+            "/" | "//" | "%" | "**" => {
                 // Arithmetic ops work for numbers
                 matches!(
                     (left, right),
@@ -700,6 +743,19 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 },
                 span,
             ));
+        }
+    }
+
+    /// Check if a type has an operator overload method
+    fn has_operator_overload(&self, ty: &Type, method_name: &str) -> bool {
+        match ty {
+            Type::Instance(class_name) => {
+                // Look up method in class_attributes
+                self.context
+                    .class_attributes
+                    .contains_key(&(class_name.clone(), method_name.to_string()))
+            }
+            _ => false,
         }
     }
 
@@ -770,6 +826,49 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
         }
     }
 
+    /// Check if a type satisfies another type (including protocol compliance)
+    fn type_satisfies(&self, actual: &Type, expected: &Type) -> bool {
+        // First check standard subtyping
+        if actual.is_subtype_of(expected) {
+            return true;
+        }
+
+        // Check protocol compliance for Instance types
+        if let (Type::Instance(actual_class), Type::Instance(protocol_name)) = (actual, expected) {
+            return self.check_protocol_compliance(actual_class, protocol_name);
+        }
+
+        false
+    }
+
+    /// Check if a class implements a protocol (structurally)
+    fn check_protocol_compliance(&self, class_name: &str, protocol_name: &str) -> bool {
+        // Get all methods defined in the protocol by looking at class_attributes
+        // Protocol methods are stored as (protocol_name, method_name)
+        let protocol_methods: Vec<String> = self
+            .context
+            .class_attributes
+            .iter()
+            .filter(|((c, _), _)| c == protocol_name)
+            .map(|((_, method), _)| method.clone())
+            .collect();
+
+        // If no methods found for this name, it might not be a protocol
+        if protocol_methods.is_empty() {
+            return false;
+        }
+
+        // Check if class has all required methods
+        for required_method in protocol_methods {
+            let class_key = (class_name.to_string(), required_method);
+            if !self.context.class_attributes.contains_key(&class_key) {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Check function call with comprehensive signature validation
     fn check_function_call(&mut self, call: &CallExpr) {
         let func_ty = self.context.get_expr_type(call.func.span());
@@ -821,7 +920,8 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             for (i, (arg_ty, arg_span)) in positional_args.iter().enumerate() {
                 if let Some((_param_name, expected_ty)) = params.get(i) {
                     // Use contravariance: argument type must be subtype of parameter type
-                    if !arg_ty.is_subtype_of(expected_ty)
+                    // Also check protocol compliance if expected type is a protocol
+                    if !self.type_satisfies(arg_ty, expected_ty)
                         && !matches!(arg_ty, Type::Unknown)
                         && !matches!(expected_ty, Type::Unknown)
                     {
@@ -847,7 +947,7 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
 
                 if let Some((idx, (_param_name, param_ty))) = param_match {
                     // Found matching parameter by name - validate type
-                    if !arg_ty.is_subtype_of(param_ty)
+                    if !self.type_satisfies(arg_ty, param_ty)
                         && !matches!(arg_ty, Type::Unknown)
                         && !matches!(param_ty, Type::Unknown)
                     {
@@ -860,46 +960,14 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                             *arg_span,
                         ));
                     }
-                } else {
-                    // Parameter name not found - check if we can match by position
-                    let remaining_params: Vec<&(Option<String>, Type)> =
-                        params.iter().skip(num_positional).collect();
-
-                    if remaining_params.is_empty() {
-                        // No parameters available for this keyword arg
-                        if let Some(name) = arg_name {
-                            self.context.add_error(*error(
-                                ErrorKind::UnexpectedKeywordArgument {
-                                    name: name.to_string(),
-                                },
-                                *arg_span,
-                            ));
-                        }
-                    } else {
-                        // Check if argument type matches any remaining parameter by type
-                        let matches_any = remaining_params
-                            .iter()
-                            .any(|(_name, param_ty)| arg_ty.is_subtype_of(param_ty));
-
-                        if !matches_any
-                            && !matches!(arg_ty, Type::Unknown)
-                            && !remaining_params
-                                .iter()
-                                .all(|(_n, p)| matches!(p, Type::Unknown))
-                        {
-                            self.context.add_error(*error(
-                                ErrorKind::InvalidArgumentType {
-                                    param_index: num_positional,
-                                    expected: remaining_params
-                                        .first()
-                                        .map(|(_n, t)| t.to_string())
-                                        .unwrap_or_else(|| "unknown".to_string()),
-                                    found: arg_ty.to_string(),
-                                },
-                                *arg_span,
-                            ));
-                        }
-                    }
+                } else if let Some(name) = arg_name {
+                    // Named argument doesn't match any parameter - this is an error
+                    self.context.add_error(*error(
+                        ErrorKind::UnexpectedKeywordArgument {
+                            name: name.to_string(),
+                        },
+                        *arg_span,
+                    ));
                 }
             }
         }

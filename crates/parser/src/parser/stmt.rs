@@ -22,6 +22,7 @@ impl<'a> Parser<'a> {
             TokenKind::Async => self.parse_async_stmt(),
             TokenKind::Def => self.parse_func_def(&[], false),
             TokenKind::Class => self.parse_class_def(&[]),
+            TokenKind::Protocol => self.parse_class_def(&[]),
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),
             TokenKind::For => self.parse_for_stmt(false),
@@ -435,26 +436,46 @@ impl<'a> Parser<'a> {
             None
         };
 
-        if self.peek().kind != TokenKind::Colon {
-            self.recover_missing_colon("function definition")?;
-        } else {
-            self.consume(TokenKind::Colon)?;
+        // Protocol methods don't have colons or bodies
+        let (body_slice, span) = if self.context.in_protocol {
+            // For protocol methods, don't require colon, just consume newline
             self.consume_newline();
-        }
-
-        let saved_context = self.context;
-        self.context = self.context.enter_function(is_async);
-
-        let body = if self.peek().kind == TokenKind::Indent {
-            self.parse_block()?
+            // Protocol methods have empty body
+            let empty_body = self.arena.alloc_slice_vec(Vec::new());
+            let span = TextRange::new(
+                start,
+                returns
+                    .as_ref()
+                    .map(|r| r.span().end())
+                    .unwrap_or(closing_span.end()),
+            );
+            (empty_body, span)
         } else {
-            vec![self.parse_stmt()?]
+            // Regular function methods require colon and body
+            if self.peek().kind != TokenKind::Colon {
+                self.recover_missing_colon("function definition")?;
+            } else {
+                self.consume(TokenKind::Colon)?;
+                self.consume_newline();
+            }
+
+            let saved_context = self.context;
+            self.context = self.context.enter_function(is_async);
+
+            let body = if self.peek().kind == TokenKind::Indent {
+                self.parse_block()?
+            } else {
+                vec![self.parse_stmt()?]
+            };
+            let body_slice = self.arena.alloc_slice_vec(body);
+
+            self.context = saved_context;
+
+            let span = TextRange::new(start, body_slice[body_slice.len() - 1].span().end());
+            (body_slice, span)
         };
-        let body_slice = self.arena.alloc_slice_vec(body);
 
         let docstring = Parser::extract_docstring_from_body(body_slice, self.source, self.arena);
-
-        self.context = saved_context;
 
         Ok(Stmt::FuncDef(FuncDefStmt {
             name,
@@ -464,7 +485,7 @@ impl<'a> Parser<'a> {
             decorators,
             returns,
             is_async,
-            span: TextRange::new(start, body_slice[body_slice.len() - 1].span().end()),
+            span,
             docstring,
         }))
     }
@@ -595,7 +616,12 @@ impl<'a> Parser<'a> {
 
     pub(super) fn parse_class_def(&mut self, decorators: &'a [Expr<'a>]) -> ParseResult<Stmt<'a>> {
         let start = self.peek().span.start();
-        self.consume(TokenKind::Class)?;
+        let is_protocol = self.peek().kind == TokenKind::Protocol;
+        if is_protocol {
+            self.consume(TokenKind::Protocol)?;
+        } else {
+            self.consume(TokenKind::Class)?;
+        }
 
         let name = self.consume_ident()?;
 
@@ -605,7 +631,25 @@ impl<'a> Parser<'a> {
             self.arena.alloc_slice_vec(Vec::new())
         };
 
-        let (bases, keywords) = if self.match_token(TokenKind::LeftParen) {
+        // Parse "implements Protocol1, Protocol2" syntax
+        let (bases, keywords) = if self.match_token(TokenKind::Implements) {
+            let mut base_list = Vec::new();
+
+            // Parse comma-separated list of protocols
+            loop {
+                let protocol = self.parse_expression()?;
+                base_list.push(protocol);
+
+                if !self.match_token(TokenKind::Comma) {
+                    break;
+                }
+            }
+
+            (
+                self.arena.alloc_slice_vec(base_list),
+                self.arena.alloc_slice_vec(Vec::new()),
+            )
+        } else if self.match_token(TokenKind::LeftParen) {
             let opening_span = self.prev().span;
             self.push_delimiter('(', opening_span);
             let mut base_list = Vec::new();
@@ -659,8 +703,17 @@ impl<'a> Parser<'a> {
             self.consume_newline();
         }
 
+        // Set protocol context if we're parsing a protocol
+        let saved_context = self.context;
+        if is_protocol {
+            self.context = self.context.enter_protocol();
+        }
+
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
+
+        // Restore context
+        self.context = saved_context;
 
         let docstring = Parser::extract_docstring_from_body(body_slice, self.source, self.arena);
 
@@ -673,6 +726,7 @@ impl<'a> Parser<'a> {
             keywords,
             body: body_slice,
             decorators,
+            is_protocol,
             span: TextRange::new(start, end),
             docstring,
         }))

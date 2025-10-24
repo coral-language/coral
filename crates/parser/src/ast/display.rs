@@ -10,7 +10,12 @@ pub fn expr_to_string(expr: &Expr) -> String {
         Expr::Complex(c) => c.value.to_string(),
         Expr::Bytes(b) => b.value.to_string(),
         Expr::Name(n) => n.id.to_string(),
-        Expr::BinOp(b) => format!("{} {} {}", expr_to_string(b.left), b.op, expr_to_string(b.right)),
+        Expr::BinOp(b) => format!(
+            "{} {} {}",
+            expr_to_string(b.left),
+            b.op,
+            expr_to_string(b.right)
+        ),
         Expr::UnaryOp(u) => format!("{}{}", u.op, expr_to_string(u.operand)),
         Expr::Compare(c) => {
             let mut result = expr_to_string(c.left);
@@ -22,7 +27,11 @@ pub fn expr_to_string(expr: &Expr) -> String {
         Expr::Call(c) => {
             let func = expr_to_string(c.func);
             let args = if c.args.len() <= 3 {
-                c.args.iter().map(expr_to_string).collect::<Vec<_>>().join(", ")
+                c.args
+                    .iter()
+                    .map(expr_to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             } else {
                 format!("{} args", c.args.len())
             };
@@ -33,7 +42,10 @@ pub fn expr_to_string(expr: &Expr) -> String {
         Expr::Slice(s) => {
             let lower = s.lower.map(expr_to_string).unwrap_or_default();
             let upper = s.upper.map(expr_to_string).unwrap_or_default();
-            let step = s.step.map(|e| format!(":{}", expr_to_string(e))).unwrap_or_default();
+            let step = s
+                .step
+                .map(|e| format!(":{}", expr_to_string(e)))
+                .unwrap_or_default();
             format!("{}:{}{}", lower, upper, step)
         }
         Expr::List(l) => format_sequence("[", "]", l.elts),
@@ -55,9 +67,15 @@ pub fn expr_to_string(expr: &Expr) -> String {
             if d.keys.is_empty() {
                 "{}".to_string()
             } else if d.keys.len() <= 2 {
-                let pairs: Vec<String> = d.keys.iter().zip(d.values.iter())
+                let pairs: Vec<String> = d
+                    .keys
+                    .iter()
+                    .zip(d.values.iter())
                     .map(|(k, v)| {
-                        let key = k.as_ref().map(expr_to_string).unwrap_or_else(|| "**".to_string());
+                        let key = k
+                            .as_ref()
+                            .map(expr_to_string)
+                            .unwrap_or_else(|| "**".to_string());
                         format!("{}: {}", key, expr_to_string(v))
                     })
                     .collect();
@@ -171,4 +189,3 @@ fn format_args(args: &crate::ast::Arguments) -> String {
         params.join(", ")
     }
 }
-

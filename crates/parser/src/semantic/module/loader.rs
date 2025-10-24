@@ -96,6 +96,21 @@ impl<'a> ModuleLoader<'a> {
         // Extract and register exports from this module
         let exports = self.extract_exports_map(module, &module_name);
 
+        // Register exports in the registry
+        for (export_name, export_type) in &exports {
+            self.export_registry.register_export(
+                &module_name,
+                export_name.clone(),
+                ExportInfo {
+                    original_name: export_name.clone(),
+                    ty: export_type.clone(),
+                    source_module: None,
+                    reexport_chain: Vec::new(),
+                    span: TextRange::default(),
+                },
+            );
+        }
+
         // Run HIR lowering to extract class metadata
         let (class_attributes, class_mro) = self.extract_class_metadata(module);
 
@@ -125,7 +140,11 @@ impl<'a> ModuleLoader<'a> {
 
     /// Extract exports from a module and register them
     /// Extract exports from module as a HashMap for caching
-    fn extract_exports_map(&self, module: &Module<'a>, _module_name: &str) -> HashMap<String, Type> {
+    fn extract_exports_map(
+        &self,
+        module: &Module<'a>,
+        _module_name: &str,
+    ) -> HashMap<String, Type> {
         use crate::ast::Stmt;
         let mut exports = HashMap::new();
 
@@ -146,9 +165,15 @@ impl<'a> ModuleLoader<'a> {
 
     /// Extract class attributes and MRO by running HIR lowering
     #[allow(clippy::type_complexity)]
-    fn extract_class_metadata(&self, module: &Module<'a>) -> (HashMap<(String, String), Type>, HashMap<String, Vec<String>>) {
-        use crate::semantic::hir::HirLowerer;
+    fn extract_class_metadata(
+        &self,
+        module: &Module<'a>,
+    ) -> (
+        HashMap<(String, String), Type>,
+        HashMap<String, Vec<String>>,
+    ) {
         use crate::arena::Interner;
+        use crate::semantic::hir::HirLowerer;
 
         // Create a temporary interner for HIR lowering
         let mut interner = Interner::new();
@@ -157,10 +182,59 @@ impl<'a> ModuleLoader<'a> {
         // Run HIR lowering and extract class information
         match lowerer.lower_module(module) {
             Ok(_typed_module) => {
-                // Extract data from class analyzer using export methods
-                let analyzer = lowerer.class_analyzer();
-                let class_attributes = analyzer.export_class_attributes();
-                let class_mro = analyzer.export_class_mro();
+                // Extract comprehensive metadata from class analyzer
+                let class_analyzer = lowerer.into_class_analyzer();
+                let metadata_map = class_analyzer.export_metadata();
+
+                // Convert to flat structure for compatibility
+                let mut class_attributes = HashMap::new();
+                let mut class_mro = HashMap::new();
+
+                for (class_name, metadata) in metadata_map {
+                    // Store MRO
+                    class_mro.insert(class_name.clone(), metadata.mro.clone());
+
+                    // Flatten all attributes with priority-based merging
+                    // Priority: Properties > Methods > Class Attrs > Instance Attrs
+                    for (prop_name, prop_desc) in &metadata.properties {
+                        let key = (class_name.clone(), prop_name.clone());
+                        let attr_type = crate::semantic::types::Type::AttributeDescriptor {
+                            kind: crate::semantic::types::AttributeKind::Property,
+                            getter_type: Box::new(prop_desc.getter_type.clone()),
+                            setter_type: prop_desc
+                                .setter_type
+                                .as_ref()
+                                .map(|t| Box::new(t.clone())),
+                        };
+                        class_attributes.insert(key, attr_type);
+                    }
+
+                    for (method_name, method_type) in &metadata.methods {
+                        let key = (class_name.clone(), method_name.clone());
+                        class_attributes
+                            .entry(key)
+                            .or_insert_with(|| method_type.clone());
+                    }
+
+                    for (attr_name, attr_type) in &metadata.class_attributes {
+                        let key = (class_name.clone(), attr_name.clone());
+                        class_attributes
+                            .entry(key)
+                            .or_insert_with(|| attr_type.clone());
+                    }
+
+                    for (attr_name, attr_type) in &metadata.instance_attributes {
+                        let key = (class_name.clone(), attr_name.clone());
+                        class_attributes
+                            .entry(key)
+                            .or_insert_with(|| attr_type.clone());
+                    }
+
+                    if let Some(constructor_type) = &metadata.constructor {
+                        let key = (class_name.clone(), "constructor".to_string());
+                        class_attributes.insert(key, constructor_type.clone());
+                    }
+                }
 
                 (class_attributes, class_mro)
             }

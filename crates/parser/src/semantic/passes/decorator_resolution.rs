@@ -246,6 +246,9 @@ impl<'a> DecoratorResolver<'a> {
                             span,
                         ));
                     }
+
+                    // Validate operator method signature
+                    self.validate_operator_signature(func);
                 }
 
                 decorator_kinds.push((kind, name, span));
@@ -577,6 +580,108 @@ impl<'a> DecoratorResolver<'a> {
                     _ => {}
                 }
             }
+        }
+    }
+
+    /// Validate operator method signature
+    fn validate_operator_signature(&mut self, func: &FuncDefStmt<'a>) {
+        let func_name = func.name;
+        let param_count = func.args.args.len();
+
+        // Operator methods must have at least self parameter
+        if param_count == 0 {
+            self.errors.push(*error(
+                ErrorKind::InvalidSyntax {
+                    message: format!(
+                        "Operator method '{}' must have at least 'self' parameter",
+                        func_name
+                    ),
+                },
+                func.span,
+            ));
+            return;
+        }
+
+        // Binary operators need exactly 2 parameters (self + other)
+        let binary_ops = [
+            "__add__",
+            "__sub__",
+            "__mul__",
+            "__truediv__",
+            "__mod__",
+            "__pow__",
+            "__floordiv__",
+            "__and__",
+            "__or__",
+            "__xor__",
+            "__lshift__",
+            "__rshift__",
+            "__eq__",
+            "__ne__",
+            "__lt__",
+            "__le__",
+            "__gt__",
+            "__ge__",
+            "__matmul__",
+            "__divmod__",
+            // Also check without underscores (if used)
+            "add",
+            "sub",
+            "mul",
+            "truediv",
+            "mod",
+            "pow",
+            "floordiv",
+            "and",
+            "or",
+            "xor",
+            "lshift",
+            "rshift",
+            "eq",
+            "ne",
+            "lt",
+            "le",
+            "gt",
+            "ge",
+            "matmul",
+            "divmod",
+        ];
+
+        if binary_ops.contains(&func_name) && param_count != 2 {
+            self.errors.push(*error(
+                ErrorKind::InvalidSyntax {
+                    message: format!(
+                        "Binary operator '{}' must have exactly 2 parameters (self, other), found {}",
+                        func_name, param_count
+                    ),
+                },
+                func.span,
+            ));
+            return;
+        }
+
+        // Unary operators need exactly 1 parameter (self)
+        let unary_ops = [
+            "__neg__",
+            "__pos__",
+            "__invert__",
+            "__abs__",
+            "neg",
+            "pos",
+            "invert",
+            "abs",
+        ];
+
+        if unary_ops.contains(&func_name) && param_count != 1 {
+            self.errors.push(*error(
+                ErrorKind::InvalidSyntax {
+                    message: format!(
+                        "Unary operator '{}' must have exactly 1 parameter (self), found {}",
+                        func_name, param_count
+                    ),
+                },
+                func.span,
+            ));
         }
     }
 }
