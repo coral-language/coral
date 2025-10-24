@@ -1422,9 +1422,34 @@ z = "hello"
 b = True
 n = None
 "#;
-        let _context = infer_types(source);
-        // Types are inferred but not yet stored in a way we can query
-        // This test just ensures inference runs without panicking
+        let context = infer_types(source);
+
+        // Verify that type inference stored results
+        assert!(!context.expr_types.is_empty(), "Should have inferred types");
+
+        // Verify that literal types were inferred correctly
+        // Check that we have at least 5 types (one for each literal)
+        assert!(
+            context.expr_types.len() >= 5,
+            "Should have inferred at least 5 literal types, got {}",
+            context.expr_types.len()
+        );
+
+        // Verify specific literal types exist in the inferred types
+        let has_int = context.expr_types.values().any(|t| matches!(t, Type::Int));
+        let has_float = context
+            .expr_types
+            .values()
+            .any(|t| matches!(t, Type::Float));
+        let has_str = context.expr_types.values().any(|t| matches!(t, Type::Str));
+        let has_bool = context.expr_types.values().any(|t| matches!(t, Type::Bool));
+        let has_none = context.expr_types.values().any(|t| matches!(t, Type::None));
+
+        assert!(has_int, "Should have inferred Int type");
+        assert!(has_float, "Should have inferred Float type");
+        assert!(has_str, "Should have inferred Str type");
+        assert!(has_bool, "Should have inferred Bool type");
+        assert!(has_none, "Should have inferred None type");
     }
 
     #[test]
@@ -1435,7 +1460,33 @@ tup = (1, "a", True)
 st = {1, 2, 3}
 dct = {"a": 1, "b": 2}
 "#;
-        let _context = infer_types(source);
+        let context = infer_types(source);
+
+        // Verify that collection types were inferred
+        assert!(!context.expr_types.is_empty(), "Should have inferred types");
+
+        // Check for specific collection types in the inferred types
+        let has_list = context
+            .expr_types
+            .values()
+            .any(|t| matches!(t, Type::List(_)));
+        let has_tuple = context
+            .expr_types
+            .values()
+            .any(|t| matches!(t, Type::Tuple(_)));
+        let has_set = context
+            .expr_types
+            .values()
+            .any(|t| matches!(t, Type::Set(_)));
+        let has_dict = context
+            .expr_types
+            .values()
+            .any(|t| matches!(t, Type::Dict(_, _)));
+
+        assert!(has_list, "Should have inferred List type");
+        assert!(has_tuple, "Should have inferred Tuple type");
+        assert!(has_set, "Should have inferred Set type");
+        assert!(has_dict, "Should have inferred Dict type");
     }
 
     #[test]
@@ -1445,7 +1496,25 @@ a = 1 + 2
 b = 1.0 + 2
 c = "hello" + "world"
 "#;
-        let _context = infer_types(source);
+        let context = infer_types(source);
+
+        // Verify that binary operation result types were inferred
+        assert!(!context.expr_types.is_empty(), "Should have inferred types");
+
+        // Check for expected types from binary operations
+        let has_int = context.expr_types.values().any(|t| matches!(t, Type::Int));
+        let has_float = context
+            .expr_types
+            .values()
+            .any(|t| matches!(t, Type::Float));
+        let has_str = context.expr_types.values().any(|t| matches!(t, Type::Str));
+
+        assert!(has_int, "Should have inferred Int from 1 + 2");
+        assert!(has_float, "Should have inferred Float from 1.0 + 2");
+        assert!(
+            has_str,
+            "Should have inferred Str from string concatenation"
+        );
     }
 
     #[test]
