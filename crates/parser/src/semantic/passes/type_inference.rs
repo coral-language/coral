@@ -142,6 +142,7 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
 }
 
 /// Type inference context that tracks inferred types for expressions
+#[derive(Clone, Debug)]
 pub struct TypeInferenceContext {
     /// Map from expression spans (start, end) to inferred types
     expr_types: HashMap<(usize, usize), Type>,

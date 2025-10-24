@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock};
 use text_size::TextRange;
 
 /// A symbol table managing all scopes in a module
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymbolTable {
     /// All scopes, indexed by scope ID
     scopes: Vec<Scope>,

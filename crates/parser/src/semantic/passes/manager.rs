@@ -8,11 +8,82 @@ use crate::semantic::metrics::{MetricsCollector, MetricsConfig};
 use crate::semantic::module::{
     CompositeResolver, ModuleExportRegistry, ModuleGraph, ModulePathResolver,
 };
+use crate::semantic::passes::control_flow::ControlFlowGraph;
+use crate::semantic::passes::type_inference::TypeInferenceContext;
 use crate::semantic::symbol::table::SymbolTable;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+
+/// Shared analysis context containing state that persists across passes
+///
+/// This struct centralizes all mutable state that needs to be shared between
+/// analysis passes, using Arc<RwLock<T>> for thread-safe access. This enables:
+/// - State persistence between passes (avoiding redundant analysis)
+/// - Parallel execution with proper synchronization
+/// - Incremental compilation with cached results
+#[derive(Clone)]
+pub struct AnalysisContext {
+    /// Shared symbol table with name bindings and scope information
+    pub symbol_table: Arc<RwLock<SymbolTable>>,
+
+    /// Type inference context containing inferred types for expressions
+    pub type_context: Arc<RwLock<TypeInferenceContext>>,
+
+    /// Cached control flow graphs (function name -> CFG)
+    /// Eliminates redundant CFG construction across multiple passes
+    pub cfg_cache: Arc<RwLock<HashMap<String, ControlFlowGraph>>>,
+
+    /// Lowered HIR modules (module name -> TypedModule)
+    /// Note: Using String keys temporarily; will use actual TypedModule once available
+    pub hir_modules: Arc<RwLock<HashMap<String, String>>>, // TODO: Replace String with TypedModule<'a>
+}
+
+impl AnalysisContext {
+    /// Create a new analysis context with empty state
+    pub fn new() -> Self {
+        Self {
+            symbol_table: Arc::new(RwLock::new(SymbolTable::new())),
+            type_context: Arc::new(RwLock::new(TypeInferenceContext::new(SymbolTable::new()))),
+            cfg_cache: Arc::new(RwLock::new(HashMap::new())),
+            hir_modules: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Clear all cached state (useful for incremental compilation)
+    pub fn clear_caches(&self) {
+        self.cfg_cache.write().unwrap().clear();
+        self.hir_modules.write().unwrap().clear();
+    }
+
+    /// Get or create a CFG for a function
+    pub fn get_or_create_cfg<F>(&self, function_name: &str, create_fn: F) -> ControlFlowGraph
+    where
+        F: FnOnce() -> ControlFlowGraph,
+    {
+        // Try read first (fast path)
+        {
+            let cache = self.cfg_cache.read().unwrap();
+            if let Some(cfg) = cache.get(function_name) {
+                return (*cfg).clone();
+            }
+        }
+
+        // Create and cache (slow path)
+        let cfg = create_fn();
+        let mut cache = self.cfg_cache.write().unwrap();
+        cache.insert(function_name.to_string(), cfg.clone());
+        cfg
+    }
+}
+
+impl Default for AnalysisContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Result of running an analysis pass
 pub type PassResult = Result<(), Vec<Diagnostic>>;
@@ -194,10 +265,13 @@ pub struct PassManager {
     metrics_collector: Option<MetricsCollector>,
     /// Historical execution times for load balancing (pass_id -> average duration in nanoseconds)
     pass_execution_times: HashMap<String, u128>,
-    /// Shared symbol table across passes (persists state between passes)
-    shared_symbol_table: Option<SymbolTable>,
+    /// Shared analysis context containing all state that persists across passes
+    /// This replaces the previous individual state fields (symbol_table, type_context, etc.)
+    analysis_context: AnalysisContext,
     /// Export registry for cross-module validation
     export_registry: ModuleExportRegistry,
+    /// Current file being analyzed (used for proper import resolution)
+    current_file: Option<PathBuf>,
 }
 
 impl PassManager {
@@ -221,8 +295,9 @@ impl PassManager {
             persistent_cache,
             metrics_collector,
             pass_execution_times: HashMap::new(),
-            shared_symbol_table: None,
+            analysis_context: AnalysisContext::new(),
             export_registry: ModuleExportRegistry::new(),
+            current_file: None,
         };
 
         // Register all available passes
@@ -267,8 +342,9 @@ impl PassManager {
             persistent_cache,
             metrics_collector,
             pass_execution_times: HashMap::new(),
-            shared_symbol_table: None,
+            analysis_context: AnalysisContext::new(),
             export_registry: ModuleExportRegistry::new(),
+            current_file: None,
         };
 
         manager.register_default_passes();
@@ -494,7 +570,14 @@ impl PassManager {
 
     /// Take ownership of the symbol table (for returning in ParseResult)
     pub fn take_symbol_table(&mut self) -> SymbolTable {
-        self.shared_symbol_table.take().unwrap_or_default()
+        // Take the symbol table from the analysis context
+        let symbol_table = {
+            let guard = self.analysis_context.symbol_table.read().unwrap();
+            (*guard).clone()
+        };
+        // Reset the context with a new empty symbol table
+        *self.analysis_context.symbol_table.write().unwrap() = SymbolTable::new();
+        symbol_table
     }
 
     /// Take ownership of the export registry
@@ -525,15 +608,13 @@ impl PassManager {
                         let exported_name = alias.unwrap_or(name);
 
                         // Get type from symbol table if available
-                        let ty = self
-                            .shared_symbol_table
-                            .as_ref()
-                            .and_then(|st| {
-                                st.module_scope()
-                                    .lookup_local(name, |entry| entry.inferred_type.clone())
-                            })
-                            .flatten()
-                            .unwrap_or(Type::Unknown);
+                        let ty = {
+                            let st = self.analysis_context.symbol_table.read().unwrap();
+                            st.module_scope()
+                                .lookup_local(name, |entry| entry.inferred_type.clone())
+                                .flatten()
+                                .unwrap_or(Type::Unknown)
+                        };
 
                         let info = ExportInfo {
                             original_name: name.to_string(),
@@ -569,8 +650,19 @@ impl PassManager {
     }
 
     /// Run all enabled passes on a module
-    pub fn run_all_passes(&mut self, module: &Module, source: &str) -> Result<(), Vec<Diagnostic>> {
+    ///
+    /// # Arguments
+    /// * `module` - The AST module to analyze
+    /// * `source` - The source code (for error reporting)
+    /// * `current_file` - Optional path to the current file being analyzed (for import resolution)
+    pub fn run_all_passes(
+        &mut self,
+        module: &Module,
+        source: &str,
+        current_file: Option<PathBuf>,
+    ) -> Result<(), Vec<Diagnostic>> {
         self.diagnostics.clear();
+        self.current_file = current_file;
 
         // Filter enabled passes
         let mut enabled_passes = Vec::new();
@@ -756,9 +848,9 @@ impl PassManager {
         let mut resolver = NameResolver::new();
         resolver.resolve_module(module);
 
-        // Store symbol table for subsequent passes
+        // Store symbol table in analysis context for subsequent passes
         let (symbol_table, _errors) = resolver.into_symbol_table();
-        self.shared_symbol_table = Some(symbol_table);
+        *self.analysis_context.symbol_table.write().unwrap() = symbol_table;
 
         Ok(())
     }
@@ -767,8 +859,12 @@ impl PassManager {
     fn run_import_resolution(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::import_resolution::ImportResolver;
 
-        // Use a placeholder file path (in real usage, this should be passed in)
-        let current_file = self.root_dir.join("module.coral");
+        // Use the actual file path if provided, otherwise fall back to a default
+        let current_file = self.current_file.clone().unwrap_or_else(|| {
+            // Fallback: infer from module name or use a default
+            self.root_dir.join("module.coral")
+        });
+
         let mut resolver = ImportResolver::new(self.root_dir.clone(), current_file);
 
         let _ = resolver.resolve_module(module);
@@ -868,23 +964,22 @@ impl PassManager {
     fn run_module_system(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::module_system::ModuleSystemChecker;
 
-        // Use shared symbol table from name_resolution
-        let symbol_table = self.shared_symbol_table.as_ref().ok_or_else(|| {
-            vec![Diagnostic::error(
-                "name_resolution must run before module_system".to_string(),
-            )]
-        })?;
+        // Use shared symbol table from analysis context
+        let symbol_table = self.analysis_context.symbol_table.read().unwrap();
 
         let module_name = self.get_current_module_name();
 
         // Create checker with registry for cross-module validation
         let checker = ModuleSystemChecker::with_registry(
-            symbol_table,
+            &symbol_table,
             &self.export_registry,
             &module_name,
             self.config.max_reexport_depth,
         );
         let errors = checker.check(module);
+
+        // Release read lock before calling register_module_exports
+        drop(symbol_table);
 
         // Register exports from this module for cross-module validation
         self.register_module_exports(module, &module_name);
@@ -928,18 +1023,17 @@ impl PassManager {
 
     /// Run type inference pass
     fn run_type_inference(&mut self, module: &Module, _source: &str) -> PassResult {
-        use crate::semantic::passes::type_inference::{TypeInference, TypeInferenceContext};
-        use crate::semantic::symbol::SymbolTable;
+        use crate::semantic::passes::type_inference::TypeInference;
 
-        // Create context
-        let symbol_table = SymbolTable::new();
-        let mut context = TypeInferenceContext::new(symbol_table);
+        // Use the shared type context from analysis context
+        let mut type_context = self.analysis_context.type_context.write().unwrap();
 
         // Run inference
-        let mut inferrer = TypeInference::new(&mut context);
+        let mut inferrer = TypeInference::new(&mut type_context);
         inferrer.infer_module(module);
 
         // Type inference doesn't produce errors directly
+        // The inferred types are now stored in the shared context
         Ok(())
     }
 
@@ -947,12 +1041,16 @@ impl PassManager {
     fn run_type_checking(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::type_checking::TypeCheckContext;
         use crate::semantic::passes::type_checking::TypeChecker;
-        use crate::semantic::passes::type_inference::TypeInferenceContext;
-        use crate::semantic::symbol::SymbolTable;
 
-        // Create context (should reuse from type_inference in production)
-        let symbol_table = SymbolTable::new();
-        let inference_context = TypeInferenceContext::new(symbol_table);
+        // Use the shared type context from type_inference
+        // We need to read it to create a TypeCheckContext, then check types
+        let inference_context = {
+            let type_ctx = self.analysis_context.type_context.read().unwrap();
+            // Clone the context for type checking
+            // TODO: Refactor TypeCheckContext to work with &TypeInferenceContext
+            type_ctx.clone()
+        };
+
         let mut type_context = TypeCheckContext::new(inference_context);
 
         let mut checker = TypeChecker::new(&mut type_context);
@@ -971,11 +1069,9 @@ impl PassManager {
     /// Run exhaustiveness checking pass
     fn run_exhaustiveness(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::exhaustiveness::ExhaustivenessChecker;
-        use crate::semantic::passes::type_inference::TypeInferenceContext;
-        use crate::semantic::symbol::SymbolTable;
 
-        let symbol_table = SymbolTable::new();
-        let context = TypeInferenceContext::new(symbol_table);
+        // Use shared type context
+        let context = self.analysis_context.type_context.read().unwrap();
 
         let mut checker = ExhaustivenessChecker::new(&context);
         let errors = checker.check_module(module);
@@ -991,9 +1087,9 @@ impl PassManager {
     /// Run decorator resolution pass
     fn run_decorator_resolution(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::decorator_resolution::DecoratorResolver;
-        use crate::semantic::symbol::SymbolTable;
 
-        let symbol_table = SymbolTable::new();
+        // Use shared symbol table
+        let symbol_table = self.analysis_context.symbol_table.read().unwrap();
         let mut resolver = DecoratorResolver::new(&symbol_table);
         let errors = resolver.check_module(module);
 
@@ -1038,11 +1134,9 @@ impl PassManager {
     /// Run protocol checking pass
     fn run_protocol_checking(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::protocol_checking::ProtocolChecker;
-        use crate::semantic::passes::type_inference::TypeInferenceContext;
-        use crate::semantic::symbol::SymbolTable;
 
-        let symbol_table = SymbolTable::new();
-        let context = TypeInferenceContext::new(symbol_table);
+        // Use shared type context
+        let context = self.analysis_context.type_context.read().unwrap();
 
         let mut checker = ProtocolChecker::new(&context);
         let errors = checker.check_module(module);
@@ -1209,7 +1303,8 @@ impl PassManager {
                     // Create a temporary pass manager for this module
                     let mut temp_manager =
                         PassManager::with_config(self.root_dir.clone(), self.config.clone());
-                    let result = temp_manager.run_all_passes(module, source);
+                    // TODO: Thread through actual file path for each module
+                    let result = temp_manager.run_all_passes(module, source, None);
                     (module_name.clone(), result)
                 } else {
                     (
@@ -1536,7 +1631,8 @@ impl PassManager {
         let mut all_diagnostics = Vec::new();
 
         for (module_name, (module, source)) in modules {
-            match self.run_all_passes(module, source) {
+            // TODO: Thread through actual file path for each module
+            match self.run_all_passes(module, source, None) {
                 Ok(()) => {
                     if let Some(graph) = self.module_graph_mut() {
                         graph.set_module_state(

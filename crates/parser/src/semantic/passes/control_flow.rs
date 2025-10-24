@@ -100,7 +100,7 @@ pub enum Terminator {
 }
 
 /// Control flow graph
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ControlFlowGraph {
     /// All basic blocks
     pub blocks: HashMap<BlockId, BasicBlock>,

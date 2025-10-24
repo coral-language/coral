@@ -41,7 +41,7 @@ fn bench_passes_sequential(c: &mut Criterion) {
         group.bench_function(format!("sequential_{}_functions", num_functions), |b| {
             b.iter(|| {
                 let mut manager = PassManager::with_config(PathBuf::from("/tmp"), config.clone());
-                let _ = std::hint::black_box(manager.run_all_passes(module, &source));
+                let _ = std::hint::black_box(manager.run_all_passes(module, &source, None));
             });
         });
     }
@@ -71,7 +71,7 @@ fn bench_passes_parallel(c: &mut Criterion) {
         group.bench_function(format!("parallel_{}_functions", num_functions), |b| {
             b.iter(|| {
                 let mut manager = PassManager::with_config(PathBuf::from("/tmp"), config.clone());
-                let _ = std::hint::black_box(manager.run_all_passes(module, &source));
+                let _ = std::hint::black_box(manager.run_all_passes(module, &source, None));
             });
         });
     }
@@ -105,7 +105,7 @@ fn bench_parallelizable_passes(c: &mut Criterion) {
                         PassManager::with_config(PathBuf::from("/tmp"), config.clone());
                     // Note: In a real scenario, we'd modify the pass metadata to control
                     // parallelizability, but for this benchmark we'll just run all passes
-                    let _ = std::hint::black_box(manager.run_all_passes(module, &source));
+                    let _ = std::hint::black_box(manager.run_all_passes(module, &source, None));
                 });
             },
         );
@@ -132,12 +132,12 @@ fn bench_cache_performance(c: &mut Criterion) {
 
     // Warm up cache
     let mut manager = PassManager::with_config(PathBuf::from("/tmp"), config.clone());
-    let _ = manager.run_all_passes(module, &source);
+    let _ = manager.run_all_passes(module, &source, None);
 
     group.bench_function("cache_hit", |b| {
         b.iter(|| {
             let mut manager = PassManager::with_config(PathBuf::from("/tmp"), config.clone());
-            let _ = std::hint::black_box(manager.run_all_passes(module, &source));
+            let _ = std::hint::black_box(manager.run_all_passes(module, &source, None));
         });
     });
 

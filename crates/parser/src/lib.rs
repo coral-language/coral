@@ -139,6 +139,9 @@ struct ParseConfig {
     /// Root directory for module resolution
     project_root: std::path::PathBuf,
 
+    /// Current file path being analyzed (for import resolution)
+    file_path: Option<std::path::PathBuf>,
+
     /// Enable all optional safety passes (ownership, concurrency)
     enable_safety_passes: bool,
 
@@ -166,6 +169,7 @@ impl ParseConfig {
     fn for_module(project_root: Option<std::path::PathBuf>) -> Self {
         Self {
             project_root: project_root.unwrap_or_else(|| std::path::PathBuf::from("<input>")),
+            file_path: None, // File path not provided through public API yet
             enable_safety_passes: true, // All passes enabled
             max_errors: None,
             continue_on_error: true,
@@ -181,6 +185,7 @@ impl ParseConfig {
     fn for_eval() -> Self {
         Self {
             project_root: std::path::PathBuf::from("<eval>"),
+            file_path: None,
             enable_safety_passes: false, // Skip heavy passes for eval
             max_errors: Some(1),         // Stop at first error
             continue_on_error: false,
@@ -196,6 +201,7 @@ impl ParseConfig {
     fn for_interactive() -> Self {
         Self {
             project_root: std::path::PathBuf::from("<interactive>"),
+            file_path: None,
             enable_safety_passes: false, // Skip heavy passes for REPL
             max_errors: Some(3),         // Show up to 3 errors
             continue_on_error: true,
@@ -324,8 +330,8 @@ fn parse_with_config(
         manager.enable_pass("protocol_checking");
     }
 
-    // Run all passes
-    let diagnostics = match manager.run_all_passes(module, source) {
+    // Run all passes with file path from config
+    let diagnostics = match manager.run_all_passes(module, source, config.file_path.clone()) {
         Ok(_) => Vec::new(),
         Err(diagnostics) => diagnostics,
     };

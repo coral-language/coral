@@ -116,7 +116,7 @@ impl Symbol {
 }
 
 /// A lexical scope containing symbol bindings
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scope {
     /// The type of this scope
     pub scope_type: ScopeType,

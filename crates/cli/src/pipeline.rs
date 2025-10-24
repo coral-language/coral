@@ -153,7 +153,8 @@ pub fn check_file(path: &Path, strict: bool) -> PipelineResult<()> {
             manager.enable_pass("protocol_checking");
 
             // Run all passes and check for semantic errors/warnings
-            match manager.run_all_passes(module, &source) {
+            // Pass the file path for proper import resolution
+            match manager.run_all_passes(module, &source, Some(path.to_path_buf())) {
                 Ok(_) => {
                     // Silent success - no errors or warnings
                     Ok(())

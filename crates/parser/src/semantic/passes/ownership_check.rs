@@ -28,9 +28,7 @@ pub struct OwnershipChecker {
     scope_depth: usize,
     /// Resources that need cleanup
     resources: Vec<Resource>,
-    /// Cleanup actions to be inserted
-    cleanup_actions: Vec<CleanupAction>,
-    /// Escape analysis results
+    /// Escape analysis results (for future optimization - stack allocation hints)
     escape_status: HashMap<String, EscapeStatus>,
     /// Variables marked as weak references
     weak_references: HashMap<String, Vec<String>>,
@@ -63,6 +61,9 @@ struct ReferenceInfo {
 }
 
 /// Escape analysis result for optimization
+///
+/// Note: Results computed but not yet consumed by codegen.
+/// Future optimization opportunity: use NoEscape to enable stack allocation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EscapeStatus {
     /// Value never escapes current function (can be stack-allocated)
@@ -71,32 +72,7 @@ enum EscapeStatus {
     Escapes,
 }
 
-/// Cleanup action to be inserted at scope exit (used by future code generator)
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct CleanupAction {
-    /// Variable to clean up
-    var_name: String,
-    /// Type of cleanup needed
-    cleanup_type: CleanupType,
-    /// Where to insert the cleanup
-    insertion_point: TextRange,
-}
-
-/// Types of cleanup operations
-#[derive(Debug, Clone, PartialEq)]
-enum CleanupType {
-    /// Decrement reference count
-    DecRef,
-    /// Close file/resource
-    Close,
-    /// Release lock
-    Release,
-    /// Rollback transaction
-    Rollback,
-}
-
-/// Tracks variable lifetime scope (for automatic cleanup insertion)
+/// Tracks variable lifetime scope
 #[derive(Debug, Clone)]
 struct Lifetime {
     /// When the variable was created
@@ -167,7 +143,6 @@ impl OwnershipChecker {
             lifetimes: HashMap::new(),
             scope_depth: 0,
             resources: Vec::new(),
-            cleanup_actions: Vec::new(),
             escape_status: HashMap::new(),
             weak_references: HashMap::new(),
             errors: Vec::new(),
@@ -742,7 +717,7 @@ impl OwnershipChecker {
     }
 
     /// Generate cleanup actions for scope exit
-    fn generate_cleanup(&mut self, scope_end: TextRange) {
+    fn generate_cleanup(&mut self, _scope_end: TextRange) {
         let current_depth = self.scope_depth;
 
         // Collect variables that need cleanup
@@ -760,43 +735,14 @@ impl OwnershipChecker {
             })
             .collect();
 
-        for (var_name, _, resource_type) in vars_to_cleanup {
-            // Determine cleanup type
-            let cleanup_type = if let Some(resource_type) = resource_type.clone() {
-                match resource_type {
-                    ResourceType::File => CleanupType::Close,
-                    ResourceType::Connection => CleanupType::Close,
-                    ResourceType::Lock => CleanupType::Release,
-                    ResourceType::Transaction => CleanupType::Rollback,
-                    ResourceType::Iterator => CleanupType::DecRef,
-                }
-            } else {
-                CleanupType::DecRef
-            };
+        // Note: Cleanup action generation removed - was unused infrastructure for future codegen
+        // Variables are tracked for lifetime analysis, but cleanup is handled differently
+        for (var_name, _, _resource_type) in vars_to_cleanup {
+            // Perform escape analysis to help with optimization hints
+            let _escape = self.analyze_escape(&var_name);
 
-            // For resources (File, Lock, etc.), always generate cleanup
-            // For regular variables, check if optimization can eliminate cleanup
-            let needs_cleanup = if resource_type.is_some() {
-                // Resources always need cleanup
-                true
-            } else {
-                // Regular variables: check escape analysis
-                let escape = self.analyze_escape(&var_name);
-                let ref_count = self
-                    .references
-                    .get(&var_name)
-                    .map(|r| r.ref_count)
-                    .unwrap_or(0);
-                !matches!(escape, EscapeStatus::NoEscape) || ref_count > 1
-            };
-
-            if needs_cleanup {
-                self.cleanup_actions.push(CleanupAction {
-                    var_name: var_name.clone(),
-                    cleanup_type,
-                    insertion_point: scope_end,
-                });
-            }
+            // Note: Escape analysis results stored in self.escape_status
+            // for future optimization (stack allocation hints)
         }
     }
 
@@ -936,25 +882,8 @@ mod tests {
         assert!(matches!(status, EscapeStatus::Escapes));
     }
 
-    #[test]
-    fn test_cleanup_generation() {
-        let mut checker = OwnershipChecker::new();
-        let span = TextRange::new(0.into(), 10.into());
-
-        checker.enter_scope();
-        checker.declare_variable("x", span, Some("File"));
-
-        // Generate cleanup for scope exit
-        checker.generate_cleanup(span);
-
-        // Should have generated a cleanup action
-        assert_eq!(checker.cleanup_actions.len(), 1);
-        assert_eq!(checker.cleanup_actions[0].var_name, "x");
-        assert!(matches!(
-            checker.cleanup_actions[0].cleanup_type,
-            CleanupType::Close
-        ));
-    }
+    // Note: test_cleanup_generation removed - cleanup actions infrastructure
+    // was removed as it was unused (meant for future codegen)
 
     #[test]
     fn test_reference_optimization() {
