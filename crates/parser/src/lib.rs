@@ -66,6 +66,8 @@ pub mod parser;
 pub mod semantic;
 pub mod visitor;
 
+pub mod helpers;
+
 pub use arena::{Arena, Interner, Symbol};
 pub use ast::{Expr, Module, Stmt};
 pub use error::{Diagnostic, DiagnosticCollector, ParseError, ParseResult};

@@ -1,42 +1,17 @@
 //! Tests for HIR (High-Level Intermediate Representation) functionality
 
-use coral_parser::arena::interner::Interner;
-use coral_parser::semantic::passes::type_inference::{TypeInference, TypeInferenceContext};
-use coral_parser::semantic::symbol::SymbolTable;
-use coral_parser::{Arena, lexer::Lexer, parser::Parser, semantic::hir::lower::HirLowerer};
+use coral_parser::Arena;
+use coral_parser::helpers::{
+    expect_hir_lowers_ok, expect_hir_lowers_with_errors, parse_and_get_ast,
+};
 
 /// Test basic HIR lowering functionality
 #[test]
 fn test_hir_lowering_basic() {
     let source = "x = 42\ny = x + 1";
-
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            // For now, we expect name resolution errors since we're not doing full name resolution
-            // In a complete implementation, this would succeed after proper name resolution
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with function definitions
@@ -49,31 +24,9 @@ def add(a: int, b: int) -> int:
 result = add(1, 2)
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for functions"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with class definitions
@@ -91,31 +44,9 @@ class Point:
 p = Point(1, 2)
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for classes"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with control flow
@@ -132,31 +63,9 @@ for i in range(5):
     print(i)
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for control flow"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with expressions
@@ -177,31 +86,9 @@ numbers = [1, 2, 3, 4, 5]
 squared = [x * x for x in numbers]
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for expressions"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering error handling
@@ -209,31 +96,9 @@ squared = [x * x for x in numbers]
 fn test_hir_lowering_errors() {
     let source = "x = undefined_variable + 1";
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR (should handle undefined variables gracefully)
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for error case"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_with_errors(ast, &arena);
 }
 
 /// Test HIR type information
@@ -245,31 +110,9 @@ y: str = "hello"
 z = x + 1
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for typed variables"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with type parameters and generics
@@ -290,31 +133,9 @@ container: Container[int] = Container(42)
 result = process([1, 2, 3])
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for generics"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with pattern matching
@@ -340,31 +161,9 @@ result3 = process_data([1, 2, 3])
 result4 = process_data({"name": "Alice", "age": 30})
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for pattern matching"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with comprehensions
@@ -387,31 +186,9 @@ even_squares = (x * x for x in range(20) if x % 2 == 0)
 matrix = [[i * j for j in range(3)] for i in range(3)]
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for comprehensions"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with async/await
@@ -435,31 +212,9 @@ async def main():
     return results
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for async/await"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with imports and exports
@@ -484,31 +239,9 @@ class PrivateClass:
     pass
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for imports/exports"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with complex type annotations
@@ -543,31 +276,9 @@ first_three = numbers[:3]
 last_two = numbers[-2:]
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for complex types"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test HIR lowering with error handling
@@ -600,38 +311,16 @@ def handle_multiple_errors():
         print("No errors occurred")
 "#;
 
-    // Parse the source
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    // Lower to HIR
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    match hir_result {
-        Ok(_) => println!("HIR lowering succeeded for error handling"),
-        Err(errors) => {
-            println!("HIR lowering failed with errors: {:?}", errors);
-            println!("Note: Name resolution errors are expected in current implementation");
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test lambda inference integration with full semantic analysis
 #[test]
 fn test_lambda_inference_integration() {
     let source = r#"
-// Test various lambda scenarios
+
 simple = lambda x: x
 annotated = lambda x: int: x * 2
 multi_param = lambda x, y, z: x + y + z
@@ -642,20 +331,9 @@ def higher_order(f):
 result = higher_order(lambda n: n * 3)
 "#;
 
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let module = parser.parse_module().expect("Parse failed");
-
-    // Should parse and infer without errors
-    let symbol_table = SymbolTable::new();
-    let mut context = TypeInferenceContext::new(symbol_table);
-    let mut inference = TypeInference::new(&mut context);
-    inference.infer_module(module);
-
-    // Lambda inference should run without panicking
-    // Full integration with name resolution would be tested separately
-    // For now, just ensure the inference completes
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test Union type attribute resolution
@@ -671,16 +349,9 @@ def process(value: int | str):
         result = str(value)  # Valid: int can be converted
 "#;
 
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let module = parser.parse_module().expect("Parse failed");
-
-    // Type inference should handle Union types gracefully
-    let symbol_table = SymbolTable::new();
-    let mut context = TypeInferenceContext::new(symbol_table);
-    let mut inference = TypeInference::new(&mut context);
-    inference.infer_module(module);
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test Optional type attribute resolution
@@ -696,15 +367,9 @@ if result is not None:
     length = result.__len__()
 "#;
 
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let module = parser.parse_module().expect("Parse failed");
-
-    let symbol_table = SymbolTable::new();
-    let mut context = TypeInferenceContext::new(symbol_table);
-    let mut inference = TypeInference::new(&mut context);
-    inference.infer_module(module);
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test decorator validation
@@ -725,30 +390,9 @@ class Example:
         return "class"
 "#;
 
-    let mut lexer = Lexer::new(source);
-    let (_tokens, errors, _warnings) = lexer.tokenize();
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors: {:?}",
-        errors
-    );
-
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let mut parser = Parser::new(lexer, &arena);
-    let ast = parser.parse_module().unwrap();
-
-    let mut interner = Interner::new();
-    let mut lowerer = HirLowerer::new(&arena, &mut interner);
-    let hir_result = lowerer.lower_module(ast);
-
-    // Should lower without errors (decorator combinations are valid)
-    match hir_result {
-        Ok(_) => println!("Decorator validation passed"),
-        Err(errors) => {
-            println!("Note: Some errors expected due to incomplete semantic analysis");
-            println!("Errors: {:?}", errors);
-        }
-    }
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test attribute resolution on built-in types
@@ -779,15 +423,9 @@ t: tuple[int, str, float] = (1, "hello", 3.14)
 count_result = t.count(1)
 "#;
 
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let module = parser.parse_module().expect("Parse failed");
-
-    let symbol_table = SymbolTable::new();
-    let mut context = TypeInferenceContext::new(symbol_table);
-    let mut inference = TypeInference::new(&mut context);
-    inference.infer_module(module);
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test attribute checking errors for invalid attributes
@@ -799,15 +437,9 @@ x: int = 42
 # This would be caught by type checking
 "#;
 
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let module = parser.parse_module().expect("Parse failed");
-
-    let symbol_table = SymbolTable::new();
-    let mut context = TypeInferenceContext::new(symbol_table);
-    let mut inference = TypeInference::new(&mut context);
-    inference.infer_module(module);
+    expect_hir_lowers_ok(ast, &arena);
 }
 
 /// Test complex nested attribute access
@@ -827,13 +459,7 @@ def get_first_employee_name(company: Company) -> str:
     return ""
 "#;
 
+    let ast = parse_and_get_ast(source);
     let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let module = parser.parse_module().expect("Parse failed");
-
-    let symbol_table = SymbolTable::new();
-    let mut context = TypeInferenceContext::new(symbol_table);
-    let mut inference = TypeInference::new(&mut context);
-    inference.infer_module(module);
+    expect_hir_lowers_ok(ast, &arena);
 }

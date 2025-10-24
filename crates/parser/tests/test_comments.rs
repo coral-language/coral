@@ -8,61 +8,11 @@
 //! - Only single-line docstrings are supported (Coral doesn't have multi-line strings yet)
 
 use coral_parser::{
-    Arena, Module,
-    lexer::{CommentMap, Lexer, TokenKind},
+    Arena,
+    helpers::{get_comments, parse_with_comments, tokenize},
+    lexer::{Lexer, TokenKind},
     parser::Parser,
 };
-
-/// Helper function to tokenize source and return token kinds.
-fn tokenize(source: &str) -> Vec<TokenKind> {
-    let mut lexer = Lexer::new(source);
-    let (tokens, errors, _warnings) = lexer.tokenize();
-
-    // Ensure no lexical errors
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors, but got: {:?}",
-        errors
-    );
-
-    tokens
-        .iter()
-        .map(|t| t.kind)
-        .filter(|k| !matches!(k, TokenKind::Newline | TokenKind::Eof))
-        .collect()
-}
-
-/// Helper function to parse source and return the module and comment map.
-fn parse_with_comments(source: &str) -> (&'static Module<'static>, CommentMap) {
-    let arena = Box::leak(Box::new(Arena::new()));
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, arena);
-    let module = parser.parse_module().unwrap();
-
-    let errors = parser.errors();
-    assert!(
-        errors.is_empty(),
-        "Expected no parse errors, but got:\n{}",
-        errors
-            .iter()
-            .map(|e| {
-                let diag = e.to_diagnostic(source);
-                format!("{}: {}", e.code(), diag.message)
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
-
-    (module, parser.comment_map.clone())
-}
-
-/// Helper to get comment map from parsed source.
-fn get_comments(source: &str) -> CommentMap {
-    let (_module, comment_map) = parse_with_comments(source);
-    comment_map
-}
-
-// ===== Comment Tokenization Tests =====
 
 #[test]
 fn test_single_line_comment_tokenization() {
@@ -110,7 +60,6 @@ x = 1
 
 #[test]
 fn test_multiple_comments_on_same_line() {
-    // This shouldn't happen in valid Coral code, but let's test robustness
     let source = r#"
 x = 1 # Comment 1
 y = 2 # Comment 2
@@ -118,8 +67,6 @@ y = 2 # Comment 2
     let comments = get_comments(source);
     assert_eq!(comments.len(), 2);
 }
-
-// ===== Comment Classification Tests =====
 
 #[test]
 fn test_line_comments() {
@@ -175,8 +122,6 @@ y = 2
     assert_eq!(trailing_comments.len(), 1);
 }
 
-// ===== Comment Content Extraction Tests =====
-
 #[test]
 fn test_comment_text_extraction() {
     let source = r#"
@@ -214,8 +159,6 @@ x = 1  #   Trailing with spaces
     assert!(texts.contains(&"Comment with leading spaces"));
     assert!(texts.contains(&"Trailing with spaces"));
 }
-
-// ===== Module Docstring Tests =====
 
 #[test]
 fn test_module_docstring() {
@@ -270,8 +213,6 @@ x = 1
     assert_eq!(module.docstring, Some("This is the docstring"));
 }
 
-// ===== Function Docstring Tests =====
-
 #[test]
 fn test_function_docstring() {
     let source = r#"
@@ -323,8 +264,6 @@ def func():
     }
 }
 
-// ===== Class Docstring Tests =====
-
 #[test]
 fn test_class_docstring() {
     let source = r#"
@@ -360,8 +299,6 @@ class MyClass:
     }
 }
 
-// ===== Complex Scenarios =====
-
 #[test]
 fn test_comments_and_docstrings_together() {
     let source = r#"
@@ -383,10 +320,8 @@ class MyClass:
 "#;
     let (module, comments) = parse_with_comments(source);
 
-    // Check module docstring
     assert_eq!(module.docstring, Some("Module docstring"));
 
-    // Check function docstring
     match &module.body[1] {
         coral_parser::Stmt::FuncDef(func_def) => {
             assert_eq!(func_def.docstring, Some("Function docstring"));
@@ -394,7 +329,6 @@ class MyClass:
         _ => panic!("Expected function definition"),
     }
 
-    // Check class docstring
     match &module.body[2] {
         coral_parser::Stmt::ClassDef(class_def) => {
             assert_eq!(class_def.docstring, Some("Class docstring"));
@@ -402,7 +336,6 @@ class MyClass:
         _ => panic!("Expected class definition"),
     }
 
-    // Check comments are preserved
     assert_eq!(comments.len(), 5); // 5 comments total
 }
 
@@ -431,7 +364,6 @@ def outer():
         coral_parser::Stmt::FuncDef(outer_func) => {
             assert_eq!(outer_func.docstring, Some("Outer docstring"));
 
-            // Check inner function
             match &outer_func.body[1] {
                 coral_parser::Stmt::FuncDef(inner_func) => {
                     assert_eq!(inner_func.docstring, Some("Inner docstring"));
@@ -439,7 +371,6 @@ def outer():
                 _ => panic!("Expected inner function"),
             }
 
-            // Check inner class
             match &outer_func.body[2] {
                 coral_parser::Stmt::ClassDef(inner_class) => {
                     assert_eq!(inner_class.docstring, Some("Inner class docstring"));
@@ -481,8 +412,6 @@ class MyClass:
         _ => panic!("Expected class definition"),
     }
 }
-
-// ===== Edge Cases =====
 
 #[test]
 fn test_empty_docstrings() {
@@ -526,8 +455,6 @@ def func():
         _ => panic!("Expected function definition"),
     }
 }
-
-// ===== Performance and Correctness =====
 
 #[test]
 fn test_comment_map_not_empty_when_comments_present() {
@@ -592,6 +519,5 @@ class MyClass:
     let mut parser2 = Parser::new(lexer2, &arena2);
     let module2 = parser2.parse_module().unwrap();
 
-    // AST structure should be the same (ignoring docstrings and comments)
     assert_eq!(module1.body.len(), module2.body.len());
 }

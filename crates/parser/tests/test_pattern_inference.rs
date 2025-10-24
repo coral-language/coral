@@ -4,7 +4,7 @@
 //! Some semantic errors may occur during full analysis but the core pattern
 //! inference logic is functional.
 
-use coral_parser::parse;
+use coral_parser::helpers::DiagnosticTestBuilder;
 
 #[test]
 fn test_tuple_destructuring() {
@@ -13,10 +13,8 @@ x, y = (1, 2)
 a, (b, c) = (1, (2, 3))
 "#;
 
-    let result = parse(source);
-    // Pattern inference may produce semantic errors during full analysis
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -25,10 +23,8 @@ fn test_list_destructuring() {
 [x, y, z] = [1, 2, 3]
 "#;
 
-    let result = parse(source);
-    // Pattern inference may produce semantic errors during full analysis
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -39,10 +35,8 @@ fn test_starred_pattern() {
 [first, *middle, last] = [1, 2, 3, 4, 5]
 "#;
 
-    let result = parse(source);
-    // Pattern inference may produce semantic errors during full analysis
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -56,10 +50,8 @@ match value:
         print(first, rest)
 "#;
 
-    let result = parse(source);
-    // Pattern inference may produce semantic errors during full analysis
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -73,10 +65,8 @@ match value:
         print(y)
 "#;
 
-    let result = parse(source);
-    // Pattern inference may produce semantic errors during full analysis
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -88,10 +78,8 @@ match data:
         print(a, b, c, d)
 "#;
 
-    let result = parse(source);
-    // Pattern inference may produce semantic errors during full analysis
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -101,8 +89,6 @@ data = {"x": 1, "y": 2}
 {"x": a, "y": b} = data
 "#;
 
-    let result = parse(source);
-    // Dict destructuring might not be fully implemented yet, but should parse
-    // Errors are okay for now
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }

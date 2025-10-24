@@ -1,26 +1,6 @@
 //! Comprehensive tests for generator type inference functionality
 
-use coral_parser::semantic::passes::name_resolution::NameResolver;
-use coral_parser::semantic::passes::type_inference::{TypeInference, TypeInferenceContext};
-use coral_parser::{Arena, Lexer, Parser};
-
-fn infer_types(source: &str) -> TypeInferenceContext {
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let module = parser.parse_module().expect("Parse failed");
-
-    // Run name resolution first
-    let mut resolver = NameResolver::new();
-    resolver.resolve_module(module);
-    let (symbol_table, _name_errors) = resolver.into_symbol_table();
-
-    let mut context = TypeInferenceContext::new(symbol_table);
-    let mut inference = TypeInference::new(&mut context);
-    inference.infer_module(module);
-
-    context
-}
+use coral_parser::helpers::infer_types;
 
 #[test]
 fn test_generator_function_with_yield() {
@@ -67,6 +47,6 @@ def gen():
     yield "string"
     "#;
     let ctx = infer_types(source);
-    // Should infer Union[int, str] as yield type
+
     assert!(ctx.is_generator_function("gen"));
 }

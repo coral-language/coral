@@ -1,23 +1,6 @@
 //! Comprehensive tests for lambda type inference functionality
 
-use coral_parser::semantic::passes::type_inference::{TypeInference, TypeInferenceContext};
-use coral_parser::semantic::symbol::SymbolTable;
-use coral_parser::{Arena, Lexer, Parser};
-
-fn infer_types(source: &str) {
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let module = parser.parse_module().expect("Parse failed");
-
-    let symbol_table = SymbolTable::new();
-    let mut context = TypeInferenceContext::new(symbol_table);
-    let mut inference = TypeInference::new(&mut context);
-    inference.infer_module(module);
-
-    // Lambda inference should run without panicking
-    // Full integration with name resolution would be tested separately
-}
+use coral_parser::helpers::infer_types;
 
 #[test]
 fn test_lambda_identity() {

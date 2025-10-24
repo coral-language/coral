@@ -3,7 +3,7 @@
 //! Note: These tests verify that code with type narrowing patterns parses correctly.
 //! Full type narrowing integration is still being implemented.
 
-use coral_parser::parse;
+use coral_parser::helpers::DiagnosticTestBuilder;
 
 #[test]
 fn test_isinstance_narrowing() {
@@ -17,10 +17,8 @@ def process(value):
         pass
 "#;
 
-    let result = parse(source);
-    // Type narrowing integration is in progress
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -34,10 +32,8 @@ def check_value(value):
     x = value
 "#;
 
-    let result = parse(source);
-    // Type narrowing integration is in progress
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -52,10 +48,8 @@ def check_value(value):
         pass
 "#;
 
-    let result = parse(source);
-    // Type narrowing integration is in progress
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -70,10 +64,8 @@ def check_value(value):
         pass
 "#;
 
-    let result = parse(source);
-    // Type narrowing integration is in progress
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -86,10 +78,8 @@ def process(value):
             x = value
 "#;
 
-    let result = parse(source);
-    // Type narrowing integration is in progress
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -108,10 +98,8 @@ def process(value):
         x = value
 "#;
 
-    let result = parse(source);
-    // Type narrowing integration is in progress
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }
 
 #[test]
@@ -126,8 +114,6 @@ def process(value):
     return 0
 "#;
 
-    let result = parse(source);
-    // Type narrowing integration is in progress
-    // Just verify parsing doesn't panic
-    let _ = result;
+    // Test that parsing completes without panicking
+    let _ = DiagnosticTestBuilder::errors(source);
 }

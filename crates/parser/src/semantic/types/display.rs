@@ -28,12 +28,7 @@ pub fn pretty_print_type(ty: &Type, indent: usize) -> String {
                 } else {
                     pretty_print_type(param_ty, indent + 2)
                 };
-                result.push_str(&format!(
-                    "{}    [{}]: {}\n",
-                    prefix,
-                    i,
-                    param_label
-                ));
+                result.push_str(&format!("{}    [{}]: {}\n", prefix, i, param_label));
             }
             result.push_str(&format!(
                 "{}  Returns: {}\n",

@@ -14,7 +14,6 @@ fn test_parallel_execution_config() {
     assert!(config.parallel_execution);
 
     let _manager = PassManager::with_config(PathBuf::from("/tmp"), config);
-    // Just verify it can be created without errors
 }
 
 /// Test symbol table snapshot memory optimization
@@ -25,7 +24,6 @@ fn test_symbol_table_snapshot_memory_optimization() {
 
     let sync_table = SyncSymbolTable::new();
 
-    // Add some symbols
     sync_table.write(|table| {
         let symbol1 = Symbol::new(
             "test_var".to_string(),
@@ -42,10 +40,8 @@ fn test_symbol_table_snapshot_memory_optimization() {
         table.current_scope_mut().define(symbol2).unwrap();
     });
 
-    // Create a snapshot
     let snapshot = sync_table.atomic_snapshot();
 
-    // Verify the snapshot contains shared references
     let scope_symbols = snapshot.scope_symbols();
     assert!(!scope_symbols.is_empty());
 
@@ -53,11 +49,9 @@ fn test_symbol_table_snapshot_memory_optimization() {
     assert!(module_symbols.contains_key("test_var"));
     assert!(module_symbols.contains_key("test_func"));
 
-    // Verify lookup works
     let looked_up = snapshot.lookup("test_var");
     assert!(looked_up.is_some());
 
-    // Verify copy-on-write works
     let mutable_copy = snapshot.get_symbol_mut("test_var");
     assert!(mutable_copy.is_some());
     assert_eq!(mutable_copy.unwrap().name, "test_var");

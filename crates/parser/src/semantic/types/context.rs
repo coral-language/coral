@@ -371,13 +371,16 @@ impl Type {
                 returns,
                 captures,
             } => {
-                let param_names: Vec<_> = params.iter().map(|(name, ty)| {
-                    if let Some(n) = name {
-                        format!("{}: {}", n, ty.display_name())
-                    } else {
-                        ty.display_name()
-                    }
-                }).collect();
+                let param_names: Vec<_> = params
+                    .iter()
+                    .map(|(name, ty)| {
+                        if let Some(n) = name {
+                            format!("{}: {}", n, ty.display_name())
+                        } else {
+                            ty.display_name()
+                        }
+                    })
+                    .collect();
                 let sig = format!("({}) -> {}", param_names.join(", "), returns.display_name());
                 if !captures.is_empty() {
                     format!("{} [captures: {}]", sig, captures.len())

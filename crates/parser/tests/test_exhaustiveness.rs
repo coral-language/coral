@@ -1,41 +1,4 @@
-// Tests for pattern matching exhaustiveness checking
-
-use coral_parser::{CoralError, CoralResult, parse};
-
-/// Helper to check if parse result contains a specific error message or code
-fn has_error_containing(
-    result: &CoralResult<coral_parser::ParseResultWithMetadata>,
-    text: &str,
-) -> bool {
-    match result {
-        Ok(parse_result) => {
-            // Check diagnostics in the parse result
-            parse_result.diagnostics.iter().any(|d| {
-                // Check the error code, message, and title
-                let code_matches = d
-                    .code
-                    .as_ref()
-                    .is_some_and(|c| format!("{:?}", c).contains(text));
-                let message_matches = d.message.contains(text);
-                let title_matches = d.title.as_ref().is_some_and(|t| t.contains(text));
-                code_matches || message_matches || title_matches
-            })
-        }
-        Err(CoralError::SemanticErrors(diagnostics)) => {
-            // Check diagnostics in the error
-            diagnostics.iter().any(|d| {
-                let code_matches = d
-                    .code
-                    .as_ref()
-                    .is_some_and(|c| format!("{:?}", c).contains(text));
-                let message_matches = d.message.contains(text);
-                let title_matches = d.title.as_ref().is_some_and(|t| t.contains(text));
-                code_matches || message_matches || title_matches
-            })
-        }
-        _ => false,
-    }
-}
+use coral_parser::helpers::DiagnosticTestBuilder;
 
 #[test]
 fn test_bool_exhaustive_with_both_cases() {
@@ -48,11 +11,7 @@ def check_bool(value):
             return "false"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    // Note: Without type annotation, checker can't determine it's a bool
-    // so it may conservatively require a wildcard
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -64,12 +23,9 @@ def check_bool(value):
             return "true"
 "#;
 
-    let result = parse(source);
-    // Should have exhaustiveness error (missing wildcard at minimum)
-    assert!(
-        has_error_containing(&result, "exhaustive") || has_error_containing(&result, "E8001"),
-        "Expected non-exhaustive match error"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("E8001")
+        .assert_some();
 }
 
 #[test]
@@ -83,9 +39,9 @@ def check_bool(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -97,10 +53,7 @@ def check_none(value):
             return "none"
 "#;
 
-    let result = parse(source);
-    // May or may not be exhaustive depending on type inference
-    // Just verify it doesn't panic
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -114,12 +67,9 @@ def check_int(value):
             return "one"
 "#;
 
-    let result = parse(source);
-    // Should have exhaustiveness error (missing wildcard for other values)
-    assert!(
-        has_error_containing(&result, "exhaustive") || has_error_containing(&result, "E8001"),
-        "Expected non-exhaustive match error for integers"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("E8001")
+        .assert_some();
 }
 
 #[test]
@@ -135,9 +85,9 @@ def check_int(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -151,12 +101,9 @@ def check_string(value):
             return "greeting"
 "#;
 
-    let result = parse(source);
-    // Should have exhaustiveness error
-    assert!(
-        has_error_containing(&result, "exhaustive") || has_error_containing(&result, "E8001"),
-        "Expected non-exhaustive match error for strings"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("E8001")
+        .assert_some();
 }
 
 #[test]
@@ -172,9 +119,9 @@ def check_string(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -188,12 +135,9 @@ def check_redundant(value):
             return "second"
 "#;
 
-    let result = parse(source);
-    // Should have unreachable/redundant pattern error
-    assert!(
-        has_error_containing(&result, "Unreachable") || has_error_containing(&result, "redundant"),
-        "Expected redundant pattern error"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("Unreachable")
+        .assert_some();
 }
 
 #[test]
@@ -207,12 +151,9 @@ def check_redundant(value):
             return "forty-two"
 "#;
 
-    let result = parse(source);
-    // Should have unreachable/redundant pattern error
-    assert!(
-        has_error_containing(&result, "Unreachable") || has_error_containing(&result, "redundant"),
-        "Expected redundant pattern error"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("Unreachable")
+        .assert_some();
 }
 
 #[test]
@@ -224,9 +165,7 @@ def check_or(value):
             return "boolean"
 "#;
 
-    let result = parse(source);
-    // Without type info, may conservatively require wildcard
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -238,9 +177,7 @@ def check_nested(value):
             return "pair"
 "#;
 
-    let result = parse(source);
-    // Should parse without panic
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -258,9 +195,9 @@ def check_nested_list(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -279,9 +216,9 @@ def check_point(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -295,9 +232,9 @@ def check_dict(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -311,12 +248,9 @@ def check_with_guard(value):
             return "negative"
 "#;
 
-    let result = parse(source);
-    // Should have exhaustiveness error (guards don't guarantee coverage)
-    assert!(
-        has_error_containing(&result, "exhaustive") || has_error_containing(&result, "E8001"),
-        "Expected non-exhaustive match error with guards"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("E8001")
+        .assert_some();
 }
 
 #[test]
@@ -330,9 +264,9 @@ def check_with_guard_exhaustive(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -350,9 +284,9 @@ def check_multiple(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -366,9 +300,9 @@ def check_as_pattern(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -382,9 +316,9 @@ def check_deeply_nested(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -400,9 +334,7 @@ def check_mixed(value):
             return "none"
 "#;
 
-    let result = parse(source);
-    // Type system should determine exhaustiveness based on inferred type
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -416,12 +348,9 @@ def check_duplicate(value):
             return "second"
 "#;
 
-    let result = parse(source);
-    // Should have redundant pattern error for second 42
-    assert!(
-        has_error_containing(&result, "Unreachable") || has_error_containing(&result, "redundant"),
-        "Expected redundant pattern error for duplicate literal"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("Unreachable")
+        .assert_some();
 }
 
 #[test]
@@ -437,9 +366,9 @@ def check_complex_or(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -453,11 +382,7 @@ def check_star(value):
             return "non-empty"
 "#;
 
-    let result = parse(source);
-    // Star patterns are complex - [] and [first, *rest] should cover all lists
-    // but our current implementation may not recognize this yet
-    // TODO: Improve star pattern handling in exhaustiveness checker
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -471,9 +396,9 @@ def check_optional(value):
             return "some"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -487,15 +412,8 @@ def check_type_mismatch(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Without type annotations, type mismatch can't be detected
-    // This test may not work as expected
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
-
-// ============================================================================
-// Edge Cases and Advanced Tests
-// ============================================================================
 
 #[test]
 fn test_nested_or_patterns() {
@@ -508,9 +426,9 @@ def check_nested_or(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors with wildcard
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -524,9 +442,9 @@ def check_or_with_guard(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Guards don't guarantee exhaustiveness
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -542,9 +460,9 @@ def check_empty_structures(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -558,9 +476,9 @@ def check_dict_rest(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -576,9 +494,9 @@ def check_multiple_dict(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -596,10 +514,7 @@ def check_star_variations(value):
             return "three or more"
 "#;
 
-    let result = parse(source);
-    // Star pattern detection may not be fully working yet
-    // Conservative: may require explicit wildcard
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -613,9 +528,7 @@ def check_star_beginning(value):
             return "has last"
 "#;
 
-    let result = parse(source);
-    // Star pattern detection may not be fully working yet
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -631,9 +544,7 @@ def check_star_middle(value):
             return "multiple"
 "#;
 
-    let result = parse(source);
-    // Star pattern detection may not be fully working yet
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -649,9 +560,9 @@ def check_union(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -665,9 +576,9 @@ def check_deeply_nested(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -683,9 +594,9 @@ def check_mixed_sequences(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -699,9 +610,7 @@ def check_bool_literals(value):
             return "false"
 "#;
 
-    let result = parse(source);
-    // Without type info, may require wildcard
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -722,9 +631,9 @@ def check_person(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -738,12 +647,9 @@ def check_redundant_star(value):
             return "empty"
 "#;
 
-    let result = parse(source);
-    // Second pattern is redundant
-    assert!(
-        has_error_containing(&result, "Unreachable") || has_error_containing(&result, "redundant"),
-        "Expected redundant pattern error"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("Unreachable")
+        .assert_some();
 }
 
 #[test]
@@ -761,10 +667,7 @@ def check_order(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Different lengths are not redundant
-    // But note: literal values within patterns may cause false positives
-    let _ = result;
+    DiagnosticTestBuilder::errors(source).assert_none();
 }
 
 #[test]
@@ -782,9 +685,9 @@ def check_tuple_lengths(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -808,9 +711,9 @@ def check_nested_class(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -828,9 +731,9 @@ def check_multiple_guards(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors with wildcard
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -846,12 +749,9 @@ def check_strings(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should detect redundant pattern
-    assert!(
-        has_error_containing(&result, "Unreachable") || has_error_containing(&result, "redundant"),
-        "Expected redundant pattern error for duplicate string"
-    );
+    DiagnosticTestBuilder::errors(source)
+        .expect("Unreachable")
+        .assert_some();
 }
 
 #[test]
@@ -865,9 +765,9 @@ def check_complex_nested_or(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -881,9 +781,9 @@ def check_as_in_or(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }
 
 #[test]
@@ -901,7 +801,7 @@ def check_singletons(value):
             return "other"
 "#;
 
-    let result = parse(source);
-    // Should not have exhaustiveness errors
-    assert!(!has_error_containing(&result, "E8001"));
+    DiagnosticTestBuilder::errors(source)
+        .expect_not("E8001")
+        .assert_all();
 }

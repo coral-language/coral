@@ -8,54 +8,8 @@
 //! - Underscore usage and validation
 //! - Edge cases and error conditions
 
-use coral_parser::{
-    Arena,
-    lexer::{Lexer, TokenKind},
-    parser::Parser,
-};
-
-/// Helper function to tokenize source and return token kinds.
-fn tokenize(source: &str) -> Vec<TokenKind> {
-    let mut lexer = Lexer::new(source);
-    let (tokens, errors, _warnings) = lexer.tokenize();
-
-    // Ensure no lexical errors
-    assert!(
-        errors.is_empty(),
-        "Expected no lexical errors, but got: {:?}",
-        errors
-    );
-
-    tokens
-        .iter()
-        .map(|t| t.kind)
-        .filter(|k| !matches!(k, TokenKind::Newline | TokenKind::Eof))
-        .collect()
-}
-
-/// Helper to parse source without errors.
-fn parse_ok(source: &str) {
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-    let _ = parser.parse_module();
-
-    let errors = parser.errors();
-    assert!(
-        errors.is_empty(),
-        "Expected no parse errors, but got:\n{}",
-        errors
-            .iter()
-            .map(|e| {
-                let diag = e.to_diagnostic(source);
-                format!("{}: {}", e.code(), diag.message)
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
-}
-
-// ===== Valid Decimal Numbers =====
+use coral_parser::helpers::{parse_ok, tokenize};
+use coral_parser::lexer::TokenKind;
 
 #[test]
 fn test_decimal_integers() {
@@ -82,8 +36,6 @@ large_float = 1_234.567_89
 "#;
     let tokens = tokenize(source);
     assert!(tokens.contains(&TokenKind::Number));
-    // Note: .5 may cause parser issues but that's not a lexer concern
-    // The important thing is it tokenizes as a Number
 }
 
 #[test]
@@ -99,8 +51,6 @@ large_scientific = 1_234.567_89e-10
     assert!(tokens.contains(&TokenKind::Number));
     parse_ok(source);
 }
-
-// ===== Valid Binary Literals =====
 
 #[test]
 fn test_binary_literals() {
@@ -119,8 +69,6 @@ uppercase = 0B1010
     parse_ok(source);
 }
 
-// ===== Valid Octal Literals =====
-
 #[test]
 fn test_octal_literals() {
     let source = r#"
@@ -136,8 +84,6 @@ uppercase = 0O755
     assert!(tokens.contains(&TokenKind::Number));
     parse_ok(source);
 }
-
-// ===== Valid Hexadecimal Literals =====
 
 #[test]
 fn test_hexadecimal_literals() {
@@ -157,8 +103,6 @@ uppercase = 0XDEADBEEF
     parse_ok(source);
 }
 
-// ===== Valid Complex Numbers =====
-
 #[test]
 fn test_complex_literals() {
     let source = r#"
@@ -177,48 +121,30 @@ complex_underscores = 1_234.567_89+9_876.543_21j
     parse_ok(source);
 }
 
-// ===== Invalid Patterns =====
-
-// These patterns are rejected by the Logos regex and tokenize without InvalidNumber errors
-
 #[test]
 fn test_invalid_patterns_tokenize_without_errors() {
-    // These should tokenize without producing InvalidNumber errors
-    // (they may produce other syntax errors during parsing, but that's fine)
-    let _ = tokenize("_100"); // identifier
-    let _ = tokenize("100_"); // number + identifier
-    let _ = tokenize("1__000"); // number + identifier
-    let _ = tokenize("0b1010_"); // number + identifier
-    let _ = tokenize("0o755_"); // number + identifier
-    let _ = tokenize("0xff_"); // number + identifier
-    let _ = tokenize("0b11__00"); // number + identifier
-    let _ = tokenize("0o12__34"); // number + identifier
-    let _ = tokenize("0xab__cd"); // number + identifier
-    let _ = tokenize("0b2"); // number + identifier
-    let _ = tokenize("0o8"); // number + identifier
-    let _ = tokenize("0xg"); // number + identifier
-    let _ = tokenize("0x"); // number + identifier
-    let _ = tokenize("0b"); // number + identifier
-    let _ = tokenize("0o"); // number + identifier
+    // These patterns should tokenize without panicking
+    let patterns = vec![
+        "_100", "100_", "1__000", "0b1010_", "0o755_", "0xff_", "0b11__00", "0o12__34", "0xab__cd",
+        "0b2", "0o8", "0xg", "0x", "0b", "0o",
+    ];
+
+    for pattern in patterns {
+        let tokens = tokenize(pattern);
+        assert!(!tokens.is_empty(), "Should tokenize pattern: {}", pattern);
+    }
 }
-
-// ===== Invalid Scientific Notation =====
-
-// These patterns are tokenized without InvalidNumber errors
 
 #[test]
 fn test_invalid_scientific_notation_tokenize() {
-    // These tokenize without producing InvalidNumber errors
-    let _ = tokenize("1ee5"); // number + identifier
-    let _ = tokenize("1.2.3"); // may produce syntax errors but no InvalidNumber
-    let _ = tokenize("1e"); // number + identifier
-    let _ = tokenize("1e+"); // number + identifier
-    let _ = tokenize("1e-"); // number + identifier
+    // These patterns should tokenize without panicking
+    let patterns = vec!["1ee5", "1.2.3", "1e", "1e+", "1e-"];
+
+    for pattern in patterns {
+        let tokens = tokenize(pattern);
+        assert!(!tokens.is_empty(), "Should tokenize pattern: {}", pattern);
+    }
 }
-
-// ===== Valid Numbers with Validation =====
-
-// These should be tokenized as numbers and pass validation
 
 #[test]
 fn test_valid_underscore_usage() {
@@ -235,36 +161,23 @@ valid_scientific = 1_234e5_67
     parse_ok(source);
 }
 
-// ===== Comprehensive Number Validation =====
-
-// The Logos regex properly rejects malformed number patterns,
-// so the main validation is already handled at the lexical level.
-
 #[test]
 fn test_comprehensive_number_validation() {
-    // All the invalid patterns from above should tokenize without InvalidNumber errors
-    // This test just ensures the system doesn't crash on various inputs
     let patterns = vec![
         "1_000_", "_1_000", "1__000", "0b1010_", "0o755_", "0xff_", "0b11__00", "0o12__34",
         "0xab__cd", "0b2", "0o8", "0xg", "0x", "0b", "0o", "1ee5", "1.2.3", "1e", "1e+", "1e-",
     ];
 
     for pattern in patterns {
-        let _ = tokenize(pattern); // Should not panic or produce InvalidNumber errors
+        let tokens = tokenize(pattern);
+        assert!(!tokens.is_empty(), "Should tokenize pattern: {}", pattern);
     }
 }
 
-// ===== Invalid Complex Numbers =====
-
 #[test]
 fn test_invalid_complex_numbers() {
-    // Complex numbers without j/J suffix should be regular numbers
     parse_ok("3+4");
-    // But if they have j but malformed, they should error
-    // (This depends on how the regex matches - complex regex should only match with j/J)
 }
-
-// ===== Numbers in Context =====
 
 #[test]
 fn test_numbers_in_expressions() {
@@ -279,17 +192,12 @@ fn test_numbers_in_collections() {
     parse_ok("evens = {0, 2, 4, 6, 8}");
 }
 
-// ===== Edge Cases =====
-
 #[test]
 fn test_edge_cases() {
-    // All single digits
     parse_ok("digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]");
 
-    // Zero in different bases
     parse_ok("zeros = [0, 0b0, 0o0, 0x0, 0.0, 0j]");
 
-    // Very large numbers (within reasonable limits)
     parse_ok("max_int = 9223372036854775807");
     parse_ok("very_small = 2.22e-16");
 }

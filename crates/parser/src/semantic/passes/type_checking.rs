@@ -776,9 +776,10 @@ impl<'a> TypeChecker<'a> {
             // Validate keyword arguments with parameter name matching
             for (arg_name, arg_ty, arg_span) in keyword_args.iter() {
                 // Try to find parameter by name
-                let param_match = params.iter().enumerate().find(|(_idx, (param_name, _ty))| {
-                    param_name.as_deref() == *arg_name
-                });
+                let param_match = params
+                    .iter()
+                    .enumerate()
+                    .find(|(_idx, (param_name, _ty))| param_name.as_deref() == *arg_name);
 
                 if let Some((idx, (_param_name, param_ty))) = param_match {
                     // Found matching parameter by name - validate type
@@ -797,7 +798,8 @@ impl<'a> TypeChecker<'a> {
                     }
                 } else {
                     // Parameter name not found - check if we can match by position
-                    let remaining_params: Vec<&(Option<String>, Type)> = params.iter().skip(num_positional).collect();
+                    let remaining_params: Vec<&(Option<String>, Type)> =
+                        params.iter().skip(num_positional).collect();
 
                     if remaining_params.is_empty() {
                         // No parameters available for this keyword arg
@@ -817,7 +819,9 @@ impl<'a> TypeChecker<'a> {
 
                         if !matches_any
                             && !matches!(arg_ty, Type::Unknown)
-                            && !remaining_params.iter().all(|(_n, p)| matches!(p, Type::Unknown))
+                            && !remaining_params
+                                .iter()
+                                .all(|(_n, p)| matches!(p, Type::Unknown))
                         {
                             self.context.add_error(*error(
                                 ErrorKind::InvalidArgumentType {

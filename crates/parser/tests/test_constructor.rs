@@ -1,6 +1,6 @@
 //! Tests for constructor keyword functionality
 
-use coral_parser::{Arena, Lexer, Parser};
+use coral_parser::helpers::parse_ok;
 
 #[test]
 fn test_constructor_basic() {
@@ -11,15 +11,7 @@ class Point:
         self.y = y
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(
-        result.is_ok(),
-        "Constructor keyword should parse successfully"
-    );
+    parse_ok(source);
 }
 
 #[test]
@@ -34,12 +26,7 @@ class Rectangle:
         self.height = height
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Constructor with types should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -50,12 +37,7 @@ class Empty:
         pass
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Constructor with no params should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -67,12 +49,7 @@ class Config:
         self.retries = retries
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Constructor with defaults should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -85,12 +62,7 @@ class Point:
         self.y = y
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Constructor with docstring should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -103,15 +75,7 @@ class Complex:
         self.magnitude = (real * real + imag * imag) ** 0.5
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(
-        result.is_ok(),
-        "Constructor with multiple statements should parse"
-    );
+    parse_ok(source);
 }
 
 #[test]
@@ -122,15 +86,7 @@ class Simple:
     y: int
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(
-        result.is_ok(),
-        "Class without explicit constructor should parse"
-    );
+    parse_ok(source);
 }
 
 #[test]
@@ -150,15 +106,7 @@ class Vector:
         self.y = self.y / mag
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(
-        result.is_ok(),
-        "Constructor with other methods should parse"
-    );
+    parse_ok(source);
 }
 
 #[test]
@@ -173,10 +121,5 @@ class Outer:
                 self.inner_value = inner_value
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Nested class constructors should parse");
+    parse_ok(source);
 }

@@ -3,7 +3,7 @@
 //! Note: These tests verify that export statements parse correctly.
 //! Full semantic analysis of exports is still being implemented.
 
-use coral_parser::parse;
+use coral_parser::helpers::parse_ok;
 
 #[test]
 fn test_simple_export() {
@@ -14,10 +14,7 @@ def my_function():
 export my_function
 "#;
 
-    let result = parse(source);
-    // Export validation may produce semantic errors, but parsing should succeed
-    // Just verify it doesn't panic
-    let _ = result;
+    parse_ok(source);
 }
 
 #[test]
@@ -32,10 +29,7 @@ def func2():
 export func1, func2
 "#;
 
-    let result = parse(source);
-    // Export validation may produce semantic errors, but parsing should succeed
-    // Just verify it doesn't panic
-    let _ = result;
+    parse_ok(source);
 }
 
 #[test]
@@ -47,10 +41,7 @@ def internal_function():
 export internal_function as public_function
 "#;
 
-    let result = parse(source);
-    // Export validation may produce semantic errors, but parsing should succeed
-    // Just verify it doesn't panic
-    let _ = result;
+    parse_ok(source);
 }
 
 #[test]
@@ -63,10 +54,7 @@ class MyClass:
 export MyClass
 "#;
 
-    let result = parse(source);
-    // Export validation may produce semantic errors, but parsing should succeed
-    // Just verify it doesn't panic
-    let _ = result;
+    parse_ok(source);
 }
 
 #[test]
@@ -78,10 +66,7 @@ PI = 3.14159
 export VERSION, PI
 "#;
 
-    let result = parse(source);
-    // Export validation may produce semantic errors, but parsing should succeed
-    // Just verify it doesn't panic
-    let _ = result;
+    parse_ok(source);
 }
 
 #[test]
@@ -92,10 +77,7 @@ export User from models.user
 export Post from models.post
 "#;
 
-    let result = parse(source);
-    // Re-exports may not be fully implemented in parser yet
-    // Just check it parses
-    let _ = result;
+    parse_ok(source);
 }
 
 #[test]
@@ -108,10 +90,7 @@ name = module::name()
 path = module::path()
 "#;
 
-    let result = parse(source);
-    // Export validation may produce semantic errors, but parsing should succeed
-    // Just verify it doesn't panic
-    let _ = result;
+    parse_ok(source);
 }
 
 #[test]
@@ -127,8 +106,5 @@ export public_function
 # private_helper is not exported
 "#;
 
-    let result = parse(source);
-    // Export validation may produce semantic errors, but parsing should succeed
-    // Just verify it doesn't panic
-    let _ = result;
+    parse_ok(source);
 }

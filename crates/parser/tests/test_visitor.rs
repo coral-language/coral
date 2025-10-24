@@ -46,7 +46,7 @@ fn test_mut_visitor_basic_traversal() {
     impl<'a> MutVisitor<'a> for TestVisitor {
         fn visit_stmt(&mut self, stmt: &Stmt<'a>) {
             self.stmt_count += 1;
-            // Continue traversal
+
             coral_parser::visitor::mut_walk::walk_stmt(self, stmt);
         }
 
@@ -63,7 +63,6 @@ fn test_mut_visitor_basic_traversal() {
 
     visitor.visit_module(module);
 
-    // Should have visited 1 statement (Pass), 0 expressions
     assert_eq!(visitor.stmt_count, 1);
     assert_eq!(visitor.expr_count, 0);
 }
@@ -72,7 +71,6 @@ fn test_mut_visitor_basic_traversal() {
 fn test_mut_visitor_expression_traversal() {
     let arena = Arena::new();
 
-    // Create a more complex expression: 1 + 2 * 3
     let one = create_constant(&arena, "1");
     let two = create_constant(&arena, "2");
     let three = create_constant(&arena, "3");
@@ -134,21 +132,18 @@ fn test_transformer_basic_functionality() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Test constant creation
     let constant = transformer.alloc_constant("42", TextRange::default());
     match constant {
         Expr::Constant(c) => assert_eq!(c.value, "42"),
         _ => panic!("Expected constant"),
     }
 
-    // Test name creation
     let name = transformer.alloc_name("x", TextRange::default());
     match name {
         Expr::Name(n) => assert_eq!(n.id, "x"),
         _ => panic!("Expected name"),
     }
 
-    // Test binary operation creation
     let left = transformer.alloc_constant("1", TextRange::default());
     let right = transformer.alloc_constant("2", TextRange::default());
     let binop = transformer.alloc_binop(left, "+", right, TextRange::default());
@@ -173,12 +168,10 @@ fn test_transformer_expression_transformation() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Create original expression: 2 + 3
     let orig_left = transformer.alloc_constant("2", TextRange::default());
     let orig_right = transformer.alloc_constant("3", TextRange::default());
     let orig_expr = transformer.alloc_binop(orig_left, "+", orig_right, TextRange::default());
 
-    // Transform: replace 2 with 10
     let transformed = transformer.transform_expr(orig_expr, |expr| match expr {
         Expr::BinOp(b) => {
             let new_left = transformer.alloc_constant("10", TextRange::default());
@@ -192,7 +185,6 @@ fn test_transformer_expression_transformation() {
         other => other.clone(),
     });
 
-    // Verify transformation
     match transformed {
         Expr::BinOp(b) => {
             match b.left {
@@ -213,12 +205,10 @@ fn test_constant_folding_transformation() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Create expression: 2 + 3
     let left = transformer.alloc_constant("2", TextRange::default());
     let right = transformer.alloc_constant("3", TextRange::default());
     let expr = transformer.alloc_binop(left, "+", right, TextRange::default());
 
-    // Test constant folding
     let binop_expr = match expr {
         Expr::BinOp(b) => b,
         _ => panic!("Expected binop"),
@@ -232,7 +222,6 @@ fn test_constant_folding_transformation() {
         _ => panic!("Expected constant 5"),
     }
 
-    // Test non-foldable case: 2 + x
     let x_name = transformer.alloc_name("x", TextRange::default());
     let non_foldable = transformer.alloc_binop(left, "+", x_name, TextRange::default());
 
@@ -250,7 +239,6 @@ fn test_augmented_assignment_desugaring() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Create x += 1
     let target = transformer.alloc_name("x", TextRange::default());
     let value = transformer.alloc_constant("1", TextRange::default());
 
@@ -261,7 +249,6 @@ fn test_augmented_assignment_desugaring() {
         span: TextRange::default(),
     };
 
-    // Desugar to x = x + 1
     let desugared = transformer.desugar_aug_assign(&aug_assign);
 
     match desugared {
@@ -294,13 +281,11 @@ fn test_statement_transformation() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Create x = 42
     let target = transformer.alloc_name("x", TextRange::default());
     let value = transformer.alloc_constant("42", TextRange::default());
     let targets = arena.alloc_slice(&[target]);
     let assign_stmt = transformer.alloc_assign(targets, value, TextRange::default());
 
-    // Transform: change value to 100
     let transformed_stmt = transformer.transform_stmt(assign_stmt, |stmt| match stmt {
         Stmt::Assign(a) => {
             let new_value = transformer.alloc_constant("100", TextRange::default());
@@ -313,7 +298,6 @@ fn test_statement_transformation() {
         other => other.clone(),
     });
 
-    // Verify transformation
     match transformed_stmt {
         Stmt::Assign(a) => match &a.value {
             Expr::Constant(c) => assert_eq!(c.value, "100"),
@@ -328,7 +312,6 @@ fn test_module_transformation() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Create module with x = 1; y = 2
     let x_target = transformer.alloc_name("x", TextRange::default());
     let x_value = transformer.alloc_constant("1", TextRange::default());
     let x_targets = arena.alloc_slice(&[x_target]);
@@ -345,7 +328,6 @@ fn test_module_transformation() {
         docstring: None,
     });
 
-    // Transform: change all constants to 99
     let transformed_module = transformer.transform_module(original_module, |stmt| match stmt {
         Stmt::Assign(a) => {
             let new_value = transformer.alloc_constant("99", TextRange::default());
@@ -358,7 +340,6 @@ fn test_module_transformation() {
         other => other.clone(),
     });
 
-    // Verify transformation
     assert_eq!(transformed_module.body.len(), 2);
     for stmt in transformed_module.body {
         match stmt {
@@ -376,7 +357,6 @@ fn test_expression_list_transformation() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Create [1, 2, 3]
     let expr1 = transformer.alloc_constant("1", TextRange::default());
     let expr2 = transformer.alloc_constant("2", TextRange::default());
     let expr3 = transformer.alloc_constant("3", TextRange::default());
@@ -384,7 +364,6 @@ fn test_expression_list_transformation() {
     let expr_array = [expr1, expr2, expr3];
     let original_list = transformer.alloc_list(&expr_array, TextRange::default());
 
-    // Transform all constants to their double values
     let transformed_list = transformer.transform_expr(original_list, |expr| match expr {
         Expr::List(l) => {
             let expr_refs: Vec<&Expr> = l.elts.iter().collect();
@@ -409,7 +388,6 @@ fn test_expression_list_transformation() {
         other => other.clone(),
     });
 
-    // Verify transformation
     match transformed_list {
         Expr::List(l) => {
             assert_eq!(l.elts.len(), 3);
@@ -432,11 +410,7 @@ fn test_complex_ast_traversal() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Create a complex function definition with nested expressions
     let func_def = {
-        // def foo(x, y=1):
-        //     return x + y * 2
-
         let _x_param = transformer.alloc_name("x", TextRange::default());
         let _y_param = transformer.alloc_name("y", TextRange::default());
         let default_val = transformer.alloc_constant("1", TextRange::default());
@@ -460,7 +434,6 @@ fn test_complex_ast_traversal() {
             kw_defaults: arena.alloc_slice_iter([Some(default_val.clone())]),
         };
 
-        // x + y * 2
         let x_ref = transformer.alloc_name("x", TextRange::default());
         let y_ref = transformer.alloc_name("y", TextRange::default());
         let two = transformer.alloc_constant("2", TextRange::default());
@@ -492,7 +465,6 @@ fn test_complex_ast_traversal() {
         docstring: None,
     });
 
-    // Count different node types
     struct NodeTypeCounter {
         func_defs: usize,
         returns: usize,
@@ -543,7 +515,6 @@ fn test_complex_ast_traversal() {
 fn test_visitor_edge_cases() {
     let arena = Arena::new();
 
-    // Test empty module
     let empty_module = arena.alloc(Module {
         body: arena.alloc_slice_iter([]),
         span: TextRange::default(),
@@ -561,10 +532,8 @@ fn test_visitor_edge_cases() {
     visitor.visit_module(empty_module);
     assert_eq!(visitor.0, 0); // No statements visited
 
-    // Test deeply nested expressions
     let transformer = Transformer::new(&arena);
 
-    // Create a moderately nested structure: ((1))
     let innermost = transformer.alloc_constant("1", TextRange::default());
     let inner_elements = [innermost];
     let inner_tuple = transformer.alloc_tuple(&inner_elements, TextRange::default());
@@ -589,7 +558,6 @@ fn test_transformation_memory_safety() {
     let arena = Arena::new();
     let transformer = Transformer::new(&arena);
 
-    // Create a large expression tree
     let mut exprs = Vec::new();
     for i in 0..1000 {
         exprs.push(transformer.alloc_constant(&i.to_string(), TextRange::default()));
@@ -597,7 +565,6 @@ fn test_transformation_memory_safety() {
 
     let list = transformer.alloc_list(&exprs, TextRange::default());
 
-    // Transform all constants
     let transformed = transformer.transform_expr(list, |expr| match expr {
         Expr::List(l) => {
             let expr_refs: Vec<&Expr> = l.elts.iter().collect();
@@ -622,7 +589,6 @@ fn test_transformation_memory_safety() {
         other => other.clone(),
     });
 
-    // Verify transformation worked and no crashes
     match transformed {
         Expr::List(l) => {
             assert_eq!(l.elts.len(), 1000);
@@ -639,7 +605,6 @@ fn test_transformation_memory_safety() {
         _ => panic!("Expected list"),
     }
 
-    // Verify arena stats are reasonable
     let stats = arena.memory_stats();
     assert!(stats.allocated_bytes > 0);
     assert!(stats.chunk_count >= 1);
@@ -649,7 +614,6 @@ fn test_transformation_memory_safety() {
 fn test_visitor_funcdef_returns_traversal() {
     let arena = Arena::new();
 
-    // Create a function with return type annotation
     let return_type_expr = arena.alloc(Expr::Name(NameExpr {
         id: arena.alloc_str("int"),
         span: TextRange::default(),
@@ -710,7 +674,6 @@ fn test_visitor_funcdef_returns_traversal() {
 
     visitor.visit_module(module);
 
-    // Should have visited 1 statement (FuncDef), 1 expression (return type), 1 name
     assert_eq!(visitor.stmt_count, 1);
     assert_eq!(visitor.expr_count, 1);
     assert_eq!(visitor.name_count, 1);
@@ -720,7 +683,6 @@ fn test_visitor_funcdef_returns_traversal() {
 fn test_visitor_formatted_value_format_spec_traversal() {
     let arena = Arena::new();
 
-    // Create a FormattedValue with format_spec
     let value_expr = create_constant(&arena, "3.14159");
     let format_spec_literal = arena.alloc(Expr::Constant(ConstantExpr {
         value: arena.alloc_str(".2f"),
@@ -779,10 +741,6 @@ fn test_visitor_formatted_value_format_spec_traversal() {
 
     visitor.visit_module(module);
 
-    // Should have visited:
-    // - 1 statement (ExprStmt)
-    // - 3 expressions (FormattedValue, value constant, format_spec constant)
-    // - 2 constants (value "3.14159" and format_spec ".2f")
     assert_eq!(visitor.stmt_count, 1);
     assert_eq!(visitor.expr_count, 3);
     assert_eq!(visitor.constant_count, 2);
@@ -792,7 +750,6 @@ fn test_visitor_formatted_value_format_spec_traversal() {
 fn test_visitor_formatted_value_no_format_spec() {
     let arena = Arena::new();
 
-    // Create a FormattedValue without format_spec
     let value_expr = create_constant(&arena, "hello");
 
     let formatted_value = arena.alloc(Expr::FormattedValue(FormattedValueExpr {
@@ -842,10 +799,6 @@ fn test_visitor_formatted_value_no_format_spec() {
 
     visitor.visit_module(module);
 
-    // Should have visited:
-    // - 1 statement (ExprStmt)
-    // - 2 expressions (FormattedValue, value constant)
-    // - 1 constant (value "hello")
     assert_eq!(visitor.stmt_count, 1);
     assert_eq!(visitor.expr_count, 2);
     assert_eq!(visitor.constant_count, 1);

@@ -6,56 +6,7 @@
 //! - Better error messages for indentation issues
 //! - EOF dedent scenarios with complex nesting
 
-use coral_parser::{Arena, lexer::Lexer, parser::Parser};
-
-/// Helper function to parse source and collect errors and warnings.
-fn parse_and_get_diagnostics(source: &str) -> (Vec<String>, Vec<String>) {
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-
-    let mut parser = Parser::new(lexer, &arena);
-    let _ = parser.parse_module();
-
-    let errors = parser
-        .errors()
-        .iter()
-        .map(|err| {
-            let diagnostic = err.to_diagnostic(source);
-            format!("{}: {}", err.code(), diagnostic.message)
-        })
-        .collect();
-
-    let warnings = parser
-        .warnings()
-        .iter()
-        .map(|warn| {
-            let diagnostic = warn.to_diagnostic(source);
-            format!("{}: {}", warn.code(), diagnostic.message)
-        })
-        .collect();
-
-    (errors, warnings)
-}
-
-/// Helper function to tokenize source and show tokens.
-fn tokenize_and_show(source: &str) -> Vec<String> {
-    let mut lexer = Lexer::new(source);
-    let (tokens, _errors, _warnings) = lexer.tokenize();
-
-    tokens.iter().map(|token| format!("{:?}", token)).collect()
-}
-
-/// Helper to check if error is present with specific code.
-fn has_error_code(errors: &[String], code: &str) -> bool {
-    errors.iter().any(|e| e.starts_with(code))
-}
-
-/// Helper to check if warning is present with specific code.
-fn has_warning_code(warnings: &[String], code: &str) -> bool {
-    warnings.iter().any(|w| w.starts_with(code))
-}
-
-// ===== Valid Indentation Tests =====
+use coral_parser::helpers::{has_error_code, has_warning_code, parse_and_get_diagnostics};
 
 #[test]
 fn test_valid_indentation_spaces_4() {
@@ -215,11 +166,8 @@ def foo():
     );
 }
 
-// ===== Mixed Tabs/Spaces Detection =====
-
 #[test]
 fn test_mixed_tabs_spaces_in_line() {
-    // This test uses consistent indentation levels but mixed tabs/spaces within lines
     let source = "def foo():\n\t    x = 1\n\t    y = 2\n"; // Both lines have 1 tab + 4 spaces = 12 spaces equivalent
     let (errors, warnings) = parse_and_get_diagnostics(source);
     assert!(
@@ -241,13 +189,8 @@ fn test_mixed_tabs_spaces_in_line() {
 #[test]
 fn test_tabs_after_spaces_consistency() {
     let source = "def foo():\n\tx = 1\n        if True:\n            pass\n";
-    let tokens = tokenize_and_show(source);
-    println!("Tokens: {:?}", tokens);
     let (errors, warnings) = parse_and_get_diagnostics(source);
-    println!("Errors: {:?}", errors);
-    println!("Warnings: {:?}", warnings);
-    // This has consistent indentation structure (levels 0, 4, 8, 8) but inconsistent style
-    // Should parse successfully but warn about style inconsistency
+
     assert!(
         errors.is_empty(),
         "Consistent structure with inconsistent style should not produce errors: {:?}",
@@ -270,14 +213,13 @@ fn test_tabs_after_spaces_consistency() {
 fn test_spaces_after_tabs_consistency() {
     let source = "def foo():\n\tx = 1\n    y = 2\n";
     let (errors, warnings) = parse_and_get_diagnostics(source);
-    // This has inconsistent indentation structure (levels 0, 8, 4) AND style inconsistency
-    // The structure inconsistency should cause a parsing error
+
     assert!(
         has_error_code(&errors, "E2029"),
         "Should detect unindent mismatch error: {:?}",
         errors
     );
-    // May also have style warnings
+
     assert!(
         warnings
             .iter()
@@ -297,14 +239,13 @@ def foo():
 		y = 2   # Tab again
 "#;
     let (errors, warnings) = parse_and_get_diagnostics(source);
-    // This has very inconsistent indentation structure, so should produce parsing errors
+
     assert!(
         !errors.is_empty(),
         "Complex inconsistent indentation should produce errors: {:?}",
         errors
     );
 
-    // May also have style warnings
     let inconsistent_warnings: Vec<_> = warnings
         .iter()
         .filter(|w| w.contains("Inconsistent indentation"))
@@ -315,8 +256,6 @@ def foo():
         warnings
     );
 }
-
-// ===== Inconsistent Indentation (Errors) =====
 
 #[test]
 fn test_unindent_mismatch() {
@@ -347,10 +286,13 @@ def foo():
     x = 1
        y = 2  # Irregular indent increase
 "#;
-    let (errors, warnings) = parse_and_get_diagnostics(source);
-    // This might be parsed differently, but should at least not crash
-    println!("Irregular indent errors: {:?}", errors);
-    println!("Irregular indent warnings: {:?}", warnings);
+    let (errors, _warnings) = parse_and_get_diagnostics(source);
+    // Irregular indentation produces syntax errors, which is expected behavior
+    assert!(
+        !errors.is_empty(),
+        "Irregular indent increase should produce errors: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -363,15 +305,13 @@ def foo():
     y = 2  # Dedents past multiple levels
 "#;
     let (errors, _) = parse_and_get_diagnostics(source);
-    // This should be valid Python - dedenting past multiple levels is allowed
+
     assert!(
         errors.is_empty(),
         "Dedenting past multiple levels should be valid: {:?}",
         errors
     );
 }
-
-// ===== EOF Dedent Scenarios =====
 
 #[test]
 fn test_eof_multiple_nested_blocks() {
@@ -489,8 +429,6 @@ def foo():
     );
 }
 
-// ===== Bracket Interaction =====
-
 #[test]
 fn test_indentation_inside_brackets_ignored() {
     let source = r#"
@@ -570,8 +508,6 @@ def foo():
         warnings
     );
 }
-
-// ===== Edge Cases =====
 
 #[test]
 fn test_single_line_file() {
@@ -681,21 +617,17 @@ def foo():
     );
 }
 
-// ===== Regression Tests =====
-
 #[test]
 fn test_regression_original_test_case() {
-    // This was the original test case from test_errors.rs
     let source = "def foo():\n\tx = 1\n    y = 2"; // Mix of tab and spaces
     let (errors, warnings) = parse_and_get_diagnostics(source);
 
-    // This has invalid indentation structure (levels 0, 8, 4), so should produce errors
     assert!(
         has_error_code(&errors, "E2029"),
         "Should detect unindent mismatch error: {:?}",
         errors
     );
-    // May also produce style warnings
+
     assert!(
         !warnings.is_empty(),
         "Should produce indentation warnings: {:?}",
@@ -705,7 +637,6 @@ fn test_regression_original_test_case() {
 
 #[test]
 fn test_regression_no_false_positives() {
-    // Ensure valid code doesn't produce warnings
     let source = r#"
 def foo():
     x = 1

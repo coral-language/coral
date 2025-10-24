@@ -1,6 +1,6 @@
 //! Tests for @operator decorator functionality
 
-use coral_parser::{Arena, Lexer, Parser};
+use coral_parser::helpers::parse_ok;
 
 #[test]
 fn test_operator_add() {
@@ -15,12 +15,7 @@ class Vector:
         return Vector(self.x + other.x, self.y + other.y)
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Operator add should parse successfully");
+    parse_ok(source);
 }
 
 #[test]
@@ -40,12 +35,7 @@ class Point:
         return f"Point(x={self.x}, y={self.y})"
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Operator str and repr should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -68,12 +58,7 @@ class Number:
         return self.value > other.value
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Operator comparison methods should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -100,12 +85,7 @@ class MyList:
         return item in self.items
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Operator container methods should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -134,12 +114,7 @@ class RangeIterator:
         return value
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Operator iterator methods should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -160,15 +135,7 @@ class FileManager:
             self.file.close()
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(
-        result.is_ok(),
-        "Operator context manager methods should parse"
-    );
+    parse_ok(source);
 }
 
 #[test]
@@ -183,12 +150,7 @@ class Multiplier:
         return value * self.factor
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Operator call method should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -214,12 +176,7 @@ class Complex:
         return Complex(real, imag)
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Operator arithmetic methods should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -238,12 +195,7 @@ class Number:
         return Number(+self.value)
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Operator unary methods should parse");
+    parse_ok(source);
 }
 
 #[test]
@@ -270,10 +222,5 @@ class FullFeatured:
         return 1
 "#;
 
-    let arena = Arena::new();
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, &arena);
-
-    let result = parser.parse_module();
-    assert!(result.is_ok(), "Multiple operator methods should parse");
+    parse_ok(source);
 }
