@@ -461,7 +461,7 @@ impl<'a> TypeInference<'a> {
                 let iter_type = self.infer_expr_val(&for_stmt.iter);
 
                 // Infer element type from iterable
-                let elem_type = self.infer_iterable_element_type(iter_type);
+                let elem_type = Self::infer_iterable_element_type(iter_type);
 
                 // Set the type for the target variable
                 self.infer_target(&for_stmt.target, &elem_type);
@@ -538,7 +538,7 @@ impl<'a> TypeInference<'a> {
                         Expr::YieldFrom(yield_from) => {
                             // Handle yield from
                             let iter_ty = self.infer_expr(yield_from.value);
-                            let elem_ty = self.infer_iterable_element_type(iter_ty);
+                            let elem_ty = Self::infer_iterable_element_type(iter_ty);
                             self.context
                                 .mark_current_function_as_generator(elem_ty.clone());
                         }
@@ -575,7 +575,7 @@ impl<'a> TypeInference<'a> {
                     }
                 } else {
                     // If the type is not a tuple, try to treat it as an iterable
-                    let elem_ty = self.infer_iterable_element_type(ty.clone());
+                    let elem_ty = Self::infer_iterable_element_type(ty.clone());
                     for elem in tuple.elts {
                         self.infer_target(elem, &elem_ty);
                     }
@@ -609,7 +609,7 @@ impl<'a> TypeInference<'a> {
                     }
                 } else {
                     // Try to extract element type from iterable
-                    let elem_ty = self.infer_iterable_element_type(ty.clone());
+                    let elem_ty = Self::infer_iterable_element_type(ty.clone());
                     for elem in list.elts {
                         if let Expr::Starred(starred) = elem {
                             self.infer_target(
@@ -639,7 +639,7 @@ impl<'a> TypeInference<'a> {
                 if let Type::List(elem_ty) = ty {
                     self.infer_target(starred.value, &Type::List(elem_ty.clone()));
                 } else {
-                    let elem_ty = self.infer_iterable_element_type(ty.clone());
+                    let elem_ty = Self::infer_iterable_element_type(ty.clone());
                     self.infer_target(starred.value, &Type::List(Box::new(elem_ty)));
                 }
             }
@@ -648,7 +648,7 @@ impl<'a> TypeInference<'a> {
     }
 
     /// Extract element type from an iterable type
-    fn infer_iterable_element_type(&self, iter_ty: Type) -> Type {
+    fn infer_iterable_element_type(iter_ty: Type) -> Type {
         match iter_ty {
             Type::List(elem) => *elem,
             Type::Set(elem) => *elem,
@@ -665,6 +665,22 @@ impl<'a> TypeInference<'a> {
             Type::Str => Type::Str,
             Type::Bytes => Type::Int,
             Type::Generator(elem) => *elem, // Support generator iteration
+            Type::Any => Type::Any,         // Support gradual typing
+            Type::Union(types) => {
+                // Infer iteration type for union - return union of all element types
+                let elem_types: Vec<Type> = types
+                    .into_iter()
+                    .map(Self::infer_iterable_element_type)
+                    .filter(|t| !matches!(t, Type::Unknown))
+                    .collect();
+                if elem_types.is_empty() {
+                    Type::Unknown
+                } else if elem_types.len() == 1 {
+                    elem_types.into_iter().next().unwrap()
+                } else {
+                    Type::Union(elem_types)
+                }
+            }
             _ => Type::Unknown,
         }
     }
@@ -752,7 +768,7 @@ impl<'a> TypeInference<'a> {
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
                     // Infer element type from iterable and set for target
-                    let elem_ty = self.infer_iterable_element_type(iter_ty);
+                    let elem_ty = Self::infer_iterable_element_type(iter_ty);
                     self.infer_target(&generator.target, &elem_ty);
 
                     // Infer condition types
@@ -777,7 +793,7 @@ impl<'a> TypeInference<'a> {
                 // Infer types for generators (similar to ListComp)
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
-                    let elem_ty = self.infer_iterable_element_type(iter_ty);
+                    let elem_ty = Self::infer_iterable_element_type(iter_ty);
                     self.infer_target(&generator.target, &elem_ty);
                     for cond in generator.ifs {
                         let _cond_ty = self.infer_expr(cond);
@@ -800,7 +816,7 @@ impl<'a> TypeInference<'a> {
                 // Infer types for generators (similar to ListComp)
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
-                    let elem_ty = self.infer_iterable_element_type(iter_ty);
+                    let elem_ty = Self::infer_iterable_element_type(iter_ty);
                     self.infer_target(&generator.target, &elem_ty);
                     for cond in generator.ifs {
                         let _cond_ty = self.infer_expr(cond);
@@ -824,7 +840,7 @@ impl<'a> TypeInference<'a> {
                 // Infer types for generators (similar to ListComp)
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
-                    let elem_ty = self.infer_iterable_element_type(iter_ty);
+                    let elem_ty = Self::infer_iterable_element_type(iter_ty);
                     self.infer_target(&generator.target, &elem_ty);
                     for cond in generator.ifs {
                         let _cond_ty = self.infer_expr(cond);
@@ -874,7 +890,8 @@ impl<'a> TypeInference<'a> {
 
                 // Infer argument types with expected types from parameters
                 for (i, arg) in call.args.iter().enumerate() {
-                    let expected = param_types.and_then(|params| params.get(i).map(|(_name, ty)| ty.clone()));
+                    let expected =
+                        param_types.and_then(|params| params.get(i).map(|(_name, ty)| ty.clone()));
                     self.infer_expr_with_expected(arg, expected);
                 }
 
@@ -965,7 +982,9 @@ impl<'a> TypeInference<'a> {
                     let param_type = if let Some(annotation) = &arg.annotation {
                         // Explicit annotation takes precedence
                         parse_annotation(annotation)
-                    } else if let Some((_name, expected_ty)) = expected_params.as_ref().and_then(|p| p.get(i)) {
+                    } else if let Some((_name, expected_ty)) =
+                        expected_params.as_ref().and_then(|p| p.get(i))
+                    {
                         // Use expected type from call site
                         expected_ty.clone()
                     } else {
@@ -1062,7 +1081,7 @@ impl<'a> TypeInference<'a> {
             Expr::YieldFrom(yield_from) => {
                 let iter_ty = self.infer_expr(yield_from.value);
                 // Extract element type from the iterable
-                let elem_ty = self.infer_iterable_element_type(iter_ty);
+                let elem_ty = Self::infer_iterable_element_type(iter_ty);
                 self.context
                     .mark_current_function_as_generator(elem_ty.clone());
                 Type::generator(elem_ty)
@@ -1100,14 +1119,26 @@ impl<'a> TypeInference<'a> {
             }
             "-" | "*" | "//" | "%" | "**" => Self::infer_numeric_binop(&left_ty, &right_ty, false),
             "|" | "^" | "&" | "<<" | ">>" => {
-                // Bitwise ops work on integers
-                if left_ty == Type::Int && right_ty == Type::Int {
-                    Type::Int
-                } else {
-                    Type::Unknown
+                // Bitwise ops work on integers and bools
+                match (&left_ty, &right_ty) {
+                    (Type::Int, Type::Int) | (Type::Bool, Type::Bool) => Type::Int,
+                    (Type::Bool, Type::Int) | (Type::Int, Type::Bool) => Type::Int,
+                    // Support Any type for gradual typing
+                    (Type::Any, _) | (_, Type::Any) => Type::Any,
+                    _ => Type::Unknown,
                 }
             }
-            "@" => Type::Unknown, // Matrix mult
+            "@" => {
+                // Matrix multiplication - commonly used for NumPy-style operations
+                // If both types support matmul, preserve the type
+                match (&left_ty, &right_ty) {
+                    // Support Any for gradual typing
+                    (Type::Any, _) | (_, Type::Any) => Type::Any,
+                    // Lists can be used for matrix operations in some contexts
+                    (Type::List(_), Type::List(_)) => left_ty,
+                    _ => Type::Unknown,
+                }
+            }
             _ => Type::Unknown,
         }
     }
@@ -1127,6 +1158,38 @@ impl<'a> TypeInference<'a> {
                     Type::Int
                 }
             }
+            // Support Any type for gradual typing
+            (Type::Any, _) | (_, Type::Any) => Type::Any,
+            // Allow numeric operations with unions containing numeric types
+            (Type::Union(types), other) | (other, Type::Union(types)) => {
+                // If all union members are numeric, return a numeric type
+                let all_numeric = types.iter().all(|t| {
+                    matches!(
+                        t,
+                        Type::Int | Type::Float | Type::Complex | Type::Bool | Type::Any
+                    )
+                });
+                if all_numeric {
+                    // Return the most general numeric type in the union
+                    if types.iter().any(|t| matches!(t, Type::Complex)) {
+                        Type::Complex
+                    } else if types.iter().any(|t| matches!(t, Type::Float)) {
+                        Type::Float
+                    } else {
+                        Type::Int
+                    }
+                } else {
+                    // Check if the other type is numeric
+                    if matches!(
+                        other,
+                        Type::Int | Type::Float | Type::Complex | Type::Bool | Type::Any
+                    ) {
+                        Type::Union(types.clone())
+                    } else {
+                        Type::Unknown
+                    }
+                }
+            }
             _ => Type::Unknown,
         }
     }
@@ -1137,12 +1200,20 @@ impl<'a> TypeInference<'a> {
 
         match unary.op {
             "not" => Type::Bool,
-            "+" | "-" => operand_ty,
+            "+" | "-" => {
+                // Unary + and - preserve numeric types
+                match &operand_ty {
+                    Type::Int | Type::Float | Type::Complex | Type::Bool => operand_ty,
+                    Type::Any => Type::Any,
+                    _ => Type::Unknown,
+                }
+            }
             "~" => {
-                if operand_ty == Type::Int {
-                    Type::Int
-                } else {
-                    Type::Unknown
+                // Bitwise NOT works on integers and bools
+                match &operand_ty {
+                    Type::Int | Type::Bool => Type::Int,
+                    Type::Any => Type::Any,
+                    _ => Type::Unknown,
                 }
             }
             _ => Type::Unknown,
@@ -1269,7 +1340,7 @@ impl<'a> TypeInference<'a> {
                         }
                     }
                     Type::Set(elem) => (**elem).clone(),
-                    _ => self.infer_iterable_element_type(subject_ty.clone()),
+                    _ => Self::infer_iterable_element_type(subject_ty.clone()),
                 };
 
                 // Bind each pattern to the element type
