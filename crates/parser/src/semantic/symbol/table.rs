@@ -98,7 +98,6 @@ impl SymbolTable {
         let scope = Scope::new(scope_type, name, Some(parent_id));
         self.scopes.push(scope);
 
-        // Add this scope as a child of its parent
         self.scopes[parent_id].children.push(scope_id);
 
         self.scope_stack.push(scope_id);
@@ -111,7 +110,6 @@ impl SymbolTable {
         let current_id = self.current_scope_id();
         let current_scope = &self.scopes[current_id];
 
-        // Find matching child scope
         for &child_id in &current_scope.children {
             let child = &self.scopes[child_id];
             if child.scope_type == scope_type && child.name == name {
@@ -140,9 +138,7 @@ impl SymbolTable {
         let current_id = self.current_scope_id();
         let current_scope = &self.scopes[current_id];
 
-        // Check if name is declared as global
         if current_scope.is_global(name) {
-            // Look only in module scope
             if let Some(symbol) =
                 self.scopes[self.module_scope_id].lookup_local(name, |s| s.clone())
             {
@@ -151,13 +147,10 @@ impl SymbolTable {
             return None;
         }
 
-        // Check if name is declared as nonlocal
         if current_scope.is_nonlocal(name) {
-            // Look in enclosing scopes (skip current)
             return self.lookup_in_enclosing(name, current_id);
         }
 
-        // Normal LEGB lookup
         self.lookup_legb(name, current_id)
     }
 
@@ -168,19 +161,16 @@ impl SymbolTable {
         loop {
             let scope = &self.scopes[scope_id];
 
-            // Local: Check current scope
             if let Some(symbol) = scope.lookup_local(name, |s| s.clone()) {
                 return Some((symbol, scope_id));
             }
 
-            // Move to enclosing scope
             match scope.parent_id {
                 Some(parent_id) => scope_id = parent_id,
                 None => break, // Reached module scope
             }
         }
 
-        // Not found (built-ins would be checked by the caller if needed)
         None
     }
 
@@ -197,9 +187,7 @@ impl SymbolTable {
 
     /// Record a usage of a name
     pub fn record_usage(&mut self, name: &str, span: TextRange) -> Result<(), String> {
-        // Find the symbol using LEGB lookup
         if let Some((_, scope_id)) = self.lookup(name) {
-            // Add usage to the symbol
             let result = self.scopes[scope_id].lookup_local_mut(name, |symbol| {
                 symbol.add_usage(span);
             });
@@ -226,10 +214,8 @@ impl SymbolTable {
         let mut unused = Vec::new();
 
         for (scope_id, scope) in self.scopes.iter().enumerate() {
-            // For each symbol in the scope, check if it's unused
             let symbols = scope.symbols.read().unwrap();
             for symbol in symbols.values() {
-                // Skip function/class definitions and imports (often intentionally unused)
                 if matches!(
                     symbol.kind,
                     BindingKind::Assignment | BindingKind::Parameter
@@ -267,7 +253,6 @@ impl SymbolTable {
 
     /// Analyze closure captures - mark symbols that are captured by nested functions
     pub fn analyze_closures(&mut self) {
-        // For each scope, check if any symbols are used from parent scopes
         for scope_id in 0..self.scopes.len() {
             self.analyze_scope_captures(scope_id);
         }
@@ -277,7 +262,6 @@ impl SymbolTable {
     fn analyze_scope_captures(&mut self, scope_id: usize) {
         let scope = &self.scopes[scope_id];
 
-        // Only function scopes can capture variables
         if !matches!(scope.scope_type, ScopeType::Function) {
             return;
         }
@@ -290,18 +274,13 @@ impl SymbolTable {
                 .collect()
         };
 
-        // Check each symbol usage
         for (name, usages) in symbols_snapshot {
-            // Look up symbol in parent scopes
             if let Some((_parent_sym, parent_scope_id)) = self.lookup_from_scope(&name, scope_id) {
-                // If found in parent scope, mark as captured
                 if parent_scope_id != scope_id && !usages.is_empty() {
-                    // Mark in parent scope as captured
                     self.scopes[parent_scope_id].lookup_local_mut(&name, |sym| {
                         sym.mark_captured();
                     });
 
-                    // Mark in current scope as free variable
                     self.scopes[scope_id]
                         .symbols
                         .write()
@@ -326,14 +305,12 @@ impl SymbolTable {
         loop {
             let scope = &self.scopes[current];
 
-            // Check if symbol is in this scope
             let symbols = scope.symbols.read().unwrap();
             if let Some(symbol) = symbols.get(name) {
                 return Some((symbol.clone(), current));
             }
             drop(symbols);
 
-            // Move to parent scope
             if let Some(parent_id) = scope.parent_id {
                 current = parent_id;
             } else {
@@ -348,35 +325,28 @@ impl SymbolTable {
     pub fn mark_usage_and_check_closure(&mut self, name: &str, span: TextRange) -> Option<()> {
         let current_scope_id = self.current_scope_id();
 
-        // First, try to find the symbol
         let (_, defining_scope_id) = self.lookup(name)?;
 
-        // If the defining scope is different from the current scope, it might be a free variable
         if defining_scope_id != current_scope_id {
-            // Check if it's a free variable (from an enclosing function scope)
             let defining_scope = self.scopes.get(defining_scope_id)?;
             let current_scope = self.scopes.get(current_scope_id)?;
 
             if current_scope.scope_type == ScopeType::Function
                 && defining_scope.scope_type == ScopeType::Function
             {
-                // Mark the symbol as captured in the defining scope
                 if let Some(scope) = self.scopes.get(defining_scope_id) {
                     scope.lookup_local_mut(name, |symbol| {
                         symbol.mark_captured();
                     });
                 }
 
-                // Create a free variable entry in the current scope if it doesn't exist
                 let symbol_name = name.to_string();
                 if let Some(current) = self.scopes.get_mut(current_scope_id) {
-                    // Check if the symbol already exists as a free variable
                     let exists = current
                         .lookup_local(&symbol_name, |symbol| symbol.is_free_var)
                         .unwrap_or(false);
 
                     if !exists {
-                        // Create a new free variable entry
                         let mut free_var = Symbol::new(
                             symbol_name.clone(),
                             BindingKind::Parameter, // Free variables are like implicit parameters
@@ -385,14 +355,12 @@ impl SymbolTable {
                         free_var.mark_free_var();
                         free_var.set_scope_depth(current_scope_id);
 
-                        // Add it to the current scope
                         let _ = current.define(free_var);
                     }
                 }
             }
         }
 
-        // Add usage to the symbol
         if let Some(scope) = self.scopes.get(defining_scope_id) {
             scope.lookup_local_mut(name, |symbol| {
                 symbol.add_usage(span);
@@ -412,18 +380,15 @@ impl SymbolTable {
         &self,
         mut metrics_collector: Option<&mut MetricsCollector>,
     ) -> SymbolTableSnapshot {
-        // Collect metrics if enabled
         let mut before_size = 0;
         let mut total_symbols = 0;
 
-        // Calculate size before snapshot (rough estimate)
         if let Some(ref mut collector) = metrics_collector
             && collector.memory_metrics_enabled()
         {
             for scope in &self.scopes {
                 if let Ok(symbols) = scope.symbols.read() {
                     for symbol in symbols.values() {
-                        // Rough estimate: symbol struct size + string sizes
                         before_size += std::mem::size_of::<Symbol>() + symbol.name.capacity();
                     }
                     total_symbols += symbols.len();
@@ -438,11 +403,9 @@ impl SymbolTable {
         let mut scope_metadata = Vec::new();
         let mut arc_count = 0;
 
-        // Create snapshots of all scopes atomically
         for scope in &self.scopes {
             let symbols_snapshot = scope.snapshot();
 
-            // Count Arc references in the snapshot
             for symbol_arc in symbols_snapshot.values() {
                 arc_count += Arc::strong_count(symbol_arc);
             }
@@ -467,17 +430,15 @@ impl SymbolTable {
             scope_metadata,
         };
 
-        // Calculate size after snapshot and record metrics
         if let Some(collector) = metrics_collector
             && collector.memory_metrics_enabled()
         {
-            // Rough estimate of snapshot size
             let mut after_size = std::mem::size_of::<SymbolTableSnapshot>();
             for scope_symbols in &snapshot.scope_symbols {
                 after_size += std::mem::size_of::<HashMap<String, Arc<Symbol>>>()
                     + scope_symbols.len()
                         * (std::mem::size_of::<String>() + std::mem::size_of::<Arc<Symbol>>());
-                // Add string capacities
+
                 for key in scope_symbols.keys() {
                     after_size += key.capacity();
                 }
@@ -485,7 +446,6 @@ impl SymbolTable {
 
             collector.record_snapshot_creation(before_size, after_size, arc_count);
 
-            // Update metrics with calculated values
             let mut metrics = collector.current_metrics().clone();
             metrics.symbol_table_size_before = before_size;
             metrics.symbol_table_size_after = after_size;
@@ -590,9 +550,7 @@ impl SymbolTableSnapshot {
             let metadata = self.scope_metadata.get(scope_id)?;
             let symbols = self.scope_symbols.get(scope_id)?;
 
-            // Check if name is declared as global
             if metadata.global_names.contains(&name.to_string()) {
-                // Look only in module scope
                 let module_symbols = self.scope_symbols.get(self.module_scope_id)?;
                 if let Some(symbol) = Scope::lookup_in_snapshot(module_symbols, name) {
                     return Some(Arc::clone(symbol));
@@ -600,18 +558,14 @@ impl SymbolTableSnapshot {
                 return None;
             }
 
-            // Check if name is declared as nonlocal
             if metadata.nonlocal_names.contains(&name.to_string()) {
-                // Look in enclosing scopes (skip current)
                 return self.lookup_in_enclosing(name, scope_id);
             }
 
-            // Local: Check current scope
             if let Some(symbol) = Scope::lookup_in_snapshot(symbols, name) {
                 return Some(Arc::clone(symbol));
             }
 
-            // Move to enclosing scope
             match metadata.parent_id {
                 Some(parent_id) => scope_id = parent_id,
                 None => break, // Reached module scope
@@ -740,7 +694,6 @@ impl SymbolTableSnapshot {
         while let Some(scope_id) = to_visit.pop() {
             result.push(scope_id);
 
-            // Add children to visit list (breadth-first traversal)
             if let Some(metadata) = self.scope_metadata.get(scope_id) {
                 for &child_id in &metadata.children {
                     to_visit.insert(0, child_id); // Insert at beginning for breadth-first

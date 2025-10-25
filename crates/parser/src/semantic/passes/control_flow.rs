@@ -226,7 +226,7 @@ impl ControlFlowGraph {
         constant_defs: Vec<String>,
     ) {
         if let Some(b) = self.blocks.get_mut(&block) {
-            // Add to block's def/use sets
+
             for def in &defs {
                 b.defs.insert(def.clone());
             }
@@ -244,7 +244,7 @@ impl ControlFlowGraph {
                 uses,
             });
 
-            // Mark block as terminating if statement is a terminator
+
             if matches!(
                 kind,
                 StmtKind::Return | StmtKind::Raise | StmtKind::Break | StmtKind::Continue
@@ -383,7 +383,7 @@ impl ControlFlowAnalyzer {
         self.function_cfgs.get(function_name)
     }
 
-    // ===== Variable Extraction Methods =====
+
 
     /// Extract variables defined and used by a statement
     fn extract_defs_uses(&self, stmt: &Stmt) -> (Vec<String>, Vec<String>) {
@@ -442,7 +442,7 @@ impl ControlFlowAnalyzer {
                 (Vec::new(), uses)
             }
             Stmt::Delete(delete) => {
-                // Delete uses the targets
+
                 let uses = delete
                     .targets
                     .iter()
@@ -451,22 +451,22 @@ impl ControlFlowAnalyzer {
                 (Vec::new(), uses)
             }
             Stmt::Global(global) => {
-                // Global declarations are definitions
+
                 (
                     global.names.iter().map(|n| n.to_string()).collect(),
                     Vec::new(),
                 )
             }
             Stmt::Nonlocal(nonlocal) => {
-                // Nonlocal declarations are definitions
+
                 (
                     nonlocal.names.iter().map(|n| n.to_string()).collect(),
                     Vec::new(),
                 )
             }
             Stmt::FuncDef(func) => {
-                // Function definitions define the function name
-                // Decorators and parameters are analyzed separately within the function
+
+
                 let defs = vec![func.name.to_string()];
                 let uses = func
                     .decorators
@@ -476,24 +476,24 @@ impl ControlFlowAnalyzer {
                 (defs, uses)
             }
             Stmt::ClassDef(class) => {
-                // Class definitions define the class name
-                // Base classes and decorators are uses
+
+
                 let defs = vec![class.name.to_string()];
                 let mut uses: Vec<String> = Vec::new();
 
-                // Extract variables from base classes
+
                 for base in class.bases {
                     uses.extend(self.extract_expr_vars(base));
                 }
 
-                // Extract variables from decorators
+
                 for decorator in class.decorators {
                     uses.extend(self.extract_expr_vars(decorator));
                 }
 
                 (defs, uses)
             }
-            // Other statements don't define or use variables directly
+
             _ => (Vec::new(), Vec::new()),
         }
     }
@@ -521,11 +521,11 @@ impl ControlFlowAnalyzer {
                 .flat_map(|e| self.extract_expr_vars_as_names(e))
                 .collect(),
             Expr::Subscript(sub) => {
-                // Subscript assignment: the base is modified, subscript is used
+
                 self.extract_expr_vars_as_names(&sub.value)
             }
             Expr::Attribute(attr) => {
-                // Attribute assignment: the base is modified
+
                 self.extract_expr_vars_as_names(&attr.value)
             }
             _ => Vec::new(),
@@ -543,7 +543,7 @@ impl ControlFlowAnalyzer {
             }
             Expr::UnaryOp(unary) => self.extract_expr_vars(&unary.operand),
             Expr::Lambda(lambda) => {
-                // Lambda body uses variables
+
                 self.extract_expr_vars(&lambda.body)
             }
             Expr::IfExp(if_exp) => {
@@ -670,20 +670,20 @@ impl ControlFlowAnalyzer {
                 }
                 vars
             }
-            // Literals don't use variables
+
             Expr::Constant(_) | Expr::TString(_) | Expr::Complex(_) | Expr::Bytes(_) => Vec::new(),
-            // Named expressions define and use
+
             Expr::NamedExpr(named) => {
-                // The target is defined, the value is used
+
                 self.extract_expr_vars(&named.value)
             }
-            // Boolean operations
+
             Expr::BoolOp(boolop) => boolop
                 .values
                 .iter()
                 .flat_map(|v| self.extract_expr_vars(v))
                 .collect(),
-            // Module introspection doesn't use variables directly
+
             Expr::ModuleIntrospection(_) => Vec::new(),
         }
     }
@@ -691,13 +691,13 @@ impl ControlFlowAnalyzer {
     /// Extract condition information from an expression for type narrowing
     fn extract_condition_info(&self, expr: &Expr, var_name: &str) -> Option<ConditionInfo> {
         match expr {
-            // isinstance(var, Type) check
+
             Expr::Call(call) => {
                 if let Expr::Name(func_name) = &*call.func {
                     if func_name.id == "isinstance" && call.args.len() >= 2 {
                         if let Expr::Name(arg_name) = &call.args[0] {
                             if arg_name.id == var_name {
-                                // Extract type name from second argument
+
                                 let type_name = if let Expr::Name(type_name) = &call.args[1] {
                                     type_name.id.to_string()
                                 } else {
@@ -715,13 +715,13 @@ impl ControlFlowAnalyzer {
                 }
                 None
             }
-            // var is None / var is not None
+
             Expr::Compare(compare) => {
                 if let Expr::Name(left_name) = &*compare.left {
                     if left_name.id == var_name {
                         if compare.ops.len() == 1 {
                             if let Some(Expr::Constant(c)) = compare.comparators.first() {
-                                // Check if it's None comparison
+
                                 if format!("{:?}", c.value).contains("None") {
                                     return Some(ConditionInfo {
                                         variable: var_name.to_string(),
@@ -740,7 +740,7 @@ impl ControlFlowAnalyzer {
                 }
                 None
             }
-            // not var (falsy check)
+
             Expr::UnaryOp(unary) => {
                 if unary.op == "not" {
                     if let Expr::Name(name) = &*unary.operand {
@@ -754,7 +754,7 @@ impl ControlFlowAnalyzer {
                 }
                 None
             }
-            // var (truthy check)
+
             Expr::Name(name) => {
                 if name.id == var_name {
                     Some(ConditionInfo {
@@ -775,95 +775,95 @@ impl ControlFlowAnalyzer {
         let full_span = stmt.span();
 
         match stmt {
-            // For simple statements, the span is already just the keyword
+
             Stmt::Pass(_) | Stmt::Break(_) | Stmt::Continue(_) => full_span,
 
-            // For other statements, estimate the first keyword/identifier length
+
             Stmt::Return(_) => {
-                // "return" is 6 characters
+
                 let end = full_span.start() + TextSize::from(6u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Raise(_) => {
-                // "raise" is 5 characters
+
                 let end = full_span.start() + TextSize::from(5u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::If(_) => {
-                // "if" is 2 characters
+
                 let end = full_span.start() + TextSize::from(2u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::While(_) => {
-                // "while" is 5 characters
+
                 let end = full_span.start() + TextSize::from(5u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::For(_) => {
-                // "for" is 3 characters
+
                 let end = full_span.start() + TextSize::from(3u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Try(_) => {
-                // "try" is 3 characters
+
                 let end = full_span.start() + TextSize::from(3u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::With(_) => {
-                // "with" is 4 characters
+
                 let end = full_span.start() + TextSize::from(4u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Match(_) => {
-                // "match" is 5 characters
+
                 let end = full_span.start() + TextSize::from(5u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Assert(_) => {
-                // "assert" is 6 characters
+
                 let end = full_span.start() + TextSize::from(6u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Import(_) => {
-                // "import" is 6 characters
+
                 let end = full_span.start() + TextSize::from(6u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::From(_) => {
-                // "from" is 4 characters
+
                 let end = full_span.start() + TextSize::from(4u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Export(_) => {
-                // "export" is 6 characters
+
                 let end = full_span.start() + TextSize::from(6u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::FuncDef(func) => {
-                // Function name span (skip "def ")
+
                 let def_offset = TextSize::from(4u32);
                 let name_len = TextSize::from(func.name.len() as u32);
                 let name_start = full_span.start() + def_offset;
                 TextRange::new(name_start, name_start + name_len)
             }
             Stmt::ClassDef(class) => {
-                // Class name span (skip "class ")
+
                 let class_offset = TextSize::from(6u32);
                 let name_len = TextSize::from(class.name.len() as u32);
                 let name_start = full_span.start() + class_offset;
                 TextRange::new(name_start, name_start + name_len)
             }
-            // For expression statements, try to get a more precise span from the expression
+
             Stmt::Expr(expr_stmt) => {
                 match &expr_stmt.value {
                     Expr::Call(call) => {
-                        // Use the function/method name being called
+
                         call.func.span()
                     }
                     _ => full_span,
                 }
             }
-            // For assignments, use the target span
+
             Stmt::Assign(assign) => {
                 if let Some(first_target) = assign.targets.first() {
                     first_target.span()
@@ -873,7 +873,7 @@ impl ControlFlowAnalyzer {
             }
             Stmt::AnnAssign(ann_assign) => ann_assign.target.span(),
             Stmt::AugAssign(aug_assign) => aug_assign.target.span(),
-            // For other statements, use the full span
+
             _ => full_span,
         }
     }
@@ -917,14 +917,14 @@ impl ControlFlowAnalyzer {
             Stmt::ClassDef(class) => {
                 let prev_protocol = self.in_protocol;
                 self.in_protocol = class.is_protocol;
-                // Analyze class methods
+
                 for stmt in class.body {
                     self.analyze_stmt(stmt);
                 }
                 self.in_protocol = prev_protocol;
             }
             _ => {
-                // Other statements don't need special control flow analysis
+
             }
         }
     }
@@ -935,20 +935,20 @@ impl ControlFlowAnalyzer {
         let function_name = func.name.to_string();
         self.current_function = Some(function_name.clone());
 
-        // Build CFG for the function
+
         let mut cfg = ControlFlowGraph::new();
         let entry = cfg.entry.clone();
 
-        // Build CFG from function body
+
         let _exit = self.build_cfg_from_stmts(func.body, &mut cfg, entry);
 
-        // Analyze using the CFG
+
         self.check_unreachable_code_cfg(&cfg);
 
-        // Check if all paths return (if function has a return type annotation)
-        // Skip this check for:
-        // 1. Protocol methods (they're just interface definitions)
-        // 2. Functions with only pass/empty body (pass is a valid placeholder for any return type)
+
+
+
+
         let is_empty_body =
             func.body.iter().all(|stmt| matches!(stmt, Stmt::Pass(_))) || func.body.is_empty();
 
@@ -958,13 +958,13 @@ impl ControlFlowAnalyzer {
             && !self.is_none_type(returns)
             && !self.check_all_paths_return_cfg(&cfg)
         {
-            // Use just the function name span
+
             let def_offset = TextSize::from(4u32);
             let name_len = TextSize::from(func.name.len() as u32);
             let name_start = func.span.start() + def_offset;
             let signature_span = TextRange::new(name_start, name_start + name_len);
 
-            // Extract return type name from the annotation expression
+
             let expected_type = self.extract_type_name(returns);
 
             self.errors.push(*error(
@@ -976,7 +976,7 @@ impl ControlFlowAnalyzer {
             ));
         }
 
-        // Store CFG for dataflow analysis
+
         self.function_cfgs.insert(function_name, cfg);
 
         self.current_function = prev_function;
@@ -995,19 +995,19 @@ impl ControlFlowAnalyzer {
                 format!("{}.{}", self.extract_type_name(attr.value), attr.attr)
             }
             Expr::Subscript(sub) => {
-                // Handle generic types like List[int], Optional[str]
+
                 let base = self.extract_type_name(sub.value);
                 let param = self.extract_type_name(sub.slice);
                 format!("{}[{}]", base, param)
             }
             Expr::Tuple(tup) => {
-                // Handle tuple types like tuple[int, str]
+
                 let types: Vec<String> =
                     tup.elts.iter().map(|e| self.extract_type_name(e)).collect();
                 format!("({})", types.join(", "))
             }
             Expr::BinOp(binop) if binop.op == "|" => {
-                // Handle union types like int | str
+
                 format!(
                     "{} | {}",
                     self.extract_type_name(binop.left),
@@ -1023,15 +1023,15 @@ impl ControlFlowAnalyzer {
     /// This is used for constant propagation analysis
     fn is_constant_expr(&self, expr: &Expr) -> bool {
         match expr {
-            // Literal constants
+
             Expr::Constant(_) | Expr::Complex(_) | Expr::Bytes(_) => true,
-            // True, False, None
+
             Expr::Name(name) if matches!(name.id, "True" | "False" | "None") => true,
-            // Constant tuples, lists, sets (if all elements are constant)
+
             Expr::Tuple(tup) => tup.elts.iter().all(|e| self.is_constant_expr(e)),
             Expr::List(list) => list.elts.iter().all(|e| self.is_constant_expr(e)),
             Expr::Set(set) => set.elts.iter().all(|e| self.is_constant_expr(e)),
-            // Constant dicts
+
             Expr::Dict(dict) => {
                 dict.keys.iter().all(|k| {
                     k.as_ref()
@@ -1039,17 +1039,17 @@ impl ControlFlowAnalyzer {
                         .unwrap_or(false)
                 }) && dict.values.iter().all(|v| self.is_constant_expr(v))
             }
-            // Binary operations on constants
+
             Expr::BinOp(binop) => {
                 self.is_constant_expr(binop.left) && self.is_constant_expr(binop.right)
             }
-            // Unary operations on constants
+
             Expr::UnaryOp(unop) => self.is_constant_expr(unop.operand),
             _ => false,
         }
     }
 
-    // ===== CFG Builder Methods =====
+
 
     /// Build CFG from a sequence of statements
     /// Returns the exit block (last block that doesn't terminate)
@@ -1060,7 +1060,7 @@ impl ControlFlowAnalyzer {
         mut current: BlockId,
     ) -> BlockId {
         for stmt in stmts {
-            // If current block already terminates, any further statements are unreachable
+
             if let Some(block) = cfg.blocks.get(&current)
                 && block.terminates
             {
@@ -1080,13 +1080,13 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-        // Extract def/use information for this statement
+
         let (defs, uses) = self.extract_defs_uses(stmt);
 
         match stmt {
-            // Assignment statements - track constant assignments
+
             Stmt::Assign(assign) => {
-                // Check if RHS is a constant expression
+
                 let constant_defs = if self.is_constant_expr(&assign.value) {
                     defs.clone()
                 } else {
@@ -1103,7 +1103,7 @@ impl ControlFlowAnalyzer {
                 current
             }
             Stmt::AnnAssign(ann_assign) => {
-                // Check if RHS is a constant expression (if value exists)
+
                 let constant_defs = if let Some(ref value) = ann_assign.value
                     && self.is_constant_expr(value)
                 {
@@ -1122,7 +1122,7 @@ impl ControlFlowAnalyzer {
                 current
             }
 
-            // Sequential statements - just add to current block
+
             Stmt::Expr(_)
             | Stmt::AugAssign(_)
             | Stmt::Pass(_)
@@ -1139,7 +1139,7 @@ impl ControlFlowAnalyzer {
                 current
             }
 
-            // Terminating statements
+
             Stmt::Return(_) => {
                 cfg.add_statement(current.clone(), stmt.span(), StmtKind::Return, defs, uses);
                 current
@@ -1152,7 +1152,7 @@ impl ControlFlowAnalyzer {
 
             Stmt::Break(_) => {
                 cfg.add_statement(current.clone(), stmt.span(), StmtKind::Break, defs, uses);
-                // Connect to loop's break target if in a loop
+
                 if let Some(loop_ctx) = self.loop_stack.last() {
                     cfg.add_edge(
                         current.clone(),
@@ -1165,7 +1165,7 @@ impl ControlFlowAnalyzer {
 
             Stmt::Continue(_) => {
                 cfg.add_statement(current.clone(), stmt.span(), StmtKind::Continue, defs, uses);
-                // Connect to loop's continue target if in a loop
+
                 if let Some(loop_ctx) = self.loop_stack.last() {
                     cfg.add_edge(
                         current.clone(),
@@ -1176,7 +1176,7 @@ impl ControlFlowAnalyzer {
                 current
             }
 
-            // Control flow statements
+
             Stmt::If(if_stmt) => self.build_cfg_if(if_stmt, cfg, current),
             Stmt::While(while_stmt) => self.build_cfg_while(while_stmt, cfg, current),
             Stmt::For(for_stmt) => self.build_cfg_for(for_stmt, cfg, current),
@@ -1184,7 +1184,7 @@ impl ControlFlowAnalyzer {
             Stmt::With(with_stmt) => self.build_cfg_with(with_stmt, cfg, current),
             Stmt::Match(match_stmt) => self.build_cfg_match(match_stmt, cfg, current),
 
-            // Nested function/class definitions don't affect control flow
+
             Stmt::FuncDef(_) | Stmt::ClassDef(_) => {
                 cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal, defs, uses);
                 current
@@ -1199,23 +1199,23 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-        // Create blocks for then, else, and merge
+
         let then_block = cfg.new_block();
         let else_block = cfg.new_block();
         let merge_block = cfg.new_block();
 
-        // Add conditional edges
+
         cfg.add_edge(current.clone(), then_block.clone(), EdgeType::True);
         cfg.add_edge(current.clone(), else_block.clone(), EdgeType::False);
 
-        // Extract condition info for type narrowing
-        // Try to extract variable name from simple conditions
+
+
         if let Some(var_name) = self.extract_simple_var_name(&if_stmt.test) {
             if let Some(condition_info) = self.extract_condition_info(&if_stmt.test, &var_name) {
-                // Set condition for true branch
+
                 cfg.set_edge_condition(current.clone(), then_block.clone(), condition_info.clone());
 
-                // Set negated condition for false branch (if applicable)
+
                 let negated_kind = match condition_info.kind {
                     ConditionKind::IsNone => Some(ConditionKind::IsNotNone),
                     ConditionKind::IsNotNone => Some(ConditionKind::IsNone),
@@ -1236,24 +1236,24 @@ impl ControlFlowAnalyzer {
             }
         }
 
-        // Build then branch
+
         let then_exit = self.build_cfg_from_stmts(if_stmt.body, cfg, then_block);
 
-        // Only connect to merge if the block doesn't terminate
+
         if let Some(block) = cfg.blocks.get(&then_exit)
             && !block.terminates
         {
             cfg.add_edge(then_exit, merge_block.clone(), EdgeType::Normal);
         }
 
-        // Build else branch
+
         let else_exit = if !if_stmt.orelse.is_empty() {
             self.build_cfg_from_stmts(if_stmt.orelse, cfg, else_block)
         } else {
             else_block
         };
 
-        // Only connect to merge if the block doesn't terminate
+
         if let Some(block) = cfg.blocks.get(&else_exit)
             && !block.terminates
         {
@@ -1275,7 +1275,7 @@ impl ControlFlowAnalyzer {
                 }
             }
             Expr::Call(call) => {
-                // For isinstance(var, Type), extract var
+
                 if call.args.is_empty() {
                     return None;
                 }
@@ -1303,40 +1303,40 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-        // Create blocks for loop header, body, else, and exit
+
         let header_block = cfg.new_block();
         let body_block = cfg.new_block();
         let exit_block = cfg.new_block();
 
-        // Connect current to header
+
         cfg.add_edge(current, header_block.clone(), EdgeType::Normal);
 
-        // Conditional edges from header
+
         cfg.add_edge(header_block.clone(), body_block.clone(), EdgeType::True);
         cfg.add_edge(header_block.clone(), exit_block.clone(), EdgeType::False);
 
-        // Push loop context
+
         self.loop_stack.push(LoopContext {
             break_target: exit_block.clone(),
             continue_target: header_block.clone(),
         });
         self.loop_depth += 1;
 
-        // Build body
+
         let body_exit = self.build_cfg_from_stmts(while_stmt.body, cfg, body_block);
 
-        // Loop back edge (only if body doesn't terminate)
+
         if let Some(block) = cfg.blocks.get(&body_exit)
             && !block.terminates
         {
             cfg.add_edge(body_exit, header_block, EdgeType::Loop);
         }
 
-        // Pop loop context
+
         self.loop_depth -= 1;
         self.loop_stack.pop();
 
-        // Handle else clause (executes when loop condition is false)
+
         if !while_stmt.orelse.is_empty() {
             self.build_cfg_from_stmts(while_stmt.orelse, cfg, exit_block.clone())
         } else {
@@ -1351,40 +1351,40 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-        // Similar to while loop
+
         let header_block = cfg.new_block();
         let body_block = cfg.new_block();
         let exit_block = cfg.new_block();
 
-        // Connect current to header
+
         cfg.add_edge(current, header_block.clone(), EdgeType::Normal);
 
-        // Conditional edges from header
+
         cfg.add_edge(header_block.clone(), body_block.clone(), EdgeType::True);
         cfg.add_edge(header_block.clone(), exit_block.clone(), EdgeType::False);
 
-        // Push loop context
+
         self.loop_stack.push(LoopContext {
             break_target: exit_block.clone(),
             continue_target: header_block.clone(),
         });
         self.loop_depth += 1;
 
-        // Build body
+
         let body_exit = self.build_cfg_from_stmts(for_stmt.body, cfg, body_block);
 
-        // Loop back edge
+
         if let Some(block) = cfg.blocks.get(&body_exit)
             && !block.terminates
         {
             cfg.add_edge(body_exit, header_block, EdgeType::Loop);
         }
 
-        // Pop loop context
+
         self.loop_depth -= 1;
         self.loop_stack.pop();
 
-        // Handle else clause
+
         if !for_stmt.orelse.is_empty() {
             self.build_cfg_from_stmts(for_stmt.orelse, cfg, exit_block.clone())
         } else {
@@ -1399,7 +1399,7 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-        // Create blocks for try, handlers, else, finally, and exit
+
         let try_block = cfg.new_block();
         let mut handler_blocks = Vec::new();
         let finally_block = if !try_stmt.finalbody.is_empty() {
@@ -1409,24 +1409,24 @@ impl ControlFlowAnalyzer {
         };
         let exit_block = cfg.new_block();
 
-        // Connect current to try block
+
         cfg.add_edge(current, try_block.clone(), EdgeType::Normal);
 
-        // Create handler blocks
+
         for _ in try_stmt.handlers {
             handler_blocks.push(cfg.new_block());
         }
 
-        // Push try context
+
         self.try_stack.push(TryContext {
             handler_blocks: handler_blocks.clone(),
             finally_block: finally_block.clone(),
         });
 
-        // Build try body
+
         let try_exit = self.build_cfg_from_stmts(try_stmt.body, cfg, try_block.clone());
 
-        // Add exception edges from try block to handlers
+
         for handler_block in &handler_blocks {
             cfg.add_edge(
                 try_block.clone(),
@@ -1435,7 +1435,7 @@ impl ControlFlowAnalyzer {
             );
         }
 
-        // Build handler blocks
+
         let mut handler_exits = Vec::new();
         for (i, handler) in try_stmt.handlers.iter().enumerate() {
             let handler_exit =
@@ -1443,19 +1443,19 @@ impl ControlFlowAnalyzer {
             handler_exits.push(handler_exit);
         }
 
-        // Build else clause (only if no exception)
+
         let else_exit = if !try_stmt.orelse.is_empty() {
             self.build_cfg_from_stmts(try_stmt.orelse, cfg, try_exit.clone())
         } else {
             try_exit.clone()
         };
 
-        // Pop try context
+
         self.try_stack.pop();
 
-        // Build finally block if present
+
         if let Some(finally) = finally_block {
-            // Connect try exit and all handler exits to finally
+
             if let Some(block) = cfg.blocks.get(&else_exit)
                 && !block.terminates
             {
@@ -1470,17 +1470,17 @@ impl ControlFlowAnalyzer {
                 }
             }
 
-            // Build finally body
+
             let finally_exit = self.build_cfg_from_stmts(try_stmt.finalbody, cfg, finally);
 
-            // Connect finally to exit
+
             if let Some(block) = cfg.blocks.get(&finally_exit)
                 && !block.terminates
             {
                 cfg.add_edge(finally_exit, exit_block.clone(), EdgeType::Normal);
             }
         } else {
-            // No finally - connect try and handler exits directly to exit
+
             if let Some(block) = cfg.blocks.get(&else_exit)
                 && !block.terminates
             {
@@ -1506,7 +1506,7 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-        // With statement is like try/finally - the context manager's __exit__ always runs
+
         let body_block = cfg.new_block();
         let exit_block = cfg.new_block();
 
@@ -1514,7 +1514,7 @@ impl ControlFlowAnalyzer {
 
         let body_exit = self.build_cfg_from_stmts(with_stmt.body, cfg, body_block);
 
-        // Always connect to exit (cleanup always runs)
+
         if let Some(block) = cfg.blocks.get(&body_exit)
             && !block.terminates
         {
@@ -1531,7 +1531,7 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-        // Create blocks for each case and merge
+
         let merge_block = cfg.new_block();
 
         for case in match_stmt.cases {
@@ -1550,16 +1550,16 @@ impl ControlFlowAnalyzer {
         merge_block
     }
 
-    // ===== CFG-Based Analysis Methods =====
+
 
     /// Check for unreachable code using CFG
     fn check_unreachable_code_cfg(&mut self, cfg: &ControlFlowGraph) {
         let reachable = cfg.reachable_blocks();
 
-        // Find unreachable blocks
+
         for (block_id, block) in &cfg.blocks {
             if !reachable.contains(block_id) {
-                // Report each statement in the unreachable block
+
                 for stmt_info in &block.statements {
                     self.errors.push(*error(
                         ErrorKind::UnreachableCode {
@@ -1574,21 +1574,21 @@ impl ControlFlowAnalyzer {
 
     /// Check if all paths return using CFG
     fn check_all_paths_return_cfg(&self, cfg: &ControlFlowGraph) -> bool {
-        // Find all blocks that have no successors (potential exit blocks)
+
         let mut has_return_on_all_paths = true;
 
         for (block_id, block) in &cfg.blocks {
-            // Skip unreachable blocks
+
             let reachable = cfg.reachable_blocks();
             if !reachable.contains(block_id) {
                 continue;
             }
 
-            // If a block has no successors and doesn't terminate with return, it's a problem
-            // UNLESS the block is empty or only contains pass statements (implicit None return)
+
+
             if block.successors.is_empty() && block.terminator != Some(Terminator::Return) {
-                // Check if block only has normal statements (pass, expr, etc.) - these can implicitly return
-                // An empty block or block with only pass/non-terminating statements is OK for None returns
+
+
                 let has_only_normal_stmts = block
                     .statements
                     .iter()
@@ -1612,8 +1612,8 @@ impl ControlFlowAnalyzer {
 
         for stmt in stmts {
             if found_terminator {
-                // Everything after a terminator is unreachable
-                // Use the more precise keyword span for better error display
+
+
                 self.errors.push(*error(
                     ErrorKind::UnreachableCode {
                         reason: terminator_reason.clone(),
@@ -1623,7 +1623,7 @@ impl ControlFlowAnalyzer {
                 continue;
             }
 
-            // Check if this statement terminates
+
             match stmt {
                 Stmt::Return(_) => {
                     found_terminator = true;
@@ -1644,7 +1644,7 @@ impl ControlFlowAnalyzer {
                 _ => {}
             }
 
-            // Recursively check nested blocks
+
             self.analyze_stmt(stmt);
         }
     }
@@ -1656,12 +1656,12 @@ impl ControlFlowAnalyzer {
             return false;
         }
 
-        // Check if any statement is a return
+
         for stmt in stmts {
             match stmt {
                 Stmt::Return(_) => return true,
                 Stmt::If(if_stmt) => {
-                    // If has both branches, check both
+
                     let then_returns = self.check_all_paths_return(if_stmt.body);
                     let else_returns = if !if_stmt.orelse.is_empty() {
                         self.check_all_paths_return(if_stmt.orelse)
@@ -1669,13 +1669,13 @@ impl ControlFlowAnalyzer {
                         false
                     };
 
-                    // Both branches must return
+
                     if then_returns && else_returns {
                         return true;
                     }
                 }
                 Stmt::Try(try_stmt) => {
-                    // Check if try and all handlers return
+
                     let try_returns = self.check_all_paths_return(try_stmt.body);
                     let all_handlers_return = try_stmt
                         .handlers
@@ -1723,18 +1723,18 @@ impl ControlFlowAnalyzer {
 
     /// Analyze a try/except/finally statement
     fn analyze_try(&mut self, try_stmt: &crate::ast::nodes::TryStmt) {
-        // Check try body
+
         self.check_unreachable_in_block(try_stmt.body);
 
-        // Check exception handlers
+
         let mut caught_exceptions = HashSet::new();
         for handler in try_stmt.handlers {
-            // Check if this exception type was already caught
+
             if let Some(ref exc_type) = handler.typ
                 && let Expr::Name(name) = exc_type
                 && !caught_exceptions.insert(name.id.to_string())
             {
-                // Use the exception type span for more precise error location
+
                 self.errors.push(*error(
                     ErrorKind::UnreachableExceptionHandler {
                         exception_type: name.id.to_string(),
@@ -1746,12 +1746,12 @@ impl ControlFlowAnalyzer {
             self.check_unreachable_in_block(handler.body);
         }
 
-        // Check else clause
+
         if !try_stmt.orelse.is_empty() {
             self.check_unreachable_in_block(try_stmt.orelse);
         }
 
-        // Check finally clause
+
         if !try_stmt.finalbody.is_empty() {
             self.check_unreachable_in_block(try_stmt.finalbody);
         }
@@ -1793,7 +1793,7 @@ impl ControlFlowWarning {
     }
 }
 
-// ===== Dataflow Analysis Framework =====
+
 
 /// Trait for dataflow analyses
 ///
@@ -1838,16 +1838,16 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
     let mut in_values: HashMap<BlockId, A::Value> = HashMap::new();
     let mut out_values: HashMap<BlockId, A::Value> = HashMap::new();
 
-    // Initialize all blocks with initial value
+
     for block_id in cfg.blocks.keys() {
         in_values.insert(block_id.clone(), analysis.initial_value());
         out_values.insert(block_id.clone(), analysis.initial_value());
     }
 
-    // Set entry block's IN to initial value
+
     in_values.insert(cfg.entry.clone(), analysis.initial_value());
 
-    // Worklist algorithm
+
     let mut worklist: VecDeque<BlockId> = cfg.blocks.keys().cloned().collect();
     let mut iteration = 0;
     const MAX_ITERATIONS: usize = 1000; // Prevent infinite loops
@@ -1861,7 +1861,7 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
 
         let block = cfg.blocks.get(&block_id).unwrap();
 
-        // Compute IN[block] = meet of OUT[pred] for all predecessors
+
         let predecessors = cfg.get_predecessors(&block_id);
         let pred_values: Vec<A::Value> = predecessors
             .iter()
@@ -1869,7 +1869,7 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
             .collect();
 
         let new_in = if pred_values.is_empty() {
-            // Entry block or unreachable block
+
             if block_id == cfg.entry {
                 analysis.initial_value()
             } else {
@@ -1879,10 +1879,10 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
             analysis.meet(pred_values)
         };
 
-        // Compute OUT[block] = transfer(IN[block], block)
+
         let new_out = analysis.transfer(block, new_in.clone());
 
-        // Check if anything changed
+
         let in_changed = in_values.get(&block_id) != Some(&new_in);
         let out_changed = out_values.get(&block_id) != Some(&new_out);
 
@@ -1890,7 +1890,7 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
             in_values.insert(block_id.clone(), new_in);
             out_values.insert(block_id.clone(), new_out);
 
-            // Add successors to worklist
+
             for (succ, _) in &block.successors {
                 if !worklist.contains(succ) {
                     worklist.push_back(succ.clone());
@@ -1919,7 +1919,7 @@ impl DataflowAnalysis for DefiniteAssignmentAnalysis {
     }
 
     fn transfer(&self, block: &BasicBlock, mut input: Self::Value) -> Self::Value {
-        // Add all variables defined in this block
+
         for def in &block.defs {
             input.insert(def.clone());
         }
@@ -1931,7 +1931,7 @@ impl DataflowAnalysis for DefiniteAssignmentAnalysis {
             return HashSet::new();
         }
 
-        // Intersection: a variable is definitely assigned only if assigned on ALL paths
+
         let mut result = values[0].clone();
         for value in values.iter().skip(1) {
             result = result.intersection(value).cloned().collect();
@@ -1960,13 +1960,13 @@ impl DataflowAnalysis for AvailableExpressionsAnalysis {
     }
 
     fn transfer(&self, block: &BasicBlock, mut input: Self::Value) -> Self::Value {
-        // Kill: remove variables that are redefined
+
         for def in &block.defs {
             input.remove(def);
         }
 
-        // Gen: add variables that get constant values
-        // Only track actual constant assignments (literals, True/False/None, etc.)
+
+
         for const_def in &block.constant_defs {
             input.insert(const_def.clone());
         }
@@ -1979,7 +1979,7 @@ impl DataflowAnalysis for AvailableExpressionsAnalysis {
             return HashSet::new();
         }
 
-        // Intersection: an expression is available only if available on ALL paths
+
         let mut result = values[0].clone();
         for value in values.iter().skip(1) {
             result = result.intersection(value).cloned().collect();

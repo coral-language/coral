@@ -133,7 +133,7 @@ impl<V: Visitor<'static>> VisitorRunner<V> {
     }
 
     pub fn visit_module(&self, module: &Module<'static>) {
-        // Use rayon for parallel traversal if needed
+
         self.visitor.visit_module(module);
     }
 }

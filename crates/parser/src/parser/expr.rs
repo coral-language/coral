@@ -30,7 +30,7 @@ impl<'a> Parser<'a> {
     fn parse_named_expr(&mut self, allow_in: bool) -> ParseResult<Expr<'a>> {
         let expr = self.parse_ternary(allow_in)?;
 
-        // Check for walrus operator :=
+
         if self.peek().kind == TokenKind::ColonEqual {
             self.advance();
             let value = self.parse_named_expr(allow_in)?;
@@ -90,12 +90,12 @@ impl<'a> Parser<'a> {
         let mut seen_star = false;
 
         while self.peek().kind != TokenKind::Colon && !self.is_at_end() {
-            // Handle / for positional-only separator
+
             if self.peek().kind == TokenKind::Slash {
                 self.advance();
                 _seen_slash = true;
 
-                // Move args to posonlyargs and their defaults
+
                 if !args.is_empty() {
                     posonlyargs = args.clone();
                     posonly_defaults = defaults.clone();
@@ -103,84 +103,93 @@ impl<'a> Parser<'a> {
                     defaults.clear();
                 }
 
-                // Continue parsing after /
+
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
                 continue;
             }
 
-            // Handle * or *args
+
             if self.peek().kind == TokenKind::Star {
                 self.advance();
                 seen_star = true;
 
-                // Check if it's *args or just *
+
                 if self.peek().kind == TokenKind::Ident {
                     let name = self.consume_ident()?;
-                    // Note: Lambda arguments use type inference
+
                     vararg = Some(Box::new(Arg {
                         arg: name,
                         annotation: None,
                     }));
                 }
 
-                // Continue parsing keyword-only args after *
+
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
                 continue;
             }
 
-            // Handle **kwargs
+
             if self.peek().kind == TokenKind::DoubleStar {
                 self.advance();
                 let name = self.consume_ident()?;
-                // Note: Lambda arguments use type inference
+
                 kwarg = Some(Box::new(Arg {
                     arg: name,
                     annotation: None,
                 }));
 
-                // **kwargs must be last, but allow trailing comma
+
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
-                // If there's more after comma and it's not :, that's an error
-                // but we'll let it pass for now and just break
-                if self.peek().kind != TokenKind::Colon {
-                    break;
+
+
+                if self.peek().kind != TokenKind::Colon && !self.is_at_end() {
+
+                    let invalid_token_span = self.peek().span;
+                    return Err(error(
+                        ErrorKind::InvalidSyntax {
+                            message: "No parameters allowed after **kwargs in lambda. \
+                                     **kwargs must be the final parameter."
+                                .to_string(),
+                        },
+                        invalid_token_span,
+                    ));
                 }
-                continue;
+                break;
             }
 
-            // Regular argument
+
             let name = self.consume_ident()?;
-            // Note: Lambda arguments use type inference
+
             let arg = Arg {
                 arg: name,
                 annotation: None,
             };
 
-            // Check for default value
+
             let has_default = self.peek().kind == TokenKind::Equal;
             if has_default {
                 self.advance(); // consume =
                 let default_expr = self.parse_expression()?;
 
                 if seen_star {
-                    // Keyword-only argument with default
+
                     kw_defaults.push(Some(default_expr));
                 } else {
-                    // Positional or positional-or-keyword with default
+
                     defaults.push(default_expr);
                 }
             } else if seen_star {
-                // Keyword-only argument without default
+
                 kw_defaults.push(None);
             }
 
-            // Add to appropriate list
+
             if seen_star {
                 kwonlyargs.push(arg);
             } else {
@@ -192,8 +201,8 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Combine positional-only defaults with regular defaults
-        // In the AST, all defaults are stored together, aligned to the right
+
+
         let mut all_defaults = posonly_defaults;
         all_defaults.extend(defaults);
 
@@ -215,7 +224,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_comprehensions(&mut self) -> ParseResult<&'a [Comprehension<'a>]> {
-        // Most comprehensions have 1-2 generators
+
         let mut generators: SmallVec<[Comprehension<'a>; 2]> = SmallVec::new();
 
         while self.peek().kind == TokenKind::For || self.peek().kind == TokenKind::Async {
@@ -226,7 +235,7 @@ impl<'a> Parser<'a> {
             self.consume(TokenKind::In)?;
             let iter = self.parse_or(true)?;
 
-            // Most comprehensions have 0-2 if clauses
+
             let mut ifs: SmallVec<[Expr<'a>; 2]> = SmallVec::new();
             while self.match_token(TokenKind::If) {
                 ifs.push(self.parse_or(true)?);
@@ -248,12 +257,12 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         let first = self.parse_expression_with_context(false)?;
 
-        // Check if this is a tuple (multiple targets separated by commas)
+
         if self.peek().kind == TokenKind::Comma {
             let mut elts = vec![first];
 
             while self.match_token(TokenKind::Comma) {
-                // Allow trailing comma
+
                 if self.peek().kind == TokenKind::In {
                     break;
                 }
@@ -364,14 +373,14 @@ impl<'a> Parser<'a> {
         loop {
             let token_kind = self.peek().kind;
 
-            // Check for "not in" first (before checking for individual tokens)
+
             if token_kind == TokenKind::Not {
                 let next_pos = self.current + 1;
                 if next_pos < self.tokens.len() && self.tokens[next_pos].kind == TokenKind::In {
                     if !allow_in {
                         break;
                     }
-                    // This is "not in"
+
                     self.advance(); // consume "not"
                     self.advance(); // consume "in"
                     let right = self.parse_bitwise_or()?;
@@ -379,7 +388,7 @@ impl<'a> Parser<'a> {
                     comparators.push(right);
                     continue;
                 } else {
-                    // Just "not", not a comparison operator
+
                     break;
                 }
             }
@@ -397,7 +406,7 @@ impl<'a> Parser<'a> {
                 TokenKind::NotEqual => OP_NE,
                 TokenKind::In => OP_IN,
                 TokenKind::Is => {
-                    // Check for "is not"
+
                     self.advance();
                     if self.peek().kind == TokenKind::Not {
                         self.advance();
@@ -594,7 +603,7 @@ impl<'a> Parser<'a> {
                 let await_token = self.peek().span;
                 self.advance();
 
-                // Validate that await is inside an async function
+
                 if !self.context.in_async_function {
                     return Err(error(ErrorKind::AwaitOutsideAsync, await_token));
                 }
@@ -701,11 +710,11 @@ impl<'a> Parser<'a> {
                     self.push_delimiter('[', opening_span);
                     self.advance();
 
-                    // Parse the first slice/index element (handles both : and regular expressions)
+
                     let first_elem = self.parse_slice_element()?;
 
                     if self.peek().kind == TokenKind::Comma {
-                        // Multi-dimensional: [1:2, 3:4] or [0, 1] or [:, 1:3, ::2]
+
                         let mut elts = vec![first_elem.clone()];
                         while self.match_token(TokenKind::Comma) {
                             if self.peek().kind == TokenKind::RightBracket {
@@ -732,7 +741,7 @@ impl<'a> Parser<'a> {
                             span,
                         });
                     } else {
-                        // Single element (handled by parse_slice_element)
+
                         let closing_span = self.peek().span;
                         self.consume(TokenKind::RightBracket)?;
                         self.pop_delimiter(']', closing_span)?;
@@ -788,15 +797,15 @@ impl<'a> Parser<'a> {
             TokenKind::String | TokenKind::RawString => {
                 let mut tokens = vec![self.advance()];
 
-                // Collect consecutive string literals for implicit concatenation
-                // Skip newlines between strings (allowed in parentheses/brackets)
+
+
                 loop {
-                    // Skip any newlines
+
                     while self.peek().kind == TokenKind::Newline {
                         self.advance();
                     }
 
-                    // Check if next token is a string or raw string
+
                     if matches!(self.peek().kind, TokenKind::String | TokenKind::RawString) {
                         tokens.push(self.advance());
                     } else {
@@ -804,16 +813,16 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                // Extract and concatenate string contents
+
                 let mut concatenated = String::new();
                 for token in &tokens {
                     let start = usize::from(token.span.start());
                     let end = usize::from(token.span.end());
                     let text = &self.source[start..end];
 
-                    // Extract the actual string content (removing quotes and prefixes)
-                    // Handle various quote styles: "...", '...', """...""", '''...'''
-                    // Also handle raw strings: r"...", r'...', r"""...""", r'''...'''
+
+
+
                     let content = if text.starts_with("r\"\"\"") || text.starts_with("R\"\"\"") {
                         &text[4..text.len() - 3]
                     } else if text.starts_with("r'''") || text.starts_with("R'''") {
@@ -823,10 +832,10 @@ impl<'a> Parser<'a> {
                     } else if text.starts_with("r'") || text.starts_with("R'") {
                         &text[2..text.len() - 1]
                     } else if text.starts_with("\"\"\"") || text.starts_with("'''") {
-                        // Triple-quoted string
+
                         &text[3..text.len() - 3]
                     } else if text.starts_with('"') || text.starts_with('\'') {
-                        // Single-quoted string
+
                         &text[1..text.len() - 1]
                     } else {
                         text
@@ -835,7 +844,7 @@ impl<'a> Parser<'a> {
                     concatenated.push_str(content);
                 }
 
-                // Create the concatenated constant
+
                 let start = tokens[0].span.start();
                 let end = tokens.last().unwrap().span.end();
                 let span = TextRange::new(start, end);
@@ -863,21 +872,21 @@ impl<'a> Parser<'a> {
                 let span = self.peek().span;
                 let name = self.get_ident_text();
 
-                // Check for module introspection: module::function()
+
                 if name == "module" && self.current + 2 < self.tokens.len() {
                     let next = &self.tokens[self.current + 1];
                     let next_next = &self.tokens[self.current + 2];
 
-                    // Check for :: (two colons in a row)
+
                     if next.kind == TokenKind::Colon && next_next.kind == TokenKind::Colon {
                         self.advance(); // consume 'module'
                         self.advance(); // consume first ':'
                         self.advance(); // consume second ':'
 
-                        // Now parse the function name
+
                         let function_name = self.consume_ident()?;
 
-                        // Expect () after function name
+
                         self.consume(TokenKind::LeftParen)?;
                         self.consume(TokenKind::RightParen)?;
 
@@ -889,7 +898,7 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                // Regular identifier
+
                 let name = self.consume_ident()?;
                 Ok(Expr::Name(NameExpr { id: name, span }))
             }
@@ -1038,7 +1047,7 @@ impl<'a> Parser<'a> {
                 self.push_delimiter('{', opening_span);
                 self.advance();
 
-                // Empty dict: {}
+
                 if self.peek().kind == TokenKind::RightBrace {
                     let end = self.peek().span.end();
                     let closing_span = self.peek().span;
@@ -1051,9 +1060,9 @@ impl<'a> Parser<'a> {
                     }));
                 }
 
-                // Check if this is a dict with ** unpacking
+
                 if self.peek().kind == TokenKind::DoubleStar {
-                    // Dict with ** unpacking: {**dict1, **dict2}
+
                     let mut keys = ThinVec::new();
                     let mut values = ThinVec::new();
 
@@ -1089,7 +1098,7 @@ impl<'a> Parser<'a> {
 
                 let first_expr = self.parse_expression()?;
 
-                // Dict comprehension: {k: v for ...}
+
                 if self.peek().kind == TokenKind::Colon {
                     self.advance();
                     let first_value = self.parse_expression()?;
@@ -1108,7 +1117,7 @@ impl<'a> Parser<'a> {
                         }));
                     }
 
-                    // Regular dict: {k: v, ...}
+
                     let mut keys = vec![Some(first_expr)];
                     let mut values = vec![first_value];
 
@@ -1117,7 +1126,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
 
-                        // Check for ** unpacking in regular dict
+
                         if self.peek().kind == TokenKind::DoubleStar {
                             self.advance(); // consume **
                             let value = self.parse_expression()?;
@@ -1143,7 +1152,7 @@ impl<'a> Parser<'a> {
                     }));
                 }
 
-                // Set comprehension: {x for x in ...}
+
                 if self.peek().kind == TokenKind::For || self.peek().kind == TokenKind::Async {
                     let generators = self.parse_comprehensions()?;
                     let end = self.peek().span.end();
@@ -1157,7 +1166,7 @@ impl<'a> Parser<'a> {
                     }));
                 }
 
-                // Regular set: {1, 2, 3}
+
                 let mut elts = vec![first_expr];
                 while self.match_token(TokenKind::Comma) {
                     if self.peek().kind == TokenKind::RightBrace {
@@ -1192,7 +1201,7 @@ impl<'a> Parser<'a> {
         let mut seen_keyword_names = std::collections::HashSet::new();
 
         while self.peek().kind != TokenKind::RightParen && !self.is_at_end() {
-            // Check for **kwargs
+
             if self.peek().kind == TokenKind::DoubleStar {
                 self.advance(); // consume **
                 let value = self.parse_expression()?;
@@ -1202,7 +1211,7 @@ impl<'a> Parser<'a> {
                     value,
                 });
             }
-            // Check for *args
+
             else if self.peek().kind == TokenKind::Star {
                 self.advance(); // consume *
                 let value = self.parse_expression()?;
@@ -1212,19 +1221,19 @@ impl<'a> Parser<'a> {
                     span,
                 }));
             }
-            // Check for potential keyword argument (name=value)
+
             else if self.peek().kind == TokenKind::Ident {
-                // We need to lookahead to see if this is a keyword argument
-                // Save current position to potentially backtrack
+
+
                 let checkpoint_pos = self.current;
                 let name = self.consume_ident()?;
 
                 if self.peek().kind == TokenKind::Equal {
-                    // This is a keyword argument
+
                     seen_keyword = true;
                     self.advance(); // consume =
 
-                    // Check for duplicate keyword argument
+
                     if !seen_keyword_names.insert(name) {
                         return Err(error(
                             ErrorKind::DuplicateArgument {
@@ -1240,10 +1249,10 @@ impl<'a> Parser<'a> {
                         value,
                     });
                 } else {
-                    // Not a keyword argument, restore position and parse as expression
+
                     self.current = checkpoint_pos;
 
-                    // Check if positional arg comes after keyword arg
+
                     if seen_keyword {
                         return Err(error(ErrorKind::PositionalAfterKeyword, self.peek().span));
                     }
@@ -1251,9 +1260,9 @@ impl<'a> Parser<'a> {
                     args.push(self.parse_expression()?);
                 }
             }
-            // Regular positional argument
+
             else {
-                // Check if positional arg comes after keyword arg
+
                 if seen_keyword {
                     return Err(error(ErrorKind::PositionalAfterKeyword, self.peek().span));
                 }
@@ -1274,20 +1283,20 @@ impl<'a> Parser<'a> {
     fn parse_slice_or_index(&mut self) -> ParseResult<Expr<'a>> {
         let start = self.peek().span.start();
 
-        // Check for leading colon (e.g., [:5] or [::2])
+
         if self.peek().kind == TokenKind::Colon {
             return self.parse_slice_from_colon(start, None);
         }
 
-        // Parse the first expression
+
         let first_expr = self.parse_expression()?;
 
-        // If no colon follows, this is a simple index
+
         if self.peek().kind != TokenKind::Colon {
             return Ok(first_expr);
         }
 
-        // We have a colon, so this is a slice with lower bound
+
         self.parse_slice_from_colon(start, Some(first_expr))
     }
 
@@ -1298,10 +1307,10 @@ impl<'a> Parser<'a> {
         start: text_size::TextSize,
         lower: Option<Expr<'a>>,
     ) -> ParseResult<Expr<'a>> {
-        // Consume the first colon
+
         self.consume(TokenKind::Colon)?;
 
-        // Parse upper bound if present (not another colon or right bracket)
+
         let upper = if self.peek().kind != TokenKind::Colon
             && self.peek().kind != TokenKind::RightBracket
         {
@@ -1310,7 +1319,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Parse step if there's another colon
+
         let step = if self.match_token(TokenKind::Colon) {
             if self.peek().kind != TokenKind::RightBracket {
                 Some(self.parse_expression()?)
@@ -1342,7 +1351,7 @@ impl<'a> Parser<'a> {
         let end = usize::from(span.end());
         let text = &self.source[start..end];
 
-        // Extract string content - handle all variants of f-strings
+
         let content = if text.starts_with("f\"\"\"") || text.starts_with("F\"\"\"") {
             &text[4..text.len() - 3] // Triple-quoted double
         } else if text.starts_with("f'''") || text.starts_with("F'''") {
@@ -1360,7 +1369,7 @@ impl<'a> Parser<'a> {
             ));
         };
 
-        // Parse f-string content into values
+
         let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
 
@@ -1379,7 +1388,7 @@ impl<'a> Parser<'a> {
         let end = usize::from(span.end());
         let text = &self.source[start..end];
 
-        // Extract string content - handle all variants of raw f-strings
+
         let content = if text.starts_with("rf\"\"\"")
             || text.starts_with("Rf\"\"\"")
             || text.starts_with("rF\"\"\"")
@@ -1429,7 +1438,7 @@ impl<'a> Parser<'a> {
             ));
         };
 
-        // Parse f-string content into values (raw f-strings still support interpolation)
+
         let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
 
@@ -1447,7 +1456,7 @@ impl<'a> Parser<'a> {
         full_span: TextRange,
         depth: u32,
     ) -> ParseResult<ThinVec<Expr<'a>>> {
-        // Limit nesting depth to prevent stack overflow or excessive complexity
+
         const MAX_NESTING_DEPTH: u32 = 10;
         if depth > MAX_NESTING_DEPTH {
             return Err(error(
@@ -1468,14 +1477,14 @@ impl<'a> Parser<'a> {
         while let Some(ch) = chars.next() {
             match ch {
                 '{' => {
-                    // Check for {{ escape
+
                     if chars.peek() == Some(&'{') {
                         chars.next();
                         literal.push('{');
                         continue;
                     }
 
-                    // Found start of expression - save any accumulated literal
+
                     if !literal.is_empty() {
                         let lit_str = self.arena.alloc_str(&literal);
                         values.push(Expr::Constant(ConstantExpr {
@@ -1485,11 +1494,11 @@ impl<'a> Parser<'a> {
                         literal.clear();
                     }
 
-                    // Parse the expression inside braces
+
                     let (expr_str, conversion, format_spec) =
                         self.extract_fstring_expr(&mut chars, full_span)?;
 
-                    // Check if expression is empty
+
                     if expr_str.trim().is_empty() {
                         return Err(error(
                             ErrorKind::InvalidSyntax {
@@ -1499,12 +1508,12 @@ impl<'a> Parser<'a> {
                         ));
                     }
 
-                    // Parse the expression string
+
                     let value_expr = self
                         .arena
                         .alloc(self.parse_fstring_expression(&expr_str, full_span)?);
 
-                    // Parse format_spec if present (recursively parse as it can contain expressions)
+
                     let format_spec_expr = if let Some(spec) = format_spec {
                         let spec_values =
                             self.parse_fstring_content(&spec, full_span, depth + 1)?;
@@ -1525,14 +1534,14 @@ impl<'a> Parser<'a> {
                     }));
                 }
                 '}' => {
-                    // Check for }} escape
+
                     if chars.peek() == Some(&'}') {
                         chars.next();
                         literal.push('}');
                         continue;
                     }
 
-                    // Unmatched }
+
                     return Err(error(
                         ErrorKind::InvalidSyntax {
                             message: "Unmatched '}' in f-string".to_string(),
@@ -1546,7 +1555,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Add any remaining literal
+
         if !literal.is_empty() {
             let lit_str = self.arena.alloc_str(&literal);
             values.push(Expr::Constant(ConstantExpr {
@@ -1570,7 +1579,7 @@ impl<'a> Parser<'a> {
         let mut in_string = false;
         let mut string_char = '\0';
 
-        // Parse the expression part
+
         while let Some(&ch) = chars.peek() {
             if in_string {
                 expr.push(ch);
@@ -1608,25 +1617,25 @@ impl<'a> Parser<'a> {
                         expr.push(ch);
                         chars.next();
                     } else {
-                        // End of expression
+
                         chars.next();
                         return Ok((expr, None, None));
                     }
                 }
                 '!' if depth == 0 => {
-                    // Check if this is a conversion character (!s, !r, !a) or part of an operator (!=)
-                    // Peek at the next character after '!'
+
+
                     let mut chars_clone = chars.clone();
                     chars_clone.next(); // skip '!'
                     if matches!(chars_clone.peek(), Some(&'s') | Some(&'r') | Some(&'a')) {
-                        // It's a conversion character
+
                         chars.next(); // consume '!'
                         let conversion = chars.next();
 
-                        // Validate conversion (we already know it's 's', 'r', or 'a')
+
                         match conversion {
                             Some('s') | Some('r') | Some('a') => {
-                                // Check for format spec
+
                                 if chars.peek() == Some(&':') {
                                     chars.next(); // consume ':'
                                     let format_spec = self.extract_format_spec(chars)?;
@@ -1656,13 +1665,13 @@ impl<'a> Parser<'a> {
                             }
                         }
                     } else {
-                        // It's part of an operator like !=, treat it as normal expression
+
                         expr.push(ch);
                         chars.next();
                     }
                 }
                 ':' if depth == 0 => {
-                    // Format spec
+
                     chars.next(); // consume ':'
                     let format_spec = self.extract_format_spec(chars)?;
                     return Ok((expr, None, Some(format_spec)));
@@ -1674,7 +1683,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // If we reach here, the expression was not properly closed
+
         Err(error(
             ErrorKind::InvalidSyntax {
                 message: "Unclosed '{' in f-string - missing closing '}'".to_string(),
@@ -1705,9 +1714,9 @@ impl<'a> Parser<'a> {
                         spec.push(ch);
                         chars.next();
                     } else {
-                        // End of format spec
+
                         chars.next();
-                        // Validate format spec if it doesn't contain nested expressions
+
                         if depth == 0 && !spec.contains('{') {
                             self.validate_format_spec(&spec)?;
                         }
@@ -1721,7 +1730,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Validate format spec even if we reached the end
+
         if depth == 0 && !spec.contains('{') {
             self.validate_format_spec(&spec)?;
         }
@@ -1735,7 +1744,7 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
 
-        // Allow nested expressions (containing {})
+
         if spec.contains('{') {
             return Ok(());
         }
@@ -1743,7 +1752,7 @@ impl<'a> Parser<'a> {
         let chars: Vec<char> = spec.chars().collect();
         let mut pos = 0;
 
-        // Helper to check if char is a valid type code
+
         let is_type_code = |c: char| -> bool {
             matches!(
                 c,
@@ -1764,39 +1773,39 @@ impl<'a> Parser<'a> {
             )
         };
 
-        // Skip fill and align (any char followed by <, >, ^, =)
+
         if pos + 1 < chars.len() && matches!(chars[pos + 1], '<' | '>' | '^' | '=') {
             pos += 2;
         } else if pos < chars.len() && matches!(chars[pos], '<' | '>' | '^' | '=') {
             pos += 1;
         }
 
-        // Skip sign (+, -, space)
+
         if pos < chars.len() && matches!(chars[pos], '+' | '-' | ' ') {
             pos += 1;
         }
 
-        // Skip alternate form (#)
+
         if pos < chars.len() && chars[pos] == '#' {
             pos += 1;
         }
 
-        // Skip zero padding
+
         if pos < chars.len() && chars[pos] == '0' {
             pos += 1;
         }
 
-        // Skip width (digits or *)
+
         while pos < chars.len() && (chars[pos].is_ascii_digit() || chars[pos] == '*') {
             pos += 1;
         }
 
-        // Skip grouping option (,, _)
+
         if pos < chars.len() && matches!(chars[pos], ',' | '_') {
             pos += 1;
         }
 
-        // Skip precision (.digits or .*)
+
         if pos < chars.len() && chars[pos] == '.' {
             pos += 1;
             while pos < chars.len() && (chars[pos].is_ascii_digit() || chars[pos] == '*') {
@@ -1804,14 +1813,14 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Check type code (should be at the end if present)
+
         if pos < chars.len() && is_type_code(chars[pos]) {
             pos += 1;
         }
 
-        // If we haven't consumed all characters, the format spec might be invalid
-        // But we'll be lenient and just warn rather than error
-        // (Python also allows custom format specs for user-defined types)
+
+
+
         let _ = pos; // Suppress unused warning
         Ok(())
     }
@@ -1823,11 +1832,11 @@ impl<'a> Parser<'a> {
         expr_str: &str,
         span: TextRange,
     ) -> ParseResult<Expr<'a>> {
-        // Create a new lexer for the expression string
+
         let mut lexer = crate::Lexer::new(expr_str);
         let (tokens, _lexical_errors, _lexical_warnings) = lexer.tokenize();
 
-        // If there are no tokens or only EOF, return error
+
         if tokens.is_empty() || (tokens.len() == 1 && tokens[0].kind == TokenKind::Eof) {
             return Err(error(
                 ErrorKind::InvalidSyntax {
@@ -1837,19 +1846,19 @@ impl<'a> Parser<'a> {
             ));
         }
 
-        // Allocate the expression string in the arena for proper lifetime management
+
         let expr_source = self.arena.alloc_str(expr_str);
 
-        // Create a temporary parser for this expression
-        // Save and replace the current parser state
+
+
         let saved_tokens = std::mem::replace(&mut self.tokens, tokens);
         let saved_current = std::mem::replace(&mut self.current, 0);
         let saved_source = std::mem::replace(&mut self.source, expr_source);
 
-        // Parse the expression
+
         let result = self.parse_expression();
 
-        // Restore the original parser state
+
         self.tokens = saved_tokens;
         self.current = saved_current;
         self.source = saved_source;
@@ -1861,7 +1870,7 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         self.consume(TokenKind::Yield)?;
 
-        // Check for yield from
+
         if self.match_token(TokenKind::From) {
             let value = self.parse_expression()?;
             let end = value.span().end();
@@ -1870,7 +1879,7 @@ impl<'a> Parser<'a> {
                 span: TextRange::new(start, end),
             }))
         } else {
-            // Regular yield
+
             let value = if self.peek().kind != TokenKind::Newline && !self.is_at_end() {
                 Some(self.arena.alloc(self.parse_expression()?))
             } else {
@@ -1894,11 +1903,11 @@ impl<'a> Parser<'a> {
     fn parse_slice_element(&mut self) -> ParseResult<Expr<'a>> {
         let start = self.peek().span.start();
 
-        // Check if it starts with colon (e.g., `:5`, `::2`)
+
         if self.peek().kind == TokenKind::Colon {
             self.advance(); // consume ':'
 
-            // Parse upper bound if present
+
             let upper = if self.peek().kind != TokenKind::Colon
                 && self.peek().kind != TokenKind::RightBracket
                 && self.peek().kind != TokenKind::Comma
@@ -1908,7 +1917,7 @@ impl<'a> Parser<'a> {
                 None
             };
 
-            // Parse step if there's another colon
+
             let step = if self.match_token(TokenKind::Colon) {
                 if self.peek().kind != TokenKind::RightBracket
                     && self.peek().kind != TokenKind::Comma
@@ -1934,14 +1943,14 @@ impl<'a> Parser<'a> {
                 span: TextRange::new(start, end),
             }))
         } else {
-            // Parse first expression
+
             let first_expr = self.parse_expression()?;
 
-            // Check if there's a colon (making it a slice)
+
             if self.peek().kind == TokenKind::Colon {
                 self.advance(); // consume ':'
 
-                // Parse upper bound if present
+
                 let upper = if self.peek().kind != TokenKind::Colon
                     && self.peek().kind != TokenKind::RightBracket
                     && self.peek().kind != TokenKind::Comma
@@ -1951,7 +1960,7 @@ impl<'a> Parser<'a> {
                     None
                 };
 
-                // Parse step if there's another colon
+
                 let step = if self.match_token(TokenKind::Colon) {
                     if self.peek().kind != TokenKind::RightBracket
                         && self.peek().kind != TokenKind::Comma
@@ -1977,14 +1986,15 @@ impl<'a> Parser<'a> {
                     span: TextRange::new(start, end),
                 }))
             } else {
-                // Just an index expression
+
                 Ok(first_expr)
             }
         }
     }
 
-    /// Parse a t-string (template string)
-    /// Similar to f-strings but evaluates to a Template object instead of a string.
+    /// Parse a t-string (template string with delayed interpolation)
+    /// Unlike f-strings which eagerly evaluate, t-strings are compiled to template functions
+    /// for delayed evaluation. This enables SQL-safe escaping, HTML templating, etc.
     fn parse_tstring(&mut self) -> ParseResult<Expr<'a>> {
         let token = self.advance();
         let span = token.span;
@@ -1992,8 +2002,8 @@ impl<'a> Parser<'a> {
         let end = usize::from(span.end());
         let text = &self.source[start..end];
 
-        // Extract the content inside the t-string quotes
-        // t"..." or t'...' or T"..." or T'...'
+
+
         let content = if text.starts_with("t\"") || text.starts_with("T\"") {
             &text[2..text.len() - 1]
         } else if text.starts_with("t'") || text.starts_with("T'") {
@@ -2007,9 +2017,16 @@ impl<'a> Parser<'a> {
             ));
         };
 
-        // Parse t-string content (same as f-string for now, will be semantically different)
+
+
+
         let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
+
+
+
+
+
 
         Ok(Expr::TString(TStringExpr {
             values: values_slice,
@@ -2018,6 +2035,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a raw t-string (rt"..." or tr"...")
+    /// Raw t-strings disable escape sequence processing but still support interpolation.
+    /// Like regular t-strings, they are compiled to template functions for delayed evaluation.
     fn parse_raw_tstring(&mut self) -> ParseResult<Expr<'a>> {
         let token = self.advance();
         let span = token.span;
@@ -2025,8 +2044,8 @@ impl<'a> Parser<'a> {
         let end = usize::from(span.end());
         let text = &self.source[start..end];
 
-        // Extract the content inside the raw t-string quotes
-        // rt"..." or tr"..." or RT"..." or TR"..." etc.
+
+
         let content = if text.len() >= 4 {
             let prefix_end = if text.starts_with("rt\"")
                 || text.starts_with("tr\"")
@@ -2066,10 +2085,13 @@ impl<'a> Parser<'a> {
             ));
         };
 
-        // For raw t-strings, we still parse interpolations but escape sequences are literal
-        // For simplicity, we'll parse it the same way as regular t-strings for now
+
+
+
         let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
+
+
 
         Ok(Expr::TString(TStringExpr {
             values: values_slice,

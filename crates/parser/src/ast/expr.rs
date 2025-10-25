@@ -268,9 +268,31 @@ pub struct FormattedValueExpr<'a> {
     pub span: TextRange,
 }
 
-/// T-string: a template string literal
-/// Similar to f-strings but evaluates to a Template object instead of a string.
-/// Example: t"Hello {name}" becomes TString with literal and interpolation parts
+/// T-String: Template string with delayed interpolation
+///
+/// Unlike f-strings which eagerly interpolate at expression evaluation time,
+/// t-strings are compiled to template functions by codegen.
+///
+/// This design enables:
+///
+/// - SQL-safe escaping: Template functions can apply parameterized query escaping
+/// - HTML/XML templating: Automatic context-aware escaping for web output
+/// - Custom escaping: Applications can define custom escaping strategies
+///
+/// Syntax:
+///
+/// - t"Hello {name}" - template string with interpolation
+/// - rt"raw {template}" - raw template (escape sequences are literal)
+///
+/// Example: t"SELECT * FROM users WHERE id = {user_id}"
+/// This compiles to a template function that safely escapes user_id for SQL,
+/// rather than eagerly substituting it as a string.
+///
+/// The values field contains the template parts:
+///
+/// - Constant strings (Expr::Constant with Str)
+/// - Interpolation expressions (any expression type)
+/// - These are ordered as they appear in the original template string.
 #[derive(Debug, Clone)]
 pub struct TStringExpr<'a> {
     pub values: &'a [Expr<'a>],

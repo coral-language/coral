@@ -1,5 +1,3 @@
-// Name resolution pass - builds symbol table and resolves names
-
 use crate::ast::*;
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
 use crate::semantic::builtins::is_builtin;
@@ -41,7 +39,6 @@ impl NameResolver {
             self.visit_stmt(stmt);
         }
 
-        // After visiting all statements, analyze closures
         self.symbol_table.analyze_closures();
     }
 
@@ -77,8 +74,6 @@ impl NameResolver {
                     self.symbol_table
                         .current_scope_mut()
                         .add_nonlocal(name.to_string());
-                    // Validate that the name exists in an enclosing scope
-                    // This is simplified - full validation would check at usage time
                 }
             }
             Stmt::Import(import) => {
@@ -86,9 +81,7 @@ impl NameResolver {
                     let binding_name = alias.unwrap_or(name);
                     let symbol =
                         Symbol::new(binding_name.to_string(), BindingKind::Import, import.span);
-                    if self.symbol_table.define(symbol).is_err() {
-                        // Duplicate import - just a warning
-                    }
+                    if self.symbol_table.define(symbol).is_err() {}
                 }
             }
             Stmt::From(from) => {
@@ -96,118 +89,84 @@ impl NameResolver {
                     let binding_name = alias.unwrap_or(name);
                     let symbol =
                         Symbol::new(binding_name.to_string(), BindingKind::Import, from.span);
-                    if self.symbol_table.define(symbol).is_err() {
-                        // Duplicate import
-                    }
+                    if self.symbol_table.define(symbol).is_err() {}
                 }
             }
-            _ => {
-                // Other statements don't define names or have special handling
-            }
+            _ => {}
         }
     }
 
     fn visit_func_def(&mut self, func: &FuncDefStmt) {
-        // Define the function in the current scope
         let symbol = Symbol::new(func.name.to_string(), BindingKind::Function, func.span);
-        if self.symbol_table.define(symbol).is_err() {
-            // Duplicate function definition
-        }
+        if self.symbol_table.define(symbol).is_err() {}
 
-        // Visit default values in current (outer) scope (they're evaluated when function is defined)
         for default in func.args.defaults {
             self.visit_expr_val(default);
         }
 
-        // Enter function scope
         self.symbol_table
             .push_scope(ScopeType::Function, func.name.to_string());
 
-        // Add parameters to function scope
         for param in func.args.args {
             let symbol = Symbol::new(param.arg.to_string(), BindingKind::Parameter, func.span);
             let _ = self.symbol_table.define(symbol);
         }
 
-        // Visit function body
         for stmt in func.body {
             self.visit_stmt(stmt);
         }
 
-        // Exit function scope
         self.symbol_table.pop_scope();
     }
 
     fn visit_class_def(&mut self, class: &ClassDefStmt) {
-        // Define the class in the current scope
         let symbol = Symbol::new(class.name.to_string(), BindingKind::Class, class.span);
-        if self.symbol_table.define(symbol).is_err() {
-            // Duplicate class definition
-        }
+        if self.symbol_table.define(symbol).is_err() {}
 
-        // Visit base classes in outer scope
         for base in class.bases {
             self.visit_expr(base);
         }
 
-        // Enter class scope
         self.symbol_table
             .push_scope(ScopeType::Class, class.name.to_string());
 
-        // Visit class body
         for stmt in class.body {
             self.visit_stmt(stmt);
         }
 
-        // Exit class scope
         self.symbol_table.pop_scope();
     }
 
     fn visit_assign(&mut self, assign: &AssignStmt) {
-        // Visit the value first (RHS)
         self.visit_expr_val(&assign.value);
 
-        // Then define the targets (LHS)
         for target in assign.targets {
             self.define_expr_target_val(target, BindingKind::Assignment, assign.span);
         }
     }
 
     fn visit_aug_assign(&mut self, aug: &AugAssignStmt) {
-        // Augmented assignment: target op= value
-        // Target must exist and is used, then assigned to
         self.visit_expr_val(&aug.target);
         self.visit_expr_val(&aug.value);
     }
 
     fn visit_ann_assign(&mut self, ann: &AnnAssignStmt) {
-        // Note: We intentionally DO NOT visit the annotation here.
-        // Type annotations can contain forward references (e.g., class attributes
-        // referencing classes defined later in the file). Name resolution happens
-        // before type checking, so we defer annotation checking to type inference.
-
-        // Visit the value if present
         if let Some(ref value) = ann.value {
             self.visit_expr_val(value);
         }
 
-        // Define the target
         self.define_expr_target_val(&ann.target, BindingKind::Assignment, ann.span);
     }
 
     fn visit_for(&mut self, for_stmt: &ForStmt) {
-        // Visit the iterator first
         self.visit_expr_val(&for_stmt.iter);
 
-        // Define the target variable
         self.define_expr_target_val(&for_stmt.target, BindingKind::Assignment, for_stmt.span);
 
-        // Visit body
         for stmt in for_stmt.body {
             self.visit_stmt(stmt);
         }
 
-        // Visit orelse
         for stmt in for_stmt.orelse {
             self.visit_stmt(stmt);
         }
@@ -276,8 +235,6 @@ impl NameResolver {
     fn visit_match(&mut self, match_stmt: &super::super::super::ast::patterns::MatchStmt) {
         self.visit_expr_val(&match_stmt.subject);
         for case in match_stmt.cases {
-            // Pattern matching can define new names
-            // This is simplified - full implementation would handle all pattern types
             for stmt in case.body {
                 self.visit_stmt(stmt);
             }
@@ -289,9 +246,7 @@ impl NameResolver {
         match expr {
             Expr::Name(name) => {
                 let symbol = Symbol::new(name.id.to_string(), kind, span);
-                if self.symbol_table.define(symbol).is_err() {
-                    // Already defined - allows shadowing
-                }
+                if self.symbol_table.define(symbol).is_err() {}
             }
             Expr::Tuple(tuple) => {
                 for elt in tuple.elts {
@@ -306,9 +261,7 @@ impl NameResolver {
             Expr::Starred(starred) => {
                 self.visit_expr(starred.value);
             }
-            _ => {
-                // Other expressions like attributes, subscripts are not name definitions
-            }
+            _ => {}
         }
     }
 
@@ -316,9 +269,7 @@ impl NameResolver {
     fn visit_expr_val(&mut self, expr: &Expr) {
         match expr {
             Expr::Name(name) => {
-                // Record usage of this name
                 if self.symbol_table.record_usage(name.id, name.span).is_err() {
-                    // Only report error if it's not a builtin
                     if !is_builtin(name.id) {
                         self.errors.push(*error(
                             ErrorKind::UndefinedName {
@@ -337,18 +288,15 @@ impl NameResolver {
                 self.visit_expr(unary.operand);
             }
             Expr::Lambda(lambda) => {
-                // Lambda creates a new scope
                 self.symbol_table
                     .push_scope(ScopeType::Function, "<lambda>".to_string());
 
-                // Add parameters
                 for param in lambda.args.args {
                     let symbol =
                         Symbol::new(param.arg.to_string(), BindingKind::Parameter, lambda.span);
                     let _ = self.symbol_table.define(symbol);
                 }
 
-                // Visit body
                 self.visit_expr(lambda.body);
 
                 self.symbol_table.pop_scope();
@@ -439,7 +387,7 @@ impl NameResolver {
                     self.visit_expr_val(value);
                 }
             }
-            // Literals don't reference names
+
             Expr::Constant(_)
             | Expr::JoinedStr(_)
             | Expr::FormattedValue(_)
@@ -458,9 +406,7 @@ impl NameResolver {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Name(name) => {
-                // Record usage of this name
                 if self.symbol_table.record_usage(name.id, name.span).is_err() {
-                    // Only report error if it's not a builtin
                     if !is_builtin(name.id) {
                         self.errors.push(*error(
                             ErrorKind::UndefinedName {
@@ -479,18 +425,15 @@ impl NameResolver {
                 self.visit_expr(unary.operand);
             }
             Expr::Lambda(lambda) => {
-                // Lambda creates a new scope
                 self.symbol_table
                     .push_scope(ScopeType::Function, "<lambda>".to_string());
 
-                // Add parameters
                 for param in lambda.args.args {
                     let symbol =
                         Symbol::new(param.arg.to_string(), BindingKind::Parameter, lambda.span);
                     let _ = self.symbol_table.define(symbol);
                 }
 
-                // Visit body
                 self.visit_expr(lambda.body);
 
                 self.symbol_table.pop_scope();
@@ -574,7 +517,7 @@ impl NameResolver {
                     self.visit_expr(step);
                 }
             }
-            // Literals don't reference names
+
             Expr::Constant(_) | Expr::JoinedStr(_) | Expr::FormattedValue(_) => {}
             _ => {}
         }
@@ -609,12 +552,10 @@ impl NameResolver {
     where
         F: FnOnce(&mut Self),
     {
-        // Comprehensions create their own scope
         self.symbol_table
             .push_scope(ScopeType::Comprehension, "<comp>".to_string());
 
         for (i, comp) in generators.iter().enumerate() {
-            // First generatorerator's iter is evaluated in enclosing scope
             if i == 0 {
                 self.symbol_table.pop_scope();
                 self.visit_expr_val(&comp.iter);
@@ -624,20 +565,17 @@ impl NameResolver {
                 self.visit_expr_val(&comp.iter);
             }
 
-            // Define the target in comprehension scope
             self.define_expr_target_val(
                 &comp.target,
                 BindingKind::ComprehensionTarget,
                 comp.iter.span(),
             );
 
-            // Visit conditions
             for if_clause in comp.ifs {
                 self.visit_expr_val(if_clause);
             }
         }
 
-        // Visit the element expression
         visit_elt(self);
 
         self.symbol_table.pop_scope();

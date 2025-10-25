@@ -278,21 +278,21 @@ impl<'a> ModuleSystemChecker<'a> {
     }
 
     fn check_export(&mut self, export: &ExportStmt<'a>) {
-        // If this is a re-export (has module field), validate it
+
         if let Some(source_module) = export.module {
             self.validate_reexport(export, source_module);
             return;
         }
 
-        // For regular exports, check that each name is defined
+
         for (name, alias) in export.names {
-            // Determine the exported name (alias if present, otherwise original name)
+
             let exported_name = alias.unwrap_or(name);
 
-            // Check if already exported
+
             self.check_duplicate_export(exported_name, export.span);
 
-            // Check if name is defined in module scope
+
             if self
                 .symbol_table
                 .module_scope()
@@ -313,13 +313,13 @@ impl<'a> ModuleSystemChecker<'a> {
     fn validate_reexport(&mut self, export: &ExportStmt<'a>, source_module: &'a str) {
         use crate::semantic::module::ReexportError;
 
-        // Check for duplicate exports first
+
         for (name, alias) in export.names {
             let exported_name = alias.unwrap_or(name);
             self.check_duplicate_export(exported_name, export.span);
         }
 
-        // Check for self-reference (circular re-export to same module)
+
         if let Some(current_module) = self.current_module_name
             && source_module == current_module
         {
@@ -332,13 +332,13 @@ impl<'a> ModuleSystemChecker<'a> {
             return; // Don't continue validation if it's a self-reference
         }
 
-        // If we have an export registry, resolve the full re-export chain
+
         if let Some(registry) = self.export_registry {
             for (name, _alias) in export.names {
                 match registry.resolve_reexport_chain(source_module, name, self.max_reexport_depth)
                 {
                     Ok((_origin_module, _info, chain)) => {
-                        // Valid re-export - check if current module is in the chain (circular)
+
                         if let Some(current_module) = self.current_module_name
                             && chain.contains(&current_module.to_string())
                         {
@@ -378,7 +378,7 @@ impl<'a> ModuleSystemChecker<'a> {
     }
 
     fn check_duplicate_export(&mut self, name: &'a str, span: TextRange) {
-        // Check if this name was already exported
+
         if let Some((_, first_span)) = self.exported_names.iter().find(|(n, _)| *n == name) {
             self.errors.push(*error(
                 ErrorKind::DuplicateExport {
@@ -394,7 +394,7 @@ impl<'a> ModuleSystemChecker<'a> {
 
     fn check_module_introspection(&mut self, intro: &ModuleIntrospectionExpr<'a>) {
         if !VALID_INTROSPECTION_FUNCTIONS.contains(&intro.function) {
-            // Find closest valid function name for suggestion
+
             let suggestion = VALID_INTROSPECTION_FUNCTIONS
                 .iter()
                 .min_by_key(|valid| levenshtein_distance(intro.function, valid))
@@ -467,12 +467,12 @@ mod tests {
         let mut parser = Parser::new(lexer, &arena);
         let module = parser.parse_module().expect("Parse failed");
 
-        // First run name resolution to build symbol table
+
         let mut name_resolver = NameResolver::new();
         name_resolver.resolve_module(module);
         let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
 
-        // Then check module system
+
         let checker = ModuleSystemChecker::new(&symbol_table);
         let errors = checker.check(module);
 
@@ -575,7 +575,7 @@ export original_name as exported_name
         let source = r#"
 export add, subtract from math
 "#;
-        // Re-exports are allowed even if we can't validate the source module
+
         assert!(check_module_system(source).is_ok());
     }
 
@@ -627,14 +627,14 @@ result = module::invalid_function()
 
     #[test]
     fn test_export_before_definition_ok() {
-        // Note: Name resolution processes all definitions first,
-        // so exports can appear before the actual definition
+
+
         let source = r#"
 export x
 x = 42
 "#;
         let result = check_module_system(source);
-        // This should pass because name resolution defines x when it sees the assignment
+
         assert!(result.is_ok());
     }
 
@@ -646,7 +646,7 @@ x = 42
         assert_eq!(levenshtein_distance("path", "pth"), 1);
     }
 
-    // ===== Re-export validation tests with registry =====
+
 
     fn check_module_system_with_registry(
         source: &str,
@@ -658,12 +658,12 @@ x = 42
         let mut parser = Parser::new(lexer, &arena);
         let module = parser.parse_module().expect("Parse failed");
 
-        // First run name resolution to build symbol table
+
         let mut name_resolver = NameResolver::new();
         name_resolver.resolve_module(module);
         let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
 
-        // Then check module system with registry
+
         let checker = ModuleSystemChecker::with_registry(&symbol_table, registry, module_name, 10);
         let errors = checker.check(module);
 
@@ -684,7 +684,7 @@ x = 42
 export add, subtract from math
 "#;
 
-        // Create a registry with the math module's exports
+
         let mut registry = ModuleExportRegistry::new();
         registry.register_export(
             "math",
@@ -709,7 +709,7 @@ export add, subtract from math
             },
         );
 
-        // This should now pass because the names exist in the registry
+
         assert!(check_module_system_with_registry(source, &registry, "mymodule").is_ok());
     }
 
@@ -723,7 +723,7 @@ export add, subtract from math
 export add, nonexistent from math
 "#;
 
-        // Create a registry with only 'add', not 'nonexistent'
+
         let mut registry = ModuleExportRegistry::new();
         registry.register_export(
             "math",
@@ -759,7 +759,7 @@ export add, nonexistent from math
 export User from models
 "#;
 
-        // Create a registry with an empty models module
+
         let registry = ModuleExportRegistry::new();
 
         let result = check_module_system_with_registry(source, &registry, "api");
@@ -801,7 +801,7 @@ export User as U from models
             },
         );
 
-        // Should pass - we check the source name (User), not the alias (U)
+
         assert!(check_module_system_with_registry(source, &registry, "api").is_ok());
     }
 
@@ -815,7 +815,7 @@ export User as U from models
 export add from mymodule
 "#;
 
-        // Create a registry where mymodule has 'add' exported
+
         let mut registry = ModuleExportRegistry::new();
         registry.register_export(
             "mymodule",
@@ -916,7 +916,7 @@ export add from math
             },
         );
 
-        // Should pass - both regular export and re-export are valid
+
         assert!(check_module_system_with_registry(source, &registry, "mymodule").is_ok());
     }
 

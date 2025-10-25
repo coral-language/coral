@@ -67,13 +67,13 @@ impl<'a> HirLowerer<'a> {
     /// Note: HIR lowering assumes name resolution has already validated all names.
     /// It doesn't perform name validation - that's the job of the name_resolution pass.
     pub fn new(arena: &'a Arena, interner: &'a mut Interner) -> Self {
-        // Create class analyzer with immutable interner reference
-        // Safety: The interner is borrowed immutably by ClassAnalyzer
-        // while the mutable reference is held by HirLowerer
-        // This is safe because:
-        // 1. ClassAnalyzer only reads from interner (resolve operations)
-        // 2. HirLowerer's intern() is the only mutation point
-        // 3. We never call intern() while ClassAnalyzer is actively using the interner
+
+
+
+
+
+
+
         let interner_ref: &'a Interner = unsafe { &*(interner as *const Interner) };
         let class_analyzer = ClassAnalyzer::new(interner_ref);
 
@@ -97,13 +97,13 @@ impl<'a> HirLowerer<'a> {
     ) -> Result<TypedModule<'a>, Vec<HirLoweringError>> {
         self.errors.clear();
 
-        // Lower all statements (this also adds classes to the analyzer)
+
         let body = self.lower_statements(module.body);
         let imports = self.extract_imports(module.body);
         let exports = self.extract_exports(module.body);
 
-        // CRITICAL: Analyze all classes after they've been added during lowering
-        // This computes MRO and builds attribute/method tables
+
+
         if let Err(_e) = self.class_analyzer.analyze() {
             self.errors.push(HirLoweringError::ClassAnalysisFailed {
                 class: "unknown".to_string(),
@@ -173,7 +173,7 @@ impl<'a> HirLowerer<'a> {
                 let target = self.lower_expression(&ann_assign.target)?;
                 let annotation = self.lower_expression(&ann_assign.annotation)?;
 
-                // Lower value if present, but annotation without value is valid
+
                 let value = match ann_assign.value.as_ref() {
                     Some(v) => Some(self.lower_expression(v)?),
                     None => None,
@@ -346,7 +346,7 @@ impl<'a> HirLowerer<'a> {
                 let value = self.lower_expression(&type_alias.value)?;
                 let ty = self.infer_type(&value);
 
-                // Lower type parameters
+
                 let type_params = self
                     .lower_type_parameters(type_alias.type_params)
                     .unwrap_or(&[]);
@@ -680,7 +680,7 @@ impl<'a> HirLowerer<'a> {
                     },
                 ))
             }
-            // Implement comprehension desugaring
+
             Expr::ListComp(list_comp) => self.lower_list_comprehension(list_comp),
             Expr::DictComp(dict_comp) => self.lower_dict_comprehension(dict_comp),
             Expr::SetComp(set_comp) => self.lower_set_comprehension(set_comp),
@@ -693,10 +693,10 @@ impl<'a> HirLowerer<'a> {
     /// Note: Name validation is done by the name_resolution pass before HIR lowering.
     /// We assume all names are valid and just create the HIR node.
     fn lower_name_expression(&mut self, name: &NameExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Intern the name to get its symbol ID
+
         let symbol = self.intern(name.id);
 
-        // Type will be inferred by the type inference pass
+
         Some(TypedExpr::Name(TypedNameExpr {
             symbol,
             ty: Type::Unknown,
@@ -706,7 +706,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Infer type for a literal value
     fn infer_literal_type(&self, value: &str) -> Type {
-        // Simple type inference for literals
+
         if value.parse::<i64>().is_ok() {
             Type::Int
         } else if value.parse::<f64>().is_ok() {
@@ -729,7 +729,7 @@ impl<'a> HirLowerer<'a> {
     ) -> Type {
         match op {
             "+" | "-" | "*" | "/" | "//" | "%" | "**" => {
-                // Numeric operations
+
                 if left.ty() == &Type::Int && right.ty() == &Type::Int {
                     Type::Int
                 } else if left.ty() == &Type::Float || right.ty() == &Type::Float {
@@ -760,12 +760,12 @@ impl<'a> HirLowerer<'a> {
         _args: &[TypedExpr<'a>],
         _keywords: &[TypedKeyword<'a>],
     ) -> Type {
-        // Basic type inference for function calls
+
         match func {
             TypedExpr::Name(name_expr) => {
-                // Check if it's a known function type
+
                 if name_expr.ty.is_function() {
-                    // Extract return type from function type
+
                     if let Type::Function { returns, .. } = &name_expr.ty {
                         returns.as_ref().clone()
                     } else {
@@ -776,7 +776,7 @@ impl<'a> HirLowerer<'a> {
                 }
             }
             TypedExpr::Attribute(attr_expr) => {
-                // Method call - check if it's a method type
+
                 if attr_expr.ty.is_function() {
                     if let Type::Function { returns, .. } = &attr_expr.ty {
                         returns.as_ref().clone()
@@ -801,22 +801,22 @@ impl<'a> HirLowerer<'a> {
 
         let base_ty = value.ty();
 
-        // Get the attribute name as a string
+
         if let Some(attr_name) = self.interner.resolve(*attr) {
-            // For user-defined class instances, the ClassAnalyzer has already
-            // collected attribute types during lowering. Those are available
-            // in TypedClassDefStmt.attributes and TypedClassDefStmt.methods.
-            // For HIR types, we use the builtin registry as a fallback.
+
+
+
+
             match base_ty {
                 Type::Instance(_class_name) => {
-                    // Class instance attributes would be resolved by consumers
-                    // using the ClassAnalyzer after lowering is complete
+
+
                     BUILTIN_ATTRIBUTE_REGISTRY
                         .lookup_builtin_attribute(base_ty, attr_name)
                         .unwrap_or(Type::Unknown)
                 }
                 _ => {
-                    // Use built-in attribute registry for other types
+
                     BUILTIN_ATTRIBUTE_REGISTRY
                         .lookup_builtin_attribute(base_ty, attr_name)
                         .unwrap_or(Type::Unknown)
@@ -829,7 +829,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Infer type for subscript access
     fn infer_subscript_type(&self, value: &TypedExpr<'a>, _slice: &TypedExpr<'a>) -> Type {
-        // Basic subscript type inference based on the value type
+
         match value {
             TypedExpr::Name(name_expr) => {
                 match &name_expr.ty {
@@ -837,8 +837,8 @@ impl<'a> HirLowerer<'a> {
                     Type::Dict(_, value_type) => value_type.as_ref().clone(),
                     Type::Str => Type::Str, // String indexing returns string
                     Type::Tuple(element_types) => {
-                        // For tuples, index type depends on compile-time constant
-                        // Return union of all element types as conservative approximation
+
+
                         if element_types.is_empty() {
                             Type::Unknown
                         } else if element_types.len() == 1 {
@@ -897,10 +897,10 @@ impl<'a> HirLowerer<'a> {
 
     /// Infer type for lambda
     fn infer_lambda_type(&self, args: &TypedArguments<'a>, body: &TypedExpr<'a>) -> Type {
-        // Construct a proper function type with parameter types from args and return type from body
+
         let mut param_types = Vec::new();
 
-        // Add positional arguments
+
         for arg in args.posonlyargs {
             param_types.push(arg.ty.clone());
         }
@@ -908,17 +908,17 @@ impl<'a> HirLowerer<'a> {
             param_types.push(arg.ty.clone());
         }
 
-        // Add keyword-only arguments
+
         for arg in args.kwonlyargs {
             param_types.push(arg.ty.clone());
         }
 
-        // Add vararg if present
+
         if let Some(vararg) = args.vararg {
             param_types.push(vararg.ty.clone());
         }
 
-        // Add kwarg if present
+
         if let Some(kwarg) = args.kwarg {
             param_types.push(kwarg.ty.clone());
         }
@@ -928,17 +928,17 @@ impl<'a> HirLowerer<'a> {
 
     /// Infer type for conditional expression
     fn infer_conditional_type(&self, body: &TypedExpr<'a>, orelse: &TypedExpr<'a>) -> Type {
-        // Union of both branches
+
         Type::Union(vec![body.ty().clone(), orelse.ty().clone()])
     }
 
     /// Infer type for await expression
     fn infer_await_type(&self, value: &TypedExpr<'a>) -> Type {
-        // Basic await type inference - await unwraps the coroutine type
-        // In a full implementation, we'd extract the return type from the coroutine
+
+
         match &value.ty() {
             Type::Union(types) => {
-                // If it's a union, await each type
+
                 if types.is_empty() {
                     Type::Unknown
                 } else {
@@ -956,7 +956,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Create iterator call for for loop
     fn create_iter_call(&mut self, iter: &'a TypedExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Create a call to __iter__() method
+
         let iter_method = TypedExpr::Attribute(TypedAttributeExpr {
             value: iter,
             attr: self.intern("__iter__"),
@@ -975,7 +975,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Create next call for for loop
     fn create_next_call(&mut self, iter: &'a TypedExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Create a call to __next__() method
+
         let next_method = TypedExpr::Attribute(TypedAttributeExpr {
             value: iter,
             attr: self.intern("__next__"),
@@ -1088,14 +1088,14 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower arguments
     fn lower_arguments(&mut self, args: &Arguments<'a>) -> Option<TypedArguments<'a>> {
-        // Lower positional arguments
+
         let posonlyargs = self.lower_typed_args(args.posonlyargs)?;
         let typed_args = self.lower_typed_args(args.args)?;
 
-        // Lower keyword-only arguments
+
         let kwonlyargs = self.lower_typed_args(args.kwonlyargs)?;
 
-        // Lower defaults
+
         let defaults = self.lower_expressions(args.defaults)?;
         let mut kw_defaults = Vec::new();
         for expr_opt in args.kw_defaults {
@@ -1108,7 +1108,7 @@ impl<'a> HirLowerer<'a> {
         }
         let kw_defaults = self.arena.alloc_slice_vec(kw_defaults);
 
-        // Handle vararg and kwarg
+
         let vararg = if let Some(arg) = args.vararg.as_ref() {
             let annotation = arg
                 .annotation
@@ -1127,7 +1127,7 @@ impl<'a> HirLowerer<'a> {
         } else {
             None
         };
-        // vararg is already properly handled above
+
 
         let kwarg = if let Some(arg) = args.kwarg.as_ref() {
             let annotation = arg
@@ -1174,10 +1174,10 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower function definition
     fn lower_function_definition(&mut self, func: &FuncDefStmt<'a>) -> Option<TypedStmt<'a>> {
-        // Lower arguments
+
         let args = self.lower_arguments(&func.args)?;
 
-        // Lower return type annotation
+
         let returns = func.returns.as_ref().map(|ret| self.lower_expression(ret));
         let returns = match returns {
             Some(Some(expr)) => Some(self.arena.alloc(expr)),
@@ -1185,16 +1185,16 @@ impl<'a> HirLowerer<'a> {
             None => None,
         };
 
-        // Lower function body
+
         let body = self.lower_statements(func.body);
 
-        // Lower decorators
+
         let decorators = self.lower_expressions(func.decorators)?;
 
-        // Create function name symbol
+
         let name = self.intern(func.name);
 
-        // Lower type parameters
+
         let type_params = self.lower_type_parameters(func.type_params).unwrap_or(&[]);
 
         Some(TypedStmt::FuncDef(TypedFuncDefStmt {
@@ -1213,31 +1213,31 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower class definition
     fn lower_class_definition(&mut self, class: &ClassDefStmt<'a>) -> Option<TypedStmt<'a>> {
-        // Lower base classes
+
         let bases = self.lower_expressions(class.bases)?;
 
-        // Lower keyword arguments
+
         let keywords = self.lower_keywords(class.keywords)?;
 
-        // Lower class body
+
         let body = self.lower_statements(class.body);
 
-        // Lower decorators
+
         let decorators = self.lower_expressions(class.decorators)?;
 
-        // Create class name symbol
+
         let name = self.intern(class.name);
 
-        // MRO, attributes, and methods are computed by ClassAnalyzer in separate pass
-        // HIR lowering focuses on structure, not semantic analysis
+
+
         let mro = &[];
         let attributes = &[];
         let methods = &[];
 
-        // Lower type parameters
+
         let type_params = self.lower_type_parameters(class.type_params).unwrap_or(&[]);
 
-        // Create the typed class definition
+
         let typed_class = TypedClassDefStmt {
             name,
             type_params,
@@ -1254,7 +1254,7 @@ impl<'a> HirLowerer<'a> {
             docstring: class.docstring,
         };
 
-        // Create a simplified version for ClassAnalyzer (without MRO/attributes/methods)
+
         let analyzer_class = crate::semantic::hir::class_analysis::TypedClassDefStmt {
             name,
             type_params,
@@ -1268,8 +1268,8 @@ impl<'a> HirLowerer<'a> {
         };
         let analyzer_class_ref = self.arena.alloc(analyzer_class);
 
-        // Add class to analyzer for MRO and attribute/method table computation
-        // CRITICAL: This must happen during lowering so the analyzer can process the class
+
+
         self.class_analyzer.add_class(analyzer_class_ref);
 
         Some(TypedStmt::ClassDef(typed_class))
@@ -1277,7 +1277,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower import statement
     fn lower_import_statement(&mut self, import: &ImportStmt<'a>) -> Option<TypedStmt<'a>> {
-        // Lower import names
+
         let mut names = Vec::new();
         for alias in import.names {
             let name_symbol = self.intern(alias.0);
@@ -1294,10 +1294,10 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower from statement
     fn lower_from_statement(&mut self, from: &FromStmt<'a>) -> Option<TypedStmt<'a>> {
-        // Lower module name
+
         let module = from.module.map(|m| self.intern(m));
 
-        // Lower import names
+
         let mut names = Vec::new();
         for alias in from.names {
             let name_symbol = self.intern(alias.0);
@@ -1316,7 +1316,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower export statement
     fn lower_export_statement(&mut self, export: &ExportStmt<'a>) -> Option<TypedStmt<'a>> {
-        // Lower export names
+
         let mut names = Vec::new();
         for alias in export.names {
             let name_symbol = self.intern(alias.0);
@@ -1325,7 +1325,7 @@ impl<'a> HirLowerer<'a> {
         }
         let names = self.arena.alloc_slice_vec(names);
 
-        // Lower module name if present
+
         let module = export.module.map(|m| self.intern(m));
 
         Some(TypedStmt::Export(TypedExportStmt {
@@ -1384,7 +1384,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Create enter call for with statement
     fn create_enter_call(&mut self, context: &'a TypedExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Create a call to __enter__() method
+
         let enter_method = TypedExpr::Attribute(TypedAttributeExpr {
             value: context,
             attr: self.intern("__enter__"),
@@ -1403,7 +1403,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Create exit call for with statement
     fn create_exit_call(&mut self, context: &'a TypedExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Create a call to __exit__() method
+
         let exit_method = TypedExpr::Attribute(TypedAttributeExpr {
             value: context,
             attr: self.intern("__exit__"),
@@ -1616,7 +1616,7 @@ impl<'a> HirLowerer<'a> {
                     });
                 }
                 _ => {
-                    // Recursively check nested statements
+
                     self.collect_imports_from_nested_stmt(stmt, imports);
                 }
             }
@@ -1693,7 +1693,7 @@ impl<'a> HirLowerer<'a> {
                     });
                 }
                 _ => {
-                    // Recursively check nested statements
+
                     self.collect_exports_from_nested_stmt(stmt, exports);
                 }
             }
@@ -1743,12 +1743,12 @@ impl<'a> HirLowerer<'a> {
     /// Simplified: creates typed list expression without full desugaring
     /// Complete desugaring to loops happens in codegen phase
     fn lower_list_comprehension(&mut self, list_comp: &ListCompExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Simplified HIR representation - full loop desugaring in codegen:
-        // result = []
-        // for <comprehension_targets> in <iterable>:
-        //     if <conditions>:
-        //         result.append(<expression>)
-        // return result
+
+
+
+
+
+
 
         let elt = self.lower_expression(list_comp.elt)?;
         let elt_ref = self.arena.alloc(elt);
@@ -1764,12 +1764,12 @@ impl<'a> HirLowerer<'a> {
     /// Simplified: creates typed dict expression without full desugaring
     /// Complete desugaring to loops happens in codegen phase
     fn lower_dict_comprehension(&mut self, dict_comp: &DictCompExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Simplified HIR representation - full loop desugaring in codegen:
-        // result = {}
-        // for <comprehension_targets> in <iterable>:
-        //     if <conditions>:
-        //         result[<key>] = <value>
-        // return result
+
+
+
+
+
+
 
         let key = self.lower_expression(dict_comp.key)?;
         let value = self.lower_expression(dict_comp.value)?;
@@ -1792,12 +1792,12 @@ impl<'a> HirLowerer<'a> {
     /// Simplified: creates typed set expression without full desugaring
     /// Complete desugaring to loops happens in codegen phase
     fn lower_set_comprehension(&mut self, set_comp: &SetCompExpr<'a>) -> Option<TypedExpr<'a>> {
-        // Simplified HIR representation - full loop desugaring in codegen:
-        // result = set()
-        // for <comprehension_targets> in <iterable>:
-        //     if <conditions>:
-        //         result.add(<expression>)
-        // return result
+
+
+
+
+
+
 
         let elt = self.lower_expression(set_comp.elt)?;
         let elt_ref = self.arena.alloc(elt);
@@ -1814,12 +1814,12 @@ impl<'a> HirLowerer<'a> {
         &mut self,
         gen_exp: &GeneratorExpExpr<'a>,
     ) -> Option<TypedExpr<'a>> {
-        // Simplified HIR representation - generator function desugaring in codegen:
-        // def _gen():
-        //     for <comprehension_targets> in <iterable>:
-        //         if <conditions>:
-        //             yield <expression>
-        // return _gen()
+
+
+
+
+
+
 
         let elt = self.lower_expression(gen_exp.elt)?;
         let elt_ref = self.arena.alloc(elt);

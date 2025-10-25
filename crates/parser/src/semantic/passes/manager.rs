@@ -1,5 +1,3 @@
-// Analysis pass manager and orchestration
-
 use crate::ast::nodes::Module;
 use crate::error::codes::Severity;
 use crate::error::diagnostic::Diagnostic;
@@ -129,7 +127,6 @@ impl AnalysisContext {
     where
         F: FnOnce() -> ControlFlowGraph,
     {
-        // Try read first (fast path)
         {
             let cache = self.cfg_cache.read().unwrap();
             if let Some(cfg) = cache.get(function_name) {
@@ -137,7 +134,6 @@ impl AnalysisContext {
             }
         }
 
-        // Create and cache (slow path)
         let cfg = create_fn();
         let mut cache = self.cfg_cache.write().unwrap();
         cache.insert(function_name.to_string(), cfg.clone());
@@ -375,10 +371,8 @@ impl PassManager {
             current_file: None,
         };
 
-        // Register all available passes
         manager.register_default_passes();
 
-        // Compute execution order
         manager.compute_execution_order();
 
         manager
@@ -430,7 +424,6 @@ impl PassManager {
 
     /// Register all default passes
     fn register_default_passes(&mut self) {
-        // Critical passes (must run first)
         self.register_pass(PassMetadata {
             id: "name_resolution",
             name: "Name Resolution",
@@ -461,7 +454,6 @@ impl PassManager {
             enabled_by_default: true,
         });
 
-        // High priority passes
         self.register_pass(PassMetadata {
             id: "hir_lowering",
             name: "HIR Lowering",
@@ -482,7 +474,6 @@ impl PassManager {
             enabled_by_default: true,
         });
 
-        // Medium priority passes
         self.register_pass(PassMetadata {
             id: "type_checking",
             name: "Type Checking",
@@ -523,7 +514,6 @@ impl PassManager {
             enabled_by_default: true,
         });
 
-        // Low priority passes
         self.register_pass(PassMetadata {
             id: "exhaustiveness",
             name: "Exhaustiveness Checking",
@@ -544,7 +534,6 @@ impl PassManager {
             enabled_by_default: true,
         });
 
-        // Optional passes (may be expensive or experimental)
         self.register_pass(PassMetadata {
             id: "ownership_check",
             name: "Ownership Checking",
@@ -589,7 +578,6 @@ impl PassManager {
         let mut visited = HashSet::new();
         let mut temp_mark = HashSet::new();
 
-        // Get all pass IDs sorted by priority
         let mut pass_ids: Vec<_> = self.passes.keys().cloned().collect();
         pass_ids.sort_by_key(|id| {
             self.passes
@@ -598,7 +586,6 @@ impl PassManager {
                 .unwrap_or(PassPriority::Optional)
         });
 
-        // Topological sort with dependency resolution
         for pass_id in pass_ids {
             if !visited.contains(&pass_id) {
                 self.visit_pass(&pass_id, &mut visited, &mut temp_mark, &mut order);
@@ -621,7 +608,6 @@ impl PassManager {
         }
 
         if temp_mark.contains(pass_id) {
-            // Circular dependency detected
             eprintln!(
                 "Warning: Circular dependency detected involving pass '{}'",
                 pass_id
@@ -631,7 +617,6 @@ impl PassManager {
 
         temp_mark.insert(pass_id.to_string());
 
-        // Visit dependencies first
         if let Some(metadata) = self.passes.get(pass_id) {
             for dep in &metadata.dependencies {
                 self.visit_pass(dep, visited, temp_mark, order);
@@ -645,12 +630,11 @@ impl PassManager {
 
     /// Take ownership of the symbol table (for returning in ParseResult)
     pub fn take_symbol_table(&mut self) -> SymbolTable {
-        // Take the symbol table from the analysis context
         let symbol_table = {
             let guard = self.analysis_context.symbol_table.read().unwrap();
             (*guard).clone()
         };
-        // Reset the context with a new empty symbol table
+
         *self.analysis_context.symbol_table.write().unwrap() = SymbolTable::new();
         symbol_table
     }
@@ -676,43 +660,37 @@ impl PassManager {
         use crate::semantic::types::Type;
 
         for stmt in module.body {
-            if let Stmt::Export(export) = stmt {
-                // Only register direct exports (not re-exports)
-                if export.module.is_none() {
-                    for (name, alias) in export.names {
-                        let exported_name = alias.unwrap_or(name);
+            if let Stmt::Export(export) = stmt
+                && export.module.is_none()
+            {
+                for (name, alias) in export.names {
+                    let exported_name = alias.unwrap_or(name);
 
-                        // Get type from symbol table if available
-                        let ty = {
-                            let st = self.analysis_context.symbol_table.read().unwrap();
-                            st.module_scope()
-                                .lookup_local(name, |entry| entry.inferred_type.clone())
-                                .flatten()
-                                .unwrap_or(Type::Unknown)
-                        };
+                    let ty = {
+                        let st = self.analysis_context.symbol_table.read().unwrap();
+                        st.module_scope()
+                            .lookup_local(name, |entry| entry.inferred_type.clone())
+                            .flatten()
+                            .unwrap_or(Type::Unknown)
+                    };
 
-                        let info = ExportInfo {
-                            original_name: name.to_string(),
-                            ty,
-                            source_module: None,
-                            reexport_chain: Vec::new(),
-                            span: export.span,
-                        };
+                    let info = ExportInfo {
+                        original_name: name.to_string(),
+                        ty,
+                        source_module: None,
+                        reexport_chain: Vec::new(),
+                        span: export.span,
+                    };
 
-                        self.export_registry.register_export(
-                            module_name,
-                            exported_name.to_string(),
-                            info,
-                        );
-                    }
+                    self.export_registry.register_export(
+                        module_name,
+                        exported_name.to_string(),
+                        info,
+                    );
                 }
             }
         }
     }
-
-    // Parallel execution of passes within a single module is not practical due to
-    // strict dependencies (e.g., name_resolution -> type_inference -> type_checking).
-    // However, parallel module analysis is supported via analyze_modules() using rayon's par_iter().
 
     /// Run all enabled passes on a module
     ///
@@ -729,10 +707,8 @@ impl PassManager {
         self.diagnostics.clear();
         self.current_file = current_file;
 
-        // Filter enabled passes
         let mut enabled_passes = Vec::new();
         for pass_id in &self.execution_order {
-            // Skip if disabled
             if self.config.disabled_passes.contains(pass_id) {
                 if self.config.verbose {
                     println!("Skipping disabled pass: {}", pass_id);
@@ -740,7 +716,6 @@ impl PassManager {
                 continue;
             }
 
-            // Check if enabled by default or explicitly enabled
             let metadata = self.passes.get(pass_id).unwrap();
             let is_enabled =
                 metadata.enabled_by_default || self.config.enabled_passes.contains(pass_id);
@@ -755,9 +730,6 @@ impl PassManager {
             enabled_passes.push(pass_id.clone());
         }
 
-        // Note: Per-module parallelization is handled in analyze_modules()
-        // Individual passes within a module still run sequentially due to dependencies
-        // (e.g., type_inference must complete before type_checking)
         self.run_passes_sequential(&enabled_passes, module, source)?;
 
         if self.diagnostics.is_empty() {
@@ -776,11 +748,9 @@ impl PassManager {
     ) -> Result<(), Vec<Diagnostic>> {
         let mut total_errors = 0;
 
-        // Compute content hash once for cache validation
         let content_hash = self.compute_source_hash(source);
 
         for pass_id in enabled_passes {
-            // Check max errors
             if let Some(max) = self.config.max_errors
                 && total_errors >= max
             {
@@ -792,7 +762,6 @@ impl PassManager {
 
             let metadata = self.passes.get(pass_id).unwrap();
 
-            // Check per-pass cache first
             if let Some(cached_result) = self.get_cached_pass_result(pass_id, &content_hash) {
                 if self.config.verbose {
                     println!(
@@ -801,7 +770,6 @@ impl PassManager {
                     );
                 }
 
-                // Use cached diagnostics
                 self.diagnostics.extend(cached_result.diagnostics.clone());
 
                 if !cached_result.success {
@@ -816,7 +784,6 @@ impl PassManager {
                 continue; // Skip running the pass
             }
 
-            // Run the pass
             if self.config.verbose {
                 println!("Running pass: {} ({})", metadata.name, pass_id);
             }
@@ -830,10 +797,9 @@ impl PassManager {
             );
             let duration = start.elapsed();
 
-            // Update execution time tracking for load balancing
             let duration_ns = duration.as_nanos();
             let current_avg = self.pass_execution_times.get(pass_id).copied().unwrap_or(0);
-            // Simple exponential moving average: 0.1 * new + 0.9 * old
+
             let new_avg = if current_avg == 0 {
                 duration_ns
             } else {
@@ -842,7 +808,6 @@ impl PassManager {
             self.pass_execution_times
                 .insert(pass_id.to_string(), new_avg);
 
-            // Store pass result in cache
             let pass_success = result.is_ok();
             let pass_diagnostics = match &result {
                 Ok(()) => Vec::new(),
@@ -862,7 +827,6 @@ impl PassManager {
                 },
             );
 
-            // Collect diagnostics
             match result {
                 Ok(()) => {
                     if self.config.collect_statistics
@@ -941,19 +905,14 @@ impl PassManager {
         let mut resolver = NameResolver::new();
         resolver.resolve_module(module);
 
-        // Store symbol table in analysis context for subsequent passes
         let (symbol_table, errors) = resolver.into_symbol_table();
 
-        // Update both the standalone symbol table and the type context's symbol table
         *self.analysis_context.symbol_table.write().unwrap() = symbol_table.clone();
 
-        // CRITICAL: Update the TypeInferenceContext's symbol table
-        // This ensures type inference can access class definitions and other symbols
         let mut type_ctx = self.analysis_context.type_context.write().unwrap();
         *type_ctx.symbol_table_mut() = symbol_table;
         drop(type_ctx); // Release lock
 
-        // Collect and return errors
         if errors.is_empty() {
             Ok(())
         } else {
@@ -966,25 +925,21 @@ impl PassManager {
     fn run_import_resolution(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::import_resolution::ImportResolver;
 
-        // Use the actual file path if provided, otherwise fall back to a default
-        let current_file = self.current_file.clone().unwrap_or_else(|| {
-            // Fallback: infer from module name or use a default
-            self.root_dir.join("module.coral")
-        });
+        let current_file = self
+            .current_file
+            .clone()
+            .unwrap_or_else(|| self.root_dir.join("module.coral"));
 
         let mut resolver = ImportResolver::new(self.root_dir.clone(), current_file);
 
         let _ = resolver.resolve_module(module);
 
-        // Collect errors and warnings
         let mut diagnostics = Vec::new();
 
-        // Add errors
         for error in resolver.errors() {
             diagnostics.push(error.to_diagnostic(source));
         }
 
-        // Add warnings
         for warning in resolver.warnings() {
             diagnostics.push(warning.to_diagnostic(source));
         }
@@ -1005,18 +960,14 @@ impl PassManager {
 
         let mut diagnostics = Vec::new();
 
-        // Collect errors
         for error in analyzer.errors() {
             diagnostics.push(error.to_diagnostic(source));
         }
 
-        // Collect warnings
         for warning in analyzer.warnings() {
             diagnostics.push(warning.to_diagnostic(source));
         }
 
-        // Store CFGs in cache for reuse by subsequent passes
-        // This eliminates redundant CFG construction in definite_assignment and constant_propagation
         {
             let mut cfg_cache = self.analysis_context.cfg_cache.write().unwrap();
             cfg_cache.clear(); // Clear old CFGs from previous module
@@ -1036,7 +987,6 @@ impl PassManager {
     fn run_definite_assignment(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::definite_assignment::DefiniteAssignmentPass;
 
-        // Reuse CFGs from cache (built by control_flow pass)
         let function_cfgs = {
             let cfg_cache = self.analysis_context.cfg_cache.read().unwrap();
             cfg_cache.clone()
@@ -1057,7 +1007,6 @@ impl PassManager {
     fn run_constant_propagation(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::constant_propagation::ConstantPropagationPass;
 
-        // Reuse CFGs from cache (built by control_flow pass)
         let function_cfgs = {
             let cfg_cache = self.analysis_context.cfg_cache.read().unwrap();
             cfg_cache.clone()
@@ -1085,12 +1034,10 @@ impl PassManager {
     fn run_module_system(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::module_system::ModuleSystemChecker;
 
-        // Use shared symbol table from analysis context
         let symbol_table = self.analysis_context.symbol_table.read().unwrap();
 
         let module_name = self.get_current_module_name();
 
-        // Create checker with registry for cross-module validation
         let checker = ModuleSystemChecker::with_registry(
             &symbol_table,
             &self.export_registry,
@@ -1099,10 +1046,8 @@ impl PassManager {
         );
         let errors = checker.check(module);
 
-        // Release read lock before calling register_module_exports
         drop(symbol_table);
 
-        // Register exports from this module for cross-module validation
         self.register_module_exports(module, &module_name);
 
         if errors.is_empty() {
@@ -1119,34 +1064,23 @@ impl PassManager {
         use crate::arena::interner::Interner;
         use crate::semantic::hir::lower::HirLowerer;
 
-        // Create arena for HIR allocation
         let arena = Arena::new();
         let mut interner = Interner::new();
         let mut lowerer = HirLowerer::new(&arena, &mut interner);
 
-        // Lower the module to HIR
         match lowerer.lower_module(module) {
             Ok(_hir_module) => {
-                // HIR lowering successful
-                // Extract class analyzer from the lowerer (consumes lowerer)
                 let class_analyzer = lowerer.into_class_analyzer();
 
-                // Export comprehensive class metadata
                 let class_metadata_map = class_analyzer.export_metadata();
 
-                // Store metadata in analysis context with flattened structure for compatibility
                 {
                     let mut attrs = self.analysis_context.class_attributes.write().unwrap();
                     let mut mro_map = self.analysis_context.class_mro.write().unwrap();
 
                     for (class_name, metadata) in class_metadata_map {
-                        // Store MRO
                         mro_map.insert(class_name.clone(), metadata.mro.clone());
 
-                        // Flatten and store all attributes with priority-based merging
-                        // Priority: Properties > Methods > Class Attrs > Instance Attrs
-
-                        // Store properties as AttributeDescriptor types
                         for (prop_name, prop_desc) in &metadata.properties {
                             let key = (class_name.clone(), prop_name.clone());
                             let attr_type = Type::AttributeDescriptor {
@@ -1160,25 +1094,21 @@ impl PassManager {
                             attrs.insert(key, attr_type);
                         }
 
-                        // Store methods (don't overwrite properties)
                         for (method_name, method_type) in &metadata.methods {
                             let key = (class_name.clone(), method_name.clone());
                             attrs.entry(key).or_insert_with(|| method_type.clone());
                         }
 
-                        // Store class attributes (don't overwrite methods or properties)
                         for (attr_name, attr_type) in &metadata.class_attributes {
                             let key = (class_name.clone(), attr_name.clone());
                             attrs.entry(key).or_insert_with(|| attr_type.clone());
                         }
 
-                        // Store instance attributes (lowest priority)
                         for (attr_name, attr_type) in &metadata.instance_attributes {
                             let key = (class_name.clone(), attr_name.clone());
                             attrs.entry(key).or_insert_with(|| attr_type.clone());
                         }
 
-                        // Store constructor as a special "constructor" method
                         if let Some(constructor_type) = &metadata.constructor {
                             let key = (class_name.clone(), "constructor".to_string());
                             attrs.insert(key, constructor_type.clone());
@@ -1189,7 +1119,6 @@ impl PassManager {
                 Ok(())
             }
             Err(errors) => {
-                // Convert HIR lowering errors to diagnostics
                 let diagnostics: Vec<_> = errors
                     .iter()
                     .map(|e| Diagnostic::error(format!("HIR lowering error: {}", e)))
@@ -1203,17 +1132,14 @@ impl PassManager {
     fn run_type_inference(&mut self, module: &Module, _source: &str) -> PassResult {
         use crate::semantic::passes::type_inference::TypeInference;
 
-        // Use the shared type context from analysis context
         let mut type_context = self.analysis_context.type_context.write().unwrap();
 
-        // Populate module exports for cross-module type resolution
         let module_exports = {
             let exports = self.analysis_context.module_exports.read().unwrap();
             exports.clone()
         };
         type_context.set_module_exports(module_exports);
 
-        // Populate class attributes and MRO for user-defined class resolution
         let class_attributes = {
             let attrs = self.analysis_context.class_attributes.read().unwrap();
             attrs.clone()
@@ -1226,12 +1152,9 @@ impl PassManager {
         };
         type_context.set_class_mro(class_mro);
 
-        // Run inference
         let mut inferrer = TypeInference::new(&mut type_context);
         inferrer.infer_module(module);
 
-        // Type inference doesn't produce errors directly
-        // The inferred types are now stored in the shared context
         Ok(())
     }
 
@@ -1240,11 +1163,8 @@ impl PassManager {
         use crate::semantic::passes::type_checking::TypeCheckContext;
         use crate::semantic::passes::type_checking::TypeChecker;
 
-        // Use the shared type context from type_inference
-        // Borrow the context instead of cloning for better performance
         let type_ctx_guard = self.analysis_context.type_context.read().unwrap();
 
-        // Get class metadata for attribute validation
         let class_attributes = {
             let attrs = self.analysis_context.class_attributes.read().unwrap();
             attrs.clone()
@@ -1259,7 +1179,6 @@ impl PassManager {
         let mut checker = TypeChecker::new(&mut type_context);
         checker.check_module(module);
 
-        // Extract errors from context
         let errors = type_context.errors();
         if errors.is_empty() {
             Ok(())
@@ -1273,7 +1192,6 @@ impl PassManager {
     fn run_exhaustiveness(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::exhaustiveness::ExhaustivenessChecker;
 
-        // Use shared type context
         let context = self.analysis_context.type_context.read().unwrap();
 
         let mut checker = ExhaustivenessChecker::new(&context);
@@ -1291,7 +1209,6 @@ impl PassManager {
     fn run_decorator_resolution(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::decorator_resolution::DecoratorResolver;
 
-        // Use shared symbol table
         let symbol_table = self.analysis_context.symbol_table.read().unwrap();
         let mut resolver = DecoratorResolver::new(&symbol_table);
         let errors = resolver.check_module(module);
@@ -1308,10 +1225,15 @@ impl PassManager {
     fn run_ownership_check(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::ownership_check::OwnershipChecker;
 
+        let function_cfgs = {
+            let cfg_cache = self.analysis_context.cfg_cache.read().unwrap();
+            cfg_cache.clone()
+        };
+
         let mut checker = OwnershipChecker::new();
+        checker.set_cfg_cache(function_cfgs);
         let (errors, recommendations) = checker.check_module(module);
 
-        // Store recommendations in context for codegen
         {
             let mut recs = self
                 .analysis_context
@@ -1333,11 +1255,9 @@ impl PassManager {
     fn run_async_validation(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::async_validation::AsyncValidator;
 
-        // Get type context for better type inference
         let type_context_ref = self.analysis_context.type_context.read().unwrap();
         let type_context = Some(&*type_context_ref);
 
-        // Get CFG cache for flow-sensitive analysis
         let cfg_cache_ref = self.analysis_context.cfg_cache.read().unwrap();
 
         let mut validator = AsyncValidator::new(type_context, &cfg_cache_ref);
@@ -1355,7 +1275,6 @@ impl PassManager {
     fn run_protocol_checking(&mut self, module: &Module, source: &str) -> PassResult {
         use crate::semantic::passes::protocol_checking::ProtocolChecker;
 
-        // Use shared type context
         let context = self.analysis_context.type_context.read().unwrap();
 
         let mut checker = ProtocolChecker::new(&context);
@@ -1459,8 +1378,6 @@ impl PassManager {
         println!("{}", "=".repeat(80));
     }
 
-    // Parallel Analysis Methods
-
     /// Initialize module graph for parallel analysis
     pub fn init_module_graph(&mut self) -> &mut ModuleGraph {
         self.module_graph.get_or_insert_with(ModuleGraph::new)
@@ -1482,14 +1399,11 @@ impl PassManager {
         modules: &HashMap<String, (Module, String)>,
     ) -> Result<(), Vec<Diagnostic>> {
         if !self.config.parallel_execution {
-            // Fall back to sequential analysis
             return self.run_sequential_analysis(modules);
         }
 
-        // Initialize and build module dependency graph
         self.build_module_dependency_graph(modules)?;
 
-        // Perform topological sort to determine analysis order
         let analysis_order = match self.module_graph().unwrap().topological_sort() {
             Ok(order) => order,
             Err(e) => {
@@ -1500,13 +1414,11 @@ impl PassManager {
             }
         };
 
-        // Run analysis in parallel using rayon
         use rayon::prelude::*;
 
         let results: Vec<_> = analysis_order
             .par_iter()
             .map(|module_name| {
-                // Check cache first (note: cache access in parallel is safe for reads)
                 if let Ok(cache_key) = self.create_cache_key(module_name)
                     && let Some(cached_result) = self.module_cache.get(&cache_key)
                 {
@@ -1521,11 +1433,9 @@ impl PassManager {
                 }
 
                 if let Some((module, source)) = modules.get(module_name) {
-                    // Create a temporary pass manager for this module
                     let mut temp_manager =
                         PassManager::with_config(self.root_dir.clone(), self.config.clone());
 
-                    // Get file path from module graph if available
                     let file_path = self
                         .module_graph()
                         .and_then(|graph| graph.get_module(module_name))
@@ -1545,7 +1455,6 @@ impl PassManager {
             })
             .collect();
 
-        // Update cache after parallel operations complete
         for (module_name, result) in &results {
             if let Ok(cache_key) = self.create_cache_key(module_name) {
                 match result {
@@ -1577,7 +1486,6 @@ impl PassManager {
             }
         }
 
-        // Collect all diagnostics
         let mut all_diagnostics = Vec::new();
         for (module_name, result) in results {
             match result {
@@ -1618,7 +1526,6 @@ impl PassManager {
         &mut self,
         modules: &HashMap<String, (Module, String)>,
     ) -> Result<(), Vec<Diagnostic>> {
-        // First, extract all import information without borrowing self
         let mut module_imports = HashMap::new();
         for (module_name, (module, _source)) in modules {
             let mut imports = Vec::new();
@@ -1626,28 +1533,19 @@ impl PassManager {
             module_imports.insert(module_name.clone(), imports);
         }
 
-        // Initialize module graph
         let module_graph = self.init_module_graph();
 
-        // Add all modules to the graph
         for name in module_imports.keys() {
             module_graph.add_module(name.clone(), text_size::TextRange::default());
         }
 
-        // Register dependencies in the graph
         for (module_name, imports) in module_imports {
             for import_name in imports {
-                // Handle different import types
                 if import_name.starts_with('.') {
-                    // Relative import: resolve to absolute module path
-                    // For now, treat as module_name.parent based on depth
-                    // This is conservative - proper resolution happens in import_resolution pass
                     let level = import_name.chars().take_while(|&c| c == '.').count();
                     let name_part = import_name.trim_start_matches('.');
 
                     if !name_part.is_empty() {
-                        // For simple relative imports, construct canonical path
-                        // In production, use CompositeResolver for accurate paths
                         let parts: Vec<&str> = module_name.split('.').collect();
                         if level <= parts.len() {
                             let base_parts = &parts[..parts.len().saturating_sub(level - 1)];
@@ -1659,12 +1557,7 @@ impl PassManager {
                             module_graph.add_dependency(&module_name, &resolved_name);
                         }
                     }
-                } else if Self::is_builtin_module_static(&import_name) {
-                    // Register builtin module in graph with predefined interface
-                    module_graph.add_module(import_name.clone(), text_size::TextRange::default());
-                    module_graph.add_dependency(&module_name, &import_name);
                 } else {
-                    // Absolute import: add to dependency graph
                     module_graph.add_module(import_name.clone(), text_size::TextRange::default());
                     module_graph.add_dependency(&module_name, &import_name);
                 }
@@ -1688,16 +1581,12 @@ impl PassManager {
         timeout_seconds: Option<u64>,
     ) -> PassResult {
         if let Some(timeout_secs) = timeout_seconds {
-            // Use a simple timer-based timeout without threads to avoid complexity
-            // This is a compromise - true timeout would require async or more complex threading
             let start = Instant::now();
             let timeout_duration = Duration::from_secs(timeout_secs);
 
-            // Run the pass and check elapsed time
             let result = self.run_pass(pass_id, module, source);
 
             if start.elapsed() > timeout_duration {
-                // Pass exceeded timeout, return error
                 Err(vec![Diagnostic::error(format!(
                     "Pass '{}' exceeded timeout of {} seconds (took {:?})",
                     pass_id,
@@ -1708,7 +1597,6 @@ impl PassManager {
                 result
             }
         } else {
-            // Run without timeout
             self.run_pass(pass_id, module, source)
         }
     }
@@ -1734,22 +1622,16 @@ impl PassManager {
 
     /// Get cached result for a specific pass
     fn get_cached_pass_result(&self, pass_id: &str, content_hash: &str) -> Option<PassCacheResult> {
-        // Find the most recent cache entry for current file
         let current_file_key = self.current_file.as_ref()?;
 
-        // Search module cache for matching entry
         for (cache_key, cache_result) in &self.module_cache {
-            // Check if this is for the current file
             let current_file_str = current_file_key.to_string_lossy();
             let file_stem_str = current_file_key.file_stem()?.to_string_lossy();
-            if cache_key.module_name == current_file_str || cache_key.module_name == file_stem_str {
-                // Check if we have a cached result for this pass
-                if let Some(pass_result) = cache_result.pass_results.get(pass_id) {
-                    // Validate content hash matches
-                    if pass_result.content_hash == content_hash {
-                        return Some(pass_result.clone());
-                    }
-                }
+            if (cache_key.module_name == current_file_str || cache_key.module_name == file_stem_str)
+                && let Some(pass_result) = cache_result.pass_results.get(pass_id)
+                && pass_result.content_hash == content_hash
+            {
+                return Some(pass_result.clone());
             }
         }
 
@@ -1758,14 +1640,9 @@ impl PassManager {
 
     /// Store result for a specific pass in the cache
     fn store_pass_result(&mut self, pass_id: &str, result: PassCacheResult) {
-        // We need a module cache key to store per-pass results
-        // For now, we'll create a simple in-memory cache that's cleared on module change
-
-        // Create or update cache entry for current module
         if let Some(current_file) = &self.current_file {
             let module_name = current_file.to_string_lossy().to_string();
 
-            // Find or create cache entry
             let cache_key = ModuleCacheKey {
                 module_name: module_name.clone(),
                 mtime: std::time::SystemTime::now()
@@ -1775,7 +1652,6 @@ impl PassManager {
                 content_hash: Some(result.content_hash.clone()),
             };
 
-            // Get or create cache result
             let cache_result =
                 self.module_cache
                     .entry(cache_key)
@@ -1789,7 +1665,6 @@ impl PassManager {
                             .as_secs(),
                     });
 
-            // Store the pass result
             cache_result
                 .pass_results
                 .insert(pass_id.to_string(), result);
@@ -1800,7 +1675,6 @@ impl PassManager {
     fn get_module_mtime(&self, module_name: &str) -> Result<u64, std::io::Error> {
         use std::fs;
 
-        // Use the resolver to get the actual file path
         let file_path = self
             .resolver
             .resolve_module(module_name, None, &[])
@@ -1824,9 +1698,7 @@ impl PassManager {
     fn create_cache_key(&self, module_name: &str) -> Result<ModuleCacheKey, std::io::Error> {
         let mtime = self.get_module_mtime(module_name)?;
 
-        // Compute content hash if enabled (for more precise invalidation)
         let content_hash = if self.config.enable_persistent_cache {
-            // Use the resolver to get the file path
             match self.resolver.resolve_module(module_name, None, &[]) {
                 Ok(file_path) => self.compute_content_hash(&file_path).ok(),
                 Err(_) => None,
@@ -1845,11 +1717,9 @@ impl PassManager {
     /// Invalidate cache for modules that depend on the given module
     pub fn invalidate_dependent_modules(&mut self, changed_module: &str) {
         if let Some(graph) = &self.module_graph {
-            // Find all modules that depend on the changed module (directly or indirectly)
             let mut to_invalidate = Vec::new();
             let mut visited = HashSet::new();
 
-            // Recursively find all modules that depend on changed_module
             fn find_dependents(
                 current: &str,
                 target: &str,
@@ -1863,12 +1733,10 @@ impl PassManager {
                 visited.insert(current.to_string());
 
                 if let Some(node) = graph.get_module(current) {
-                    // If this module depends on the target, add it to invalidation list
                     if node.dependencies.contains(target) {
                         result.push(current.to_string());
                     }
 
-                    // Recursively check modules that depend on this module
                     for dependent in &node.dependents {
                         find_dependents(dependent, target, graph, visited, result);
                     }
@@ -1888,18 +1756,15 @@ impl PassManager {
                 }
             }
 
-            // Remove duplicates
             dependents.sort();
             dependents.dedup();
 
-            // Find cache keys to invalidate
             for cache_key in self.module_cache.keys() {
                 if dependents.contains(&cache_key.module_name) {
                     to_invalidate.push(cache_key.clone());
                 }
             }
 
-            // Remove invalidated entries
             for key in to_invalidate {
                 self.module_cache.remove(&key);
             }
@@ -1924,13 +1789,11 @@ impl PassManager {
         for stmt in module.body {
             match stmt {
                 Stmt::Import(import_stmt) => {
-                    // Handle "import module" statements
                     for (module_name, _alias) in import_stmt.names {
                         imports.push(module_name.to_string());
                     }
                 }
                 Stmt::From(from_stmt) => {
-                    // Handle "from module import ..." statements
                     if let Some(module_name) = from_stmt.module {
                         imports.push(module_name.to_string());
                     }
@@ -1941,8 +1804,8 @@ impl PassManager {
     }
 
     /// Check if a module name refers to a builtin module
+    #[allow(dead_code)]
     fn is_builtin_module_static(name: &str) -> bool {
-        // Basic check for common builtin modules
         matches!(
             name,
             "sys" | "os" | "math" | "json" | "re" | "datetime" | "collections" | "itertools"
@@ -1957,7 +1820,6 @@ impl PassManager {
         let mut all_diagnostics = Vec::new();
 
         for (module_name, (module, source)) in modules {
-            // Get file path from module graph if available
             let file_path = self
                 .module_graph()
                 .and_then(|graph| graph.get_module(module_name))
@@ -1967,10 +1829,10 @@ impl PassManager {
                 Ok(()) => {
                     if let Some(graph) = self.module_graph_mut() {
                         graph.set_module_state(
-                            module_name,
+                            &module_name,
                             crate::semantic::module::ModuleState::Analyzed,
                         );
-                        graph.set_module_result(module_name, Ok(()));
+                        graph.set_module_result(&module_name, Ok(()));
                     }
                 }
                 Err(diagnostics) => {
@@ -2005,7 +1867,6 @@ mod tests {
     fn test_execution_order() {
         let manager = PassManager::new(PathBuf::from("/test"));
 
-        // name_resolution and import_resolution should come before type_checking
         let order = manager.get_execution_order();
         let name_res_pos = order.iter().position(|id| id == "name_resolution");
         let type_check_pos = order.iter().position(|id| id == "type_checking");
@@ -2019,7 +1880,6 @@ mod tests {
     fn test_pass_dependencies() {
         let manager = PassManager::new(PathBuf::from("/test"));
 
-        // type_checking depends on type_inference
         let order = manager.get_execution_order();
         let type_inf_pos = order.iter().position(|id| id == "type_inference");
         let type_check_pos = order.iter().position(|id| id == "type_checking");
@@ -2033,7 +1893,6 @@ mod tests {
     fn test_priority_ordering() {
         let manager = PassManager::new(PathBuf::from("/test"));
 
-        // Critical passes should come before optional passes
         let order = manager.get_execution_order();
         let critical_max = order
             .iter()
@@ -2108,13 +1967,11 @@ mod tests {
     fn test_pass_registration() {
         let manager = PassManager::new(PathBuf::from("/test"));
 
-        // Verify all expected passes are registered
         assert!(manager.passes.contains_key("name_resolution"));
         assert!(manager.passes.contains_key("type_checking"));
         assert!(manager.passes.contains_key("ownership_check"));
         assert!(manager.passes.contains_key("async_validation"));
 
-        // Verify pass metadata
         let ownership = manager.passes.get("ownership_check").unwrap();
         assert_eq!(ownership.priority, PassPriority::Optional);
         assert!(!ownership.enabled_by_default);
@@ -2131,7 +1988,6 @@ mod tests {
         let manager = PassManager::with_config(PathBuf::from("/test"), config);
         assert!(manager.config().collect_statistics);
 
-        // Statistics should be initialized
         let stats = manager.get_statistics();
         assert!(!stats.is_empty());
     }

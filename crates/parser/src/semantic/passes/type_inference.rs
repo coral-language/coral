@@ -32,24 +32,24 @@ use std::collections::HashMap;
 
 /// Parse a constant string literal to infer its type
 fn infer_constant_from_str(value: &str) -> Type {
-    // Try to parse as different types
+
     if value == "True" || value == "False" {
         return Type::Bool;
     }
     if value == "None" {
         return Type::None;
     }
-    // Try to parse as int first (handles negative too)
+
     if value.parse::<i64>().is_ok() {
         return Type::Int;
     }
-    // Try to parse as float (includes scientific notation)
+
     if value.parse::<f64>().is_ok() {
         return Type::Float;
     }
-    // If it's not a number and not a keyword, it's likely a string
-    // The AST Constant node is used for string literals (with quotes already removed by parser)
-    // as well as numeric constants
+
+
+
     Type::Str
 }
 
@@ -57,7 +57,7 @@ fn infer_constant_from_str(value: &str) -> Type {
 pub fn parse_annotation(annotation: &Expr) -> Type {
     match annotation {
         Expr::Name(name) => {
-            // Simple type names
+
             match name.id {
                 "int" => Type::Int,
                 "str" => Type::Str,
@@ -67,18 +67,18 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                 "complex" => Type::Complex,
                 "None" => Type::None,
                 "Any" => Type::Any,
-                // Bare container types without parameters
+
                 "list" | "List" => Type::list(Type::Unknown),
                 "tuple" | "Tuple" => Type::tuple(vec![]), // Empty tuple type represents any tuple
                 "dict" | "Dict" => Type::dict(Type::Unknown, Type::Unknown),
                 "set" | "Set" => Type::set(Type::Unknown),
-                // For custom class names, assume they refer to class instances
-                // The name resolution pass should have validated that the class exists
+
+
                 _ => Type::Instance(name.id.to_string()),
             }
         }
         Expr::Subscript(subscript) => {
-            // Generic types like List[int], Dict[str, int]
+
             if let Expr::Name(name) = subscript.value {
                 match name.id {
                     "list" | "List" => {
@@ -86,7 +86,7 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                         Type::list(elem_ty)
                     }
                     "dict" | "Dict" => {
-                        // Dict[K, V] - slice should be a tuple
+
                         if let Expr::Tuple(tuple) = subscript.slice
                             && tuple.elts.len() == 2
                         {
@@ -101,7 +101,7 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                         Type::set(elem_ty)
                     }
                     "tuple" | "Tuple" => {
-                        // Tuple[int, str, float]
+
                         if let Expr::Tuple(tuple) = subscript.slice {
                             let types: Vec<Type> =
                                 tuple.elts.iter().map(parse_annotation).collect();
@@ -115,7 +115,7 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                         Type::optional(inner)
                     }
                     "Union" => {
-                        // Union[int, str]
+
                         if let Expr::Tuple(tuple) = subscript.slice {
                             let types: Vec<Type> =
                                 tuple.elts.iter().map(parse_annotation).collect();
@@ -131,7 +131,7 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
             }
         }
         Expr::Constant(constant) => {
-            // Literal types like Literal["foo"]
+
             if constant.value == "None" {
                 Type::None
             } else {
@@ -139,7 +139,7 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
             }
         }
         Expr::BinOp(binop) if binop.op == "|" => {
-            // Union types using | operator
+
             let left = parse_annotation(binop.left);
             let right = parse_annotation(binop.right);
             Type::union(vec![left, right])
@@ -275,14 +275,14 @@ impl<'a> TypeInference<'a> {
     fn resolve_attribute_type(&mut self, base_ty: &Type, attr_name: &str) -> Type {
         match base_ty {
             Type::Instance(class_name) => {
-                // For user-defined class instances, look up attribute in class metadata
-                // First try direct attribute lookup
+
+
                 let key = (class_name.to_string(), attr_name.to_string());
                 if let Some(attr_type) = self.context.class_attributes.get(&key) {
                     return attr_type.clone();
                 }
 
-                // If not found directly, walk the MRO (method resolution order)
+
                 if let Some(mro) = self.context.class_mro.get(class_name.as_str()) {
                     for base_class in mro {
                         let base_key = (base_class.clone(), attr_name.to_string());
@@ -292,29 +292,29 @@ impl<'a> TypeInference<'a> {
                     }
                 }
 
-                // Attribute not found in class hierarchy
+
                 Type::Unknown
             }
             Type::Class(_class_name) => {
-                // For built-in class types, use the registry
+
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
             Type::Module(module_name) => {
-                // Module-level attributes: look up in module exports
-                // This enables cross-module type checking
+
+
                 self.context
                     .module_exports
                     .get(module_name.as_str())
                     .and_then(|exports| exports.get(attr_name))
                     .cloned()
-                    // Export not found - could be dynamic or missing
-                    // Return Unknown rather than erroring (conservative approach)
+
+
                     .unwrap_or(Type::Unknown)
             }
             Type::Union(types) => {
-                // For union types, resolve attribute on each type and union the results
+
                 let mut result_types = Vec::new();
                 for ty in types {
                     let attr_ty = self.resolve_attribute_type(ty, attr_name);
@@ -331,38 +331,38 @@ impl<'a> TypeInference<'a> {
                 }
             }
             Type::Optional(inner_ty) => {
-                // For optional types, resolve the attribute on the inner type
+
                 self.resolve_attribute_type(inner_ty, attr_name)
             }
             Type::List(elem_ty) => {
-                // List attributes and methods
+
                 let _ = elem_ty;
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
             Type::Dict(key_ty, val_ty) => {
-                // Dict attributes and methods
+
                 let _ = (key_ty, val_ty);
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
             Type::Set(elem_ty) => {
-                // Set attributes and methods
+
                 let _ = elem_ty;
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
             Type::Tuple(elem_types) => {
-                // Tuple attributes and methods
+
                 let _ = elem_types;
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
-            // Handle built-in types (str, list, dict, etc.)
+
             _ => BUILTIN_ATTRIBUTE_REGISTRY
                 .lookup_builtin_attribute(base_ty, attr_name)
                 .unwrap_or(Type::Unknown),
@@ -380,32 +380,32 @@ impl<'a> TypeInference<'a> {
     fn infer_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Assign(assign) => {
-                // Infer type from the value
+
                 let value_type = self.infer_expr_val(&assign.value);
-                // All targets get the same type
+
                 for target in assign.targets {
                     self.infer_target(target, &value_type);
                 }
             }
             Stmt::AnnAssign(ann) => {
-                // Parse the type annotation
+
                 let annotated_type = parse_annotation(&ann.annotation);
 
-                // If there's a value, use the annotation type
+
                 if let Some(ref value) = ann.value {
                     let _value_type = self.infer_expr_val(value);
 
-                    // Use the annotation type, but could check compatibility
+
                     self.infer_target(&ann.target, &annotated_type);
 
-                    // Store the more specific type (annotation)
+
                     if let Expr::Name(name) = &ann.target {
                         self.context
                             .symbol_table_mut()
                             .set_symbol_type(name.id, annotated_type);
                     }
                 } else {
-                    // Just the annotation, no value
+
                     self.infer_target(&ann.target, &annotated_type);
                 }
             }
@@ -422,73 +422,73 @@ impl<'a> TypeInference<'a> {
                 let _ = self.infer_expr_val(&expr_stmt.value);
             }
             Stmt::FuncDef(func) => {
-                // Enter existing function scope (created by NameResolver)
+
                 let entered = self
                     .context
                     .symbol_table_mut()
                     .enter_child_scope(crate::semantic::symbol::ScopeType::Function, func.name);
 
                 if !entered {
-                    // Scope doesn't exist, skip (this shouldn't happen if name resolution ran first)
+
                     return;
                 }
 
-                // Infer return type
+
                 let declared_return_ty = if let Some(returns) = &func.returns {
                     parse_annotation(returns)
                 } else {
-                    // Infer return type from function body
-                    // Would require analyzing all return statements
-                    // Conservative: Unknown allows any return type
+
+
+
                     Type::Unknown
                 };
 
-                // Wrap return type in Coroutine for async functions
+
                 let return_ty = if func.is_async {
                     Type::Coroutine(Box::new(declared_return_ty))
                 } else {
                     declared_return_ty
                 };
 
-                // Build function type and store parameter types in symbol table
+
                 let func_ty = self.build_function_type_from_args(&func.args, return_ty);
                 self.context
                     .symbol_table_mut()
                     .set_symbol_type(func.name, func_ty);
 
-                // Infer types in function body
+
                 for stmt in func.body {
                     self.infer_stmt(stmt);
                 }
 
-                // Check if function is a generator
+
                 if self.context.is_generator_function(func.name) {
                     let yield_ty = self
                         .context
                         .get_generator_yield_type(func.name)
                         .unwrap_or(Type::Unknown);
 
-                    // Function's return type is Generator[YieldType]
+
                     let generator_ty = Type::generator(yield_ty);
 
-                    // Update function type to return Generator instead of declared return type
+
                     let func_ty = self.build_function_type_from_args(&func.args, generator_ty);
                     self.context
                         .symbol_table_mut()
                         .set_symbol_type(func.name, func_ty);
                 }
 
-                // Exit function scope
+
                 self.context.symbol_table_mut().pop_scope();
             }
             Stmt::ClassDef(class) => {
-                // Register the class name as a Class type in the current scope
-                // This allows the class to be referenced as a callable constructor
+
+
                 self.context
                     .symbol_table_mut()
                     .set_symbol_type(class.name, Type::Class(class.name.to_string()));
 
-                // Enter existing class scope (created by NameResolver)
+
                 let entered = self
                     .context
                     .symbol_table_mut()
@@ -499,17 +499,17 @@ impl<'a> TypeInference<'a> {
                         self.infer_stmt(stmt);
                     }
 
-                    // Exit class scope
+
                     self.context.symbol_table_mut().pop_scope();
                 }
             }
             Stmt::For(for_stmt) => {
                 let iter_type = self.infer_expr_val(&for_stmt.iter);
 
-                // Infer element type from iterable
+
                 let elem_type = Self::infer_iterable_element_type(iter_type);
 
-                // Set the type for the target variable
+
                 self.infer_target(&for_stmt.target, &elem_type);
 
                 for stmt in for_stmt.body {
@@ -564,10 +564,10 @@ impl<'a> TypeInference<'a> {
             Stmt::Match(match_stmt) => {
                 let subject_ty = self.infer_expr_val(&match_stmt.subject);
                 for case in match_stmt.cases {
-                    // Infer types from pattern bindings
+
                     self.infer_pattern_types(&case.pattern, &subject_ty);
 
-                    // Infer guard expression if present
+
                     if let Some(ref guard) = case.guard {
                         let _ = self.infer_expr(guard);
                     }
@@ -579,24 +579,24 @@ impl<'a> TypeInference<'a> {
             }
             Stmt::Yield(yield_stmt) => {
                 if let Some(ref value) = yield_stmt.value {
-                    // The value might be a YieldFrom expression, which needs special handling
+
                     match value {
                         Expr::YieldFrom(yield_from) => {
-                            // Handle yield from
+
                             let iter_ty = self.infer_expr(yield_from.value);
                             let elem_ty = Self::infer_iterable_element_type(iter_ty);
                             self.context
                                 .mark_current_function_as_generator(elem_ty.clone());
                         }
                         _ => {
-                            // Regular yield
+
                             let value_ty = self.infer_expr(value);
                             self.context
                                 .mark_current_function_as_generator(value_ty.clone());
                         }
                     }
                 } else {
-                    // yield without value
+
                     self.context.mark_current_function_as_generator(Type::None);
                 }
             }
@@ -608,19 +608,19 @@ impl<'a> TypeInference<'a> {
     fn infer_target(&mut self, target: &Expr, ty: &Type) {
         match target {
             Expr::Name(name) => {
-                // Store type for this name in the symbol table
+
                 self.context
                     .symbol_table_mut()
                     .set_symbol_type(name.id, ty.clone());
             }
             Expr::Tuple(tuple) => {
-                // Unpack tuple type if available
+
                 if let Type::Tuple(types) = ty {
                     for (elem, elem_ty) in tuple.elts.iter().zip(types.iter()) {
                         self.infer_target(elem, elem_ty);
                     }
                 } else {
-                    // If the type is not a tuple, try to treat it as an iterable
+
                     let elem_ty = Self::infer_iterable_element_type(ty.clone());
                     for elem in tuple.elts {
                         self.infer_target(elem, &elem_ty);
@@ -628,33 +628,33 @@ impl<'a> TypeInference<'a> {
                 }
             }
             Expr::List(list) => {
-                // Handle list destructuring
+
                 if let Type::List(elem_ty) = ty {
-                    // Check for starred expressions (rest patterns)
+
                     let starred_count = list
                         .elts
                         .iter()
                         .filter(|e| matches!(e, Expr::Starred(_)))
                         .count();
                     if starred_count == 0 {
-                        // Simple case: all elements get the same type
+
                         for elem in list.elts {
                             self.infer_target(elem, elem_ty);
                         }
                     } else if starred_count == 1 {
-                        // Rest pattern: [first, *rest, last] = items
+
                         for elem in list.elts {
                             if let Expr::Starred(starred) = elem {
-                                // Rest gets List[elem_ty]
+
                                 self.infer_target(starred.value, &Type::List(elem_ty.clone()));
                             } else {
-                                // Regular elements get elem_ty
+
                                 self.infer_target(elem, elem_ty);
                             }
                         }
                     }
                 } else {
-                    // Try to extract element type from iterable
+
                     let elem_ty = Self::infer_iterable_element_type(ty.clone());
                     for elem in list.elts {
                         if let Expr::Starred(starred) = elem {
@@ -669,19 +669,19 @@ impl<'a> TypeInference<'a> {
                 }
             }
             Expr::Dict(dict) => {
-                // Handle dictionary unpacking patterns
+
                 if let Type::Dict(_key_ty, val_ty) = ty {
-                    // Match keys to patterns
+
                     for (_key, value) in dict.keys.iter().zip(dict.values.iter()) {
-                        // The key should be a constant or name to match
-                        // The value is the pattern to bind the dict value
+
+
                         self.infer_target(value, val_ty);
                     }
                 }
             }
             Expr::Starred(starred) => {
-                // Starred expression in destructuring context
-                // The starred variable gets a list of the element type
+
+
                 if let Type::List(elem_ty) = ty {
                     self.infer_target(starred.value, &Type::List(elem_ty.clone()));
                 } else {
@@ -713,7 +713,7 @@ impl<'a> TypeInference<'a> {
             Type::Generator(elem) => *elem, // Support generator iteration
             Type::Any => Type::Any,         // Support gradual typing
             Type::Union(types) => {
-                // Infer iteration type for union - return union of all element types
+
                 let elem_types: Vec<Type> = types
                     .into_iter()
                     .map(Self::infer_iterable_element_type)
@@ -736,7 +736,7 @@ impl<'a> TypeInference<'a> {
         self.infer_expr(expr)
     }
 
-    // Add new method variant
+
     fn infer_expr_with_expected(&mut self, expr: &Expr, expected: Option<Type>) -> Type {
         self.context.push_expected_type(expected);
         let ty = self.infer_expr(expr);
@@ -747,24 +747,24 @@ impl<'a> TypeInference<'a> {
     /// Infer type from an expression
     fn infer_expr(&mut self, expr: &Expr) -> Type {
         let ty = match expr {
-            // Literals
+
             Expr::Constant(constant) => infer_constant_from_str(constant.value),
             Expr::Complex(_) => Type::Complex,
             Expr::Bytes(_) => Type::Bytes,
             Expr::Name(name) => {
-                // Look up name in symbol table
+
                 self.context
                     .symbol_table()
                     .get_symbol_type(name.id)
                     .unwrap_or(Type::Unknown)
             }
 
-            // Collections
+
             Expr::List(list) => {
                 if list.elts.is_empty() {
                     Type::list(Type::Unknown)
                 } else {
-                    // Infer element type from first element
+
                     let elem_ty = self.infer_expr(&list.elts[0]);
                     Type::list(elem_ty)
                 }
@@ -785,7 +785,7 @@ impl<'a> TypeInference<'a> {
                 if dict.keys.is_empty() {
                     Type::dict(Type::Unknown, Type::Unknown)
                 } else {
-                    // Keys can be None for ** unpacking, skip those
+
                     let key_ty = if let Some(ref key) = dict.keys[0] {
                         self.infer_expr(key)
                     } else {
@@ -796,47 +796,47 @@ impl<'a> TypeInference<'a> {
                 }
             }
 
-            // Comprehensions
+
             Expr::ListComp(comp) => {
-                // Enter existing comprehension scope (created by NameResolver)
+
                 let entered = self
                     .context
                     .symbol_table_mut()
                     .enter_child_scope(crate::semantic::symbol::ScopeType::Comprehension, "<comp>");
 
                 if !entered {
-                    // Fallback: compute without scope navigation
+
                     let elem_ty = self.infer_expr(comp.elt);
                     return Type::list(elem_ty);
                 }
 
-                // Infer types for generators (iter and conditions)
+
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
-                    // Infer element type from iterable and set for target
+
                     let elem_ty = Self::infer_iterable_element_type(iter_ty);
                     self.infer_target(&generator.target, &elem_ty);
 
-                    // Infer condition types
+
                     for cond in generator.ifs {
                         let _cond_ty = self.infer_expr(cond);
                     }
                 }
                 let elem_ty = self.infer_expr(comp.elt);
 
-                // Exit comprehension scope
+
                 self.context.symbol_table_mut().pop_scope();
 
                 Type::list(elem_ty)
             }
             Expr::SetComp(comp) => {
-                // Enter comprehension scope
+
                 self.context.symbol_table_mut().push_scope(
                     crate::semantic::symbol::ScopeType::Comprehension,
                     "<comp>".to_string(),
                 );
 
-                // Infer types for generators (similar to ListComp)
+
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
                     let elem_ty = Self::infer_iterable_element_type(iter_ty);
@@ -847,19 +847,19 @@ impl<'a> TypeInference<'a> {
                 }
                 let elem_ty = self.infer_expr(comp.elt);
 
-                // Exit comprehension scope
+
                 self.context.symbol_table_mut().pop_scope();
 
                 Type::set(elem_ty)
             }
             Expr::DictComp(comp) => {
-                // Enter comprehension scope
+
                 self.context.symbol_table_mut().push_scope(
                     crate::semantic::symbol::ScopeType::Comprehension,
                     "<comp>".to_string(),
                 );
 
-                // Infer types for generators (similar to ListComp)
+
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
                     let elem_ty = Self::infer_iterable_element_type(iter_ty);
@@ -871,19 +871,19 @@ impl<'a> TypeInference<'a> {
                 let key_ty = self.infer_expr(comp.key);
                 let value_ty = self.infer_expr(comp.value);
 
-                // Exit comprehension scope
+
                 self.context.symbol_table_mut().pop_scope();
 
                 Type::dict(key_ty, value_ty)
             }
             Expr::GeneratorExp(comp) => {
-                // Enter comprehension scope
+
                 self.context.symbol_table_mut().push_scope(
                     crate::semantic::symbol::ScopeType::Comprehension,
                     "<comp>".to_string(),
                 );
 
-                // Infer types for generators (similar to ListComp)
+
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
                     let elem_ty = Self::infer_iterable_element_type(iter_ty);
@@ -892,99 +892,99 @@ impl<'a> TypeInference<'a> {
                         let _cond_ty = self.infer_expr(cond);
                     }
                 }
-                // Generator expressions return generator objects
-                // Type is Generator[T] where T is the element type
+
+
                 let elem_ty = self.infer_expr(comp.elt);
 
-                // Exit comprehension scope
+
                 self.context.symbol_table_mut().pop_scope();
 
                 Type::generator(elem_ty) // Return proper generator type
             }
 
-            // Operations
+
             Expr::BinOp(binop) => self.infer_binop(binop),
             Expr::UnaryOp(unary) => self.infer_unaryop(unary),
             Expr::Compare(compare) => {
-                // Infer types of all operands for type storage
+
                 let _left_ty = self.infer_expr(compare.left);
                 for comparator in compare.comparators {
                     let _comp_ty = self.infer_expr(comparator);
                 }
-                // Comparisons always return bool
+
                 Type::Bool
             }
             Expr::BoolOp(boolop) => {
-                // Infer types of all operands for type storage
+
                 for value in boolop.values {
                     let _val_ty = self.infer_expr(value);
                 }
-                // Boolean operations return bool
+
                 Type::Bool
             }
 
-            // Function calls
+
             Expr::Call(call) => {
-                // Infer function type
+
                 let func_ty = self.infer_expr(call.func);
 
-                // Extract parameter types if function type is known
+
                 let param_types = match &func_ty {
                     Type::Function { params, .. } => Some(params.as_slice()),
                     _ => None,
                 };
 
-                // Infer argument types with expected types from parameters
+
                 for (i, arg) in call.args.iter().enumerate() {
                     let expected =
                         param_types.and_then(|params| params.get(i).map(|(_name, ty)| ty.clone()));
                     self.infer_expr_with_expected(arg, expected);
                 }
 
-                // Infer keyword argument types with name matching
+
                 for keyword in call.keywords {
-                    // Infer the keyword argument value type
-                    // In a full implementation, we would match keyword.arg name
-                    // to function parameter names for better type inference
+
+
+
                     let _kwarg_ty = self.infer_expr(&keyword.value);
-                    // Note: Full keyword matching requires parameter names in Type::Function
+
                 }
 
-                // Return the function's return type or instance type for class constructors
+
                 match func_ty {
                     Type::Function { returns, .. } => *returns,
                     Type::Class(class_name) => {
-                        // Class instantiation returns an instance of the class
+
                         Type::Instance(class_name)
                     }
                     _ => Type::Unknown,
                 }
             }
 
-            // Attribute access
+
             Expr::Attribute(attr) => {
                 let value_ty = self.infer_expr(attr.value);
                 self.resolve_attribute_type(&value_ty, attr.attr)
             }
 
-            // Subscript
+
             Expr::Subscript(subscript) => {
                 let value_ty = self.infer_expr(subscript.value);
-                // Also infer the slice type (important for storing types)
+
                 let _slice_ty = self.infer_expr(subscript.slice);
 
                 match value_ty {
                     Type::List(elem_ty) => *elem_ty,
                     Type::Dict(_, val_ty) => *val_ty,
                     Type::Tuple(types) => {
-                        // Check if slice is a constant integer
+
                         if let Expr::Constant(constant) = subscript.slice
                             && let Ok(index) = constant.value.parse::<usize>()
                             && index < types.len()
                         {
                             return types[index].clone();
                         }
-                        // Negative indices
+
                         if let Expr::Constant(constant) = subscript.slice
                             && let Ok(index) = constant.value.parse::<isize>()
                             && index < 0
@@ -994,7 +994,7 @@ impl<'a> TypeInference<'a> {
                                 return types[positive_index as usize].clone();
                             }
                         }
-                        // If we can't determine the index, return union of all types
+
                         if types.is_empty() {
                             Type::Unknown
                         } else if types.iter().all(|t| t == &types[0]) {
@@ -1009,15 +1009,15 @@ impl<'a> TypeInference<'a> {
                 }
             }
 
-            // Lambda
+
             Expr::Lambda(lambda) => {
-                // Enter lambda scope
+
                 self.context.symbol_table_mut().push_scope(
                     crate::semantic::symbol::ScopeType::Function,
                     "<lambda>".to_string(),
                 );
 
-                // Get expected function type from context if available
+
                 let expected_params =
                     if let Some(Type::Function { params, .. }) = self.context.expected_type() {
                         Some(params.clone())
@@ -1027,18 +1027,18 @@ impl<'a> TypeInference<'a> {
 
                 let mut param_types = Vec::new();
 
-                // Infer parameter types from annotations OR expected types
+
                 for (i, arg) in lambda.args.args.iter().enumerate() {
                     let param_type = if let Some(annotation) = &arg.annotation {
-                        // Explicit annotation takes precedence
+
                         parse_annotation(annotation)
                     } else if let Some((_name, expected_ty)) =
                         expected_params.as_ref().and_then(|p| p.get(i))
                     {
-                        // Use expected type from call site
+
                         expected_ty.clone()
                     } else {
-                        // No information available
+
                         Type::Unknown
                     };
 
@@ -1048,7 +1048,7 @@ impl<'a> TypeInference<'a> {
                         .set_symbol_type(arg.arg, param_type);
                 }
 
-                // Handle positional-only args
+
                 for arg in lambda.args.posonlyargs {
                     let param_type = arg
                         .annotation
@@ -1061,7 +1061,7 @@ impl<'a> TypeInference<'a> {
                         .set_symbol_type(arg.arg, param_type);
                 }
 
-                // Handle keyword-only args
+
                 for arg in lambda.args.kwonlyargs {
                     let param_type = arg
                         .annotation
@@ -1074,13 +1074,13 @@ impl<'a> TypeInference<'a> {
                         .set_symbol_type(arg.arg, param_type);
                 }
 
-                // Infer the body expression type (this is the return type)
+
                 let return_ty = self.infer_expr(lambda.body);
 
-                // Analyze closure captures before exiting scope
+
                 self.context.symbol_table_mut().analyze_closures();
 
-                // Collect captured variables
+
                 let mut captures = Vec::new();
                 {
                     let current_scope = self.context.symbol_table().current_scope();
@@ -1094,19 +1094,19 @@ impl<'a> TypeInference<'a> {
                     }
                 }
 
-                // Exit lambda scope
+
                 self.context.symbol_table_mut().pop_scope();
 
-                // Build function type with captures
+
                 Type::function_with_captures(param_types, return_ty, captures)
             }
 
-            // If expression
+
             Expr::IfExp(ifexp) => {
                 let _test_ty = self.infer_expr(ifexp.test);
                 let body_ty = self.infer_expr(ifexp.body);
                 let else_ty = self.infer_expr(ifexp.orelse);
-                // Return union of both branches
+
                 if body_ty == else_ty {
                     body_ty
                 } else {
@@ -1117,12 +1117,12 @@ impl<'a> TypeInference<'a> {
             Expr::Yield(yield_expr) => {
                 if let Some(value) = yield_expr.value {
                     let value_ty = self.infer_expr(value);
-                    // Mark that we're in a generator context
+
                     self.context
                         .mark_current_function_as_generator(value_ty.clone());
                     Type::generator(value_ty)
                 } else {
-                    // yield without value yields None
+
                     self.context.mark_current_function_as_generator(Type::None);
                     Type::generator(Type::None)
                 }
@@ -1130,59 +1130,59 @@ impl<'a> TypeInference<'a> {
 
             Expr::YieldFrom(yield_from) => {
                 let iter_ty = self.infer_expr(yield_from.value);
-                // Extract element type from the iterable
+
                 let elem_ty = Self::infer_iterable_element_type(iter_ty);
                 self.context
                     .mark_current_function_as_generator(elem_ty.clone());
                 Type::generator(elem_ty)
             }
 
-            // String expressions
+
             Expr::TString(_) => Type::Str,
             Expr::JoinedStr(_) => Type::Str,
             Expr::FormattedValue(_) => Type::Str,
 
-            // Starred expressions - type depends on context
+
             Expr::Starred(starred) => self.infer_expr(starred.value),
 
-            // Await expressions - unwrap the awaited type
+
             Expr::Await(await_expr) => {
                 let awaited_type = self.infer_expr(await_expr.value);
 
-                // Unwrap coroutine/future types to get the yielded value type
+
                 match awaited_type {
-                    // Coroutine(T) -> T
+
                     Type::Coroutine(inner) => *inner,
-                    // Handle common async library types (Future, Task, Coroutine instances)
+
                     Type::Instance(ref name)
                         if name == "Future" || name == "Task" || name == "Coroutine" =>
                     {
-                        // Without generic type info, we can't determine the inner type
+
                         Type::Unknown
                     }
-                    // Generic types might have the awaited type as a parameter
+
                     Type::Generic { base, params } if matches!(*base, Type::Instance(ref n) if n == "Future" || n == "Task" || n == "Coroutine") =>
                     {
-                        // First parameter is typically the return type
+
                         params.first().cloned().unwrap_or(Type::Unknown)
                     }
-                    // Unknown types are conservatively treated as awaitable
+
                     Type::Unknown => Type::Unknown,
-                    // For any other type, assume it's the awaited value (validation happens elsewhere)
+
                     other => other,
                 }
             }
 
-            // Slice expressions - used in subscripts
+
             Expr::Slice(_) => Type::Unknown, // Slices don't have a direct type
 
-            // Named expressions (walrus operator :=)
+
             Expr::NamedExpr(named) => self.infer_expr(named.value),
 
             _ => Type::Unknown,
         };
 
-        // Store the inferred type for this expression
+
         let span = expr.span();
         self.context
             .set_type_by_span(span.start().into(), span.end().into(), ty.clone());
@@ -1195,38 +1195,38 @@ impl<'a> TypeInference<'a> {
         let left_ty = self.infer_expr(binop.left);
         let right_ty = self.infer_expr(binop.right);
 
-        // Simple inference based on operation string
+
         match binop.op {
             "+" => {
-                // String concatenation
+
                 if left_ty == Type::Str && right_ty == Type::Str {
                     return Type::Str;
                 }
-                // Numeric addition
+
                 Self::infer_numeric_binop(&left_ty, &right_ty, false)
             }
             "/" => {
-                // Division always returns float
+
                 Type::Float
             }
             "-" | "*" | "//" | "%" | "**" => Self::infer_numeric_binop(&left_ty, &right_ty, false),
             "|" | "^" | "&" | "<<" | ">>" => {
-                // Bitwise ops work on integers and bools
+
                 match (&left_ty, &right_ty) {
                     (Type::Int, Type::Int) | (Type::Bool, Type::Bool) => Type::Int,
                     (Type::Bool, Type::Int) | (Type::Int, Type::Bool) => Type::Int,
-                    // Support Any type for gradual typing
+
                     (Type::Any, _) | (_, Type::Any) => Type::Any,
                     _ => Type::Unknown,
                 }
             }
             "@" => {
-                // Matrix multiplication - commonly used for NumPy-style operations
-                // If both types support matmul, preserve the type
+
+
                 match (&left_ty, &right_ty) {
-                    // Support Any for gradual typing
+
                     (Type::Any, _) | (_, Type::Any) => Type::Any,
-                    // Lists can be used for matrix operations in some contexts
+
                     (Type::List(_), Type::List(_)) => left_ty,
                     _ => Type::Unknown,
                 }
@@ -1250,11 +1250,11 @@ impl<'a> TypeInference<'a> {
                     Type::Int
                 }
             }
-            // Support Any type for gradual typing
+
             (Type::Any, _) | (_, Type::Any) => Type::Any,
-            // Allow numeric operations with unions containing numeric types
+
             (Type::Union(types), other) | (other, Type::Union(types)) => {
-                // If all union members are numeric, return a numeric type
+
                 let all_numeric = types.iter().all(|t| {
                     matches!(
                         t,
@@ -1262,7 +1262,7 @@ impl<'a> TypeInference<'a> {
                     )
                 });
                 if all_numeric {
-                    // Return the most general numeric type in the union
+
                     if types.iter().any(|t| matches!(t, Type::Complex)) {
                         Type::Complex
                     } else if types.iter().any(|t| matches!(t, Type::Float)) {
@@ -1271,7 +1271,7 @@ impl<'a> TypeInference<'a> {
                         Type::Int
                     }
                 } else {
-                    // Check if the other type is numeric
+
                     if matches!(
                         other,
                         Type::Int | Type::Float | Type::Complex | Type::Bool | Type::Any
@@ -1293,7 +1293,7 @@ impl<'a> TypeInference<'a> {
         match unary.op {
             "not" => Type::Bool,
             "+" | "-" => {
-                // Unary + and - preserve numeric types
+
                 match &operand_ty {
                     Type::Int | Type::Float | Type::Complex | Type::Bool => operand_ty,
                     Type::Any => Type::Any,
@@ -1301,7 +1301,7 @@ impl<'a> TypeInference<'a> {
                 }
             }
             "~" => {
-                // Bitwise NOT works on integers and bools
+
                 match &operand_ty {
                     Type::Int | Type::Bool => Type::Int,
                     Type::Any => Type::Any,
@@ -1320,46 +1320,46 @@ impl<'a> TypeInference<'a> {
     ) -> Type {
         let mut params: Vec<(Option<String>, Type)> = Vec::new();
 
-        // Positional-only arguments
+
         for arg in args.posonlyargs {
             let ty = arg
                 .annotation
                 .as_ref()
                 .map(|ann| parse_annotation(ann))
                 .unwrap_or(Type::Unknown);
-            // Include parameter name for keyword argument validation
+
             params.push((Some(arg.arg.to_string()), ty.clone()));
-            // Store parameter type in symbol table
+
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
 
-        // Regular arguments
+
         for arg in args.args {
             let ty = arg
                 .annotation
                 .as_ref()
                 .map(|ann| parse_annotation(ann))
                 .unwrap_or(Type::Unknown);
-            // Include parameter name for keyword argument validation
+
             params.push((Some(arg.arg.to_string()), ty.clone()));
-            // Store parameter type in symbol table
+
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
 
-        // Keyword-only arguments
+
         for arg in args.kwonlyargs {
             let ty = arg
                 .annotation
                 .as_ref()
                 .map(|ann| parse_annotation(ann))
                 .unwrap_or(Type::Unknown);
-            // Include parameter name for keyword argument validation
+
             params.push((Some(arg.arg.to_string()), ty.clone()));
-            // Store parameter type in symbol table
+
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
 
-        // Handle *args and **kwargs
+
         if let Some(vararg) = &args.vararg {
             let ty = vararg
                 .annotation
@@ -1393,40 +1393,40 @@ impl<'a> TypeInference<'a> {
 
         match pattern {
             Pattern::MatchAs(match_as) => {
-                // Bind the name to the subject type (or narrowed type)
+
                 if let Some(name) = match_as.name {
                     self.context
                         .symbol_table_mut()
                         .set_symbol_type(name, subject_ty.clone());
                 }
-                // Recursively handle nested pattern
+
                 if let Some(ref inner_pattern) = match_as.pattern {
                     self.infer_pattern_types(inner_pattern, subject_ty);
                 }
             }
             Pattern::MatchValue(_) => {
-                // Match value patterns don't bind names
+
             }
             Pattern::MatchOr(match_or) => {
-                // All alternatives should match the same type
+
                 for alt_pattern in match_or.patterns {
                     self.infer_pattern_types(alt_pattern, subject_ty);
                 }
             }
             Pattern::MatchSequence(match_seq) => {
-                // Extract element type from sequence
+
                 let elem_ty = match subject_ty {
                     Type::List(elem) => (**elem).clone(),
                     Type::Tuple(elems) => {
-                        // For tuple patterns, try to match structurally
+
                         if elems.len() == match_seq.patterns.len() {
-                            // Match each pattern to corresponding tuple element
+
                             for (pat, ty) in match_seq.patterns.iter().zip(elems.iter()) {
                                 self.infer_pattern_types(pat, ty);
                             }
                             return;
                         } else {
-                            // If lengths don't match, use union of all types
+
                             if elems.is_empty() {
                                 Type::Unknown
                             } else {
@@ -1438,42 +1438,42 @@ impl<'a> TypeInference<'a> {
                     _ => Self::infer_iterable_element_type(subject_ty.clone()),
                 };
 
-                // Bind each pattern to the element type
+
                 for pat in match_seq.patterns {
                     self.infer_pattern_types(pat, &elem_ty);
                 }
             }
             Pattern::MatchMapping(match_map) => {
-                // Extract value type from dict
+
                 let val_ty = match subject_ty {
                     Type::Dict(_, val) => (**val).clone(),
                     _ => Type::Unknown,
                 };
 
-                // Bind each value pattern to the dict value type
+
                 for pat in match_map.patterns {
                     self.infer_pattern_types(pat, &val_ty);
                 }
 
-                // Handle rest pattern (captures remaining keys)
+
                 if let Some(rest_name) = match_map.rest {
-                    // Rest gets a dict of the same type
+
                     self.context
                         .symbol_table_mut()
                         .set_symbol_type(rest_name, subject_ty.clone());
                 }
             }
             Pattern::MatchClass(match_class) => {
-                // For class patterns, infer types from constructor signature
-                // This is a simplified version - full implementation would need class analysis
+
+
                 let _class_name = match &match_class.cls {
                     crate::ast::Expr::Name(name) => name.id,
                     _ => "",
                 };
 
-                // Bind class patterns to constructor parameter types
-                // Requires ClassAnalyzer to resolve constructor signature
-                // Conservative: bind to Unknown (any type accepted)
+
+
+
                 for pat in match_class.patterns {
                     self.infer_pattern_types(pat, &Type::Unknown);
                 }
@@ -1482,7 +1482,7 @@ impl<'a> TypeInference<'a> {
                 }
             }
             Pattern::MatchSingleton(_singleton) => {
-                // Singleton patterns don't bind names
+
             }
         }
     }
@@ -1519,18 +1519,18 @@ n = None
 "#;
         let context = infer_types(source);
 
-        // Verify that type inference stored results
+
         assert!(!context.expr_types.is_empty(), "Should have inferred types");
 
-        // Verify that literal types were inferred correctly
-        // Check that we have at least 5 types (one for each literal)
+
+
         assert!(
             context.expr_types.len() >= 5,
             "Should have inferred at least 5 literal types, got {}",
             context.expr_types.len()
         );
 
-        // Verify specific literal types exist in the inferred types
+
         let has_int = context.expr_types.values().any(|t| matches!(t, Type::Int));
         let has_float = context
             .expr_types
@@ -1557,10 +1557,10 @@ dct = {"a": 1, "b": 2}
 "#;
         let context = infer_types(source);
 
-        // Verify that collection types were inferred
+
         assert!(!context.expr_types.is_empty(), "Should have inferred types");
 
-        // Check for specific collection types in the inferred types
+
         let has_list = context
             .expr_types
             .values()
@@ -1593,10 +1593,10 @@ c = "hello" + "world"
 "#;
         let context = infer_types(source);
 
-        // Verify that binary operation result types were inferred
+
         assert!(!context.expr_types.is_empty(), "Should have inferred types");
 
-        // Check for expected types from binary operations
+
         let has_int = context.expr_types.values().any(|t| matches!(t, Type::Int));
         let has_float = context
             .expr_types
@@ -1618,8 +1618,8 @@ c = "hello" + "world"
 gen = (x * 2 for x in [1, 2, 3])
 "#;
         let _context = infer_types(source);
-        // Type inference should run without panicking
-        // The actual type checking will be done when we integrate with name resolution
+
+
     }
 
     #[test]
@@ -1628,7 +1628,7 @@ gen = (x * 2 for x in [1, 2, 3])
 result = [x for gen in [(y for y in [1,2,3])] for x in gen]
 "#;
         let _ctx = infer_types(source);
-        // Should handle nested generator iteration without panicking
+
     }
 
     #[test]
@@ -1640,8 +1640,8 @@ def takes_int(x: int) -> int:
 result = takes_int(42)
 "#;
         let _ctx = infer_types(source);
-        // Call site propagation should run without panicking
-        // Full integration will happen when name resolution is run first
+
+
     }
 
     #[test]
@@ -1650,8 +1650,8 @@ result = takes_int(42)
 f = lambda x: x + 1
 "#;
         let _ctx = infer_types(source);
-        // Lambda inference should run without panicking
-        // Full integration will happen when name resolution is run first
+
+
     }
 
     #[test]
@@ -1660,7 +1660,7 @@ f = lambda x: x + 1
 g = lambda x: int: x * 2
 "#;
         let _ctx = infer_types(source);
-        // Lambda with annotations should run without panicking
+
     }
 
     #[test]
@@ -1672,7 +1672,7 @@ def apply(f, x: int) -> int:
 result = apply(lambda x: x * 2, 5)
 "#;
         let _ctx = infer_types(source);
-        // Lambda from call site should run without panicking
+
     }
 
     #[test]
@@ -1684,7 +1684,7 @@ def make_adder(n: int):
 add_five = make_adder(5)
 "#;
         let _ctx = infer_types(source);
-        // Lambda closure capture should run without panicking
+
     }
 
     #[test]
@@ -1702,9 +1702,9 @@ keys = d.keys()
 "#;
         let ctx = infer_types(source);
 
-        // Check that attribute access expressions have proper types
-        // Note: This test just ensures the code runs without panicking
-        // Full type checking integration will be tested separately
+
+
+
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1716,9 +1716,9 @@ result = s.upper()
 "#;
         let ctx = infer_types(source);
 
-        // The result of s.upper() should be inferred as str
-        // We can't easily check this without a more sophisticated test framework,
-        // but we can ensure the inference runs without errors
+
+
+
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1730,7 +1730,7 @@ count = lst.count(1)
 "#;
         let ctx = infer_types(source);
 
-        // lst.count(1) should return an int
+
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1742,7 +1742,7 @@ keys = d.keys()
 "#;
         let ctx = infer_types(source);
 
-        // d.keys() should return a list-like type
+
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1754,8 +1754,8 @@ class Person:
     age: int = 30
 "#;
         let ctx = infer_types(source);
-        // Simple class definition should parse and infer without errors
-        // The class body has annotated assignments which create expr_types
+
+
         let _ = ctx; // Just ensure it parses without panicking
     }
 
@@ -1768,7 +1768,7 @@ class Person:
         self.age = age
 "#;
         let ctx = infer_types(source);
-        // Class with constructor method should parse without errors
+
         let _ = ctx;
     }
 
@@ -1783,7 +1783,7 @@ class Calculator:
         return a * b
 "#;
         let ctx = infer_types(source);
-        // Class with multiple methods should parse without errors
+
         let _ = ctx;
     }
 
@@ -1797,7 +1797,7 @@ class Counter:
         self.value = 0  # Instance attribute
 "#;
         let ctx = infer_types(source);
-        // Should distinguish class vs instance attributes
+
         let _ = ctx;
     }
 
@@ -1810,7 +1810,7 @@ class Math:
         return a + b
 "#;
         let ctx = infer_types(source);
-        // Static method should be recognized
+
         let _ = ctx;
     }
 
@@ -1823,7 +1823,7 @@ class Factory:
         return cls()
 "#;
         let ctx = infer_types(source);
-        // Class method should be recognized
+
         let _ = ctx;
     }
 
@@ -1839,7 +1839,7 @@ class Circle:
         return self._radius
 "#;
         let ctx = infer_types(source);
-        // Property decorator should be recognized
+
         let _ = ctx;
     }
 
@@ -1859,7 +1859,7 @@ class Circle:
         self._radius = value
 "#;
         let ctx = infer_types(source);
-        // Property with setter should be recognized
+
         let _ = ctx;
     }
 
@@ -1875,7 +1875,7 @@ class Dog(Animal):
         pass
 "#;
         let ctx = infer_types(source);
-        // Inheritance should be recognized
+
         let _ = ctx;
     }
 
@@ -1895,7 +1895,7 @@ class C(A, B):
         pass
 "#;
         let ctx = infer_types(source);
-        // Multiple inheritance should be recognized
+
         let _ = ctx;
     }
 
@@ -1907,7 +1907,7 @@ upper_result = s.upper()
 length = len(s)
 "#;
         let ctx = infer_types(source);
-        // Built-in string attributes should work
+
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1926,7 +1926,7 @@ person = Person()
 city = person.address.city
 "#;
         let ctx = infer_types(source);
-        // Chained attribute access should parse without errors
+
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1939,7 +1939,7 @@ lst.pop()
 lst.clear()
 "#;
         let ctx = infer_types(source);
-        // List method calls should infer without errors
+
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1953,7 +1953,7 @@ items = d.items()
 d.clear()
 "#;
         let ctx = infer_types(source);
-        // Dict method calls should infer without errors
+
         assert!(!ctx.expr_types.is_empty());
     }
 }

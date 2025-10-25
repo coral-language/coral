@@ -389,7 +389,7 @@ impl<'a> HirValidator<'a> {
             self.validate_expression(decorator);
         }
 
-        // Check if class metadata exists
+
         if self.context.get_class_metadata(class.name).is_none() {
             self.errors.push(HirValidationError::InvalidMro {
                 class: class.name,
@@ -402,7 +402,7 @@ impl<'a> HirValidator<'a> {
     fn validate_class_hierarchies(&mut self) {
         let classes = self.context.find_classes();
         for class in classes {
-            // Check if class metadata exists and has valid MRO
+
             if let Some(metadata) = self.context.get_class_metadata(class.name)
                 && metadata.mro.is_empty()
             {

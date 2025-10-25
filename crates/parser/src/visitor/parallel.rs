@@ -183,18 +183,18 @@ impl<V: Visitor<'static>> ParallelVisitor<V> {
     /// between sequential and parallel traversal.
     pub fn visit_stmts_adaptive(&self, stmts: &[&Stmt<'static>]) {
         if stmts.len() < self.config.min_parallel_items {
-            // Sequential for small collections
+
             for stmt in stmts {
                 self.visitor.visit_stmt(stmt);
             }
         } else if self.config.enable_work_stealing {
-            // Parallel with work-stealing
+
             stmts
                 .par_iter()
                 .with_min_len(self.config.min_parallel_items / 4)
                 .for_each(|stmt| self.visitor.visit_stmt(stmt));
         } else {
-            // Basic parallel traversal
+
             stmts
                 .par_iter()
                 .for_each(|stmt| self.visitor.visit_stmt(stmt));
@@ -204,18 +204,18 @@ impl<V: Visitor<'static>> ParallelVisitor<V> {
     /// Adaptively visit expressions (parallel if count >= threshold).
     pub fn visit_exprs_adaptive(&self, exprs: &[&Expr<'static>]) {
         if exprs.len() < self.config.min_parallel_items {
-            // Sequential for small collections
+
             for expr in exprs {
                 self.visitor.visit_expr(expr);
             }
         } else if self.config.enable_work_stealing {
-            // Parallel with work-stealing
+
             exprs
                 .par_iter()
                 .with_min_len(self.config.min_parallel_items / 4)
                 .for_each(|expr| self.visitor.visit_expr(expr));
         } else {
-            // Basic parallel traversal
+
             exprs
                 .par_iter()
                 .for_each(|expr| self.visitor.visit_expr(expr));
@@ -284,9 +284,9 @@ impl<V: Visitor<'static>> ParallelVisitor<V> {
         let cancellable_visitor = CancellableVisitor::new((*self.visitor).clone(), tracker);
         let parallel = ParallelVisitor::with_config(cancellable_visitor, self.config.clone());
 
-        // Note: Cancellation is checked during traversal, but we can't easily
-        // propagate the cancellation status back from parallel operations.
-        // This is a simplified implementation.
+
+
+
         parallel.visit_module(module);
         Ok(())
     }
@@ -398,7 +398,7 @@ impl<V> DiagnosticVisitor<V> {
     }
 }
 
-// Implement Visitor for DiagnosticVisitor to wrap any visitor
+
 impl<'a, V: Visitor<'a>> Visitor<'a> for DiagnosticVisitor<V> {
     fn visit_module(&self, module: &Module<'a>) {
         self.visitor.visit_module(module);
@@ -477,14 +477,14 @@ impl<V> CancellableVisitor<V> {
     }
 }
 
-// Implement Visitor for CancellableVisitor to wrap any visitor
+
 impl<'a, V: Visitor<'a>> Visitor<'a> for CancellableVisitor<V> {
     fn visit_module(&self, module: &Module<'a>) {
         self.visitor.visit_module(module);
     }
 
     fn visit_stmt(&self, stmt: &Stmt<'a>) {
-        // Check for cancellation before each statement
+
         if self.check_cancelled().is_err() {
             return;
         }
@@ -493,7 +493,7 @@ impl<'a, V: Visitor<'a>> Visitor<'a> for CancellableVisitor<V> {
     }
 
     fn visit_expr(&self, expr: &Expr<'a>) {
-        // Check for cancellation before each expression
+
         if self.check_cancelled().is_err() {
             return;
         }
@@ -557,12 +557,12 @@ where
     V: Visitor<'a> + Sync,
 {
     if stmts.len() < min_chunk_size {
-        // Sequential for small collections
+
         for stmt in stmts {
             visitor.visit_stmt(stmt);
         }
     } else {
-        // Parallel with adaptive chunking
+
         stmts
             .par_iter()
             .with_min_len(min_chunk_size / 4)
@@ -576,12 +576,12 @@ where
     V: Visitor<'a> + Sync,
 {
     if exprs.len() < min_chunk_size {
-        // Sequential for small collections
+
         for expr in exprs {
             visitor.visit_expr(expr);
         }
     } else {
-        // Parallel with adaptive chunking
+
         exprs
             .par_iter()
             .with_min_len(min_chunk_size / 4)
@@ -602,7 +602,7 @@ mod tests {
             enable_progress: true,
         };
 
-        // Use a dummy visitor for config testing
+
         struct DummyVisitor;
         impl<'a> Visitor<'a> for DummyVisitor {}
 
@@ -636,19 +636,19 @@ mod tests {
 
     #[test]
     fn test_diagnostic_visitor() {
-        // Use a dummy visitor for diagnostic testing
+
         struct DummyVisitor;
         impl<'a> Visitor<'a> for DummyVisitor {}
 
         let visitor = DummyVisitor;
         let diagnostic_visitor = DiagnosticVisitor::new(visitor);
 
-        // Initially empty
+
         assert!(diagnostic_visitor.diagnostics().is_empty());
         assert!(!diagnostic_visitor.has_errors());
         assert_eq!(diagnostic_visitor.error_count(), 0);
 
-        // Add a diagnostic
+
         let diagnostic = Diagnostic::error("Test error".to_string());
         diagnostic_visitor.collect_diagnostic(diagnostic);
 
@@ -660,7 +660,7 @@ mod tests {
 
     #[test]
     fn test_cancellable_visitor() {
-        // Use a dummy visitor for cancellation testing
+
         struct DummyVisitor;
         impl<'a> Visitor<'a> for DummyVisitor {}
 
@@ -668,10 +668,10 @@ mod tests {
         let tracker = ProgressTracker::new();
         let cancellable = CancellableVisitor::new(visitor, tracker);
 
-        // Initially not cancelled
+
         assert!(cancellable.check_cancelled().is_ok());
 
-        // Cancel and check
+
         cancellable.tracker().cancel();
         assert!(cancellable.check_cancelled().is_err());
     }

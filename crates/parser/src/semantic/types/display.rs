@@ -1,5 +1,3 @@
-// Type display and formatting
-
 use super::context::Type;
 use std::fmt;
 

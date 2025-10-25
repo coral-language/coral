@@ -1,5 +1,3 @@
-// Symbol table and scope management
-
 pub mod scope;
 pub mod table;
 

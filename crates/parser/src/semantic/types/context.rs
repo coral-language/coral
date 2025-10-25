@@ -1,4 +1,4 @@
-// Type checking context and core type representation
+
 
 /// Type identifier for fast equality checks
 pub type TypeId = usize;
@@ -263,58 +263,58 @@ impl Type {
     /// Check if this is a subtype of another type
     pub fn is_subtype_of(&self, other: &Type) -> bool {
         match (self, other) {
-            // Any is supertype of everything except Never
+
             (_, Type::Any) => !matches!(self, Type::Never),
 
-            // Never is subtype of everything
+
             (Type::Never, _) => true,
 
-            // Unknown is compatible with everything (gradual typing)
+
             (Type::Unknown, _) | (_, Type::Unknown) => true,
 
-            // Exact match
+
             (a, b) if a == b => true,
 
-            // Numeric hierarchy: Bool -> Int -> Float -> Complex
+
             (Type::Bool, Type::Int | Type::Float | Type::Complex) => true,
             (Type::Int, Type::Float | Type::Complex) => true,
             (Type::Float, Type::Complex) => true,
 
-            // Optional[T] is Union[T, None]
+
             (Type::Optional(t), Type::Union(types)) => {
                 types.contains(&Type::None) && types.iter().any(|ty| t.is_subtype_of(ty))
             }
 
-            // T is subtype of Optional[T]
+
             (t, Type::Optional(opt_t)) => t.is_subtype_of(opt_t) || *t == Type::None,
 
-            // Union subtyping: Union[A, B] <: Union[C, D] if A <: C|D and B <: C|D
+
             (Type::Union(types1), Type::Union(types2)) => types1
                 .iter()
                 .all(|t1| types2.iter().any(|t2| t1.is_subtype_of(t2))),
 
-            // T <: Union[A, B] if T <: A or T <: B
+
             (t, Type::Union(types)) => types.iter().any(|ty| t.is_subtype_of(ty)),
 
-            // List invariance: mutable containers are invariant
-            // List[T] <: List[U] only if T == U
+
+
             (Type::List(t1), Type::List(t2)) => t1 == t2,
 
-            // Set invariance: mutable containers are invariant
-            // Set[T] <: Set[U] only if T == U
+
+
             (Type::Set(t1), Type::Set(t2)) => t1 == t2,
 
-            // Dict invariance: mutable containers are invariant
-            // Dict[K1, V1] <: Dict[K2, V2] only if K1 == K2 and V1 == V2
+
+
             (Type::Dict(k1, v1), Type::Dict(k2, v2)) => k1 == k2 && v1 == v2,
 
-            // Tuple covariance: immutable containers are covariant
-            // Tuple[T1, T2, ...] <: Tuple[U1, U2, ...] if T1 <: U1, T2 <: U2, ...
+
+
             (Type::Tuple(t1), Type::Tuple(t2)) => {
                 t1.len() == t2.len() && t1.iter().zip(t2.iter()).all(|(a, b)| a.is_subtype_of(b))
             }
 
-            // Function subtyping (contravariant in parameters, covariant in return)
+
             (
                 Type::Function {
                     params: p1,
@@ -327,15 +327,15 @@ impl Type {
                     captures: _c2,
                 },
             ) => {
-                // Function subtyping: contravariant params, covariant returns
-                // Captures don't affect subtyping (implementation detail)
-                // Parameter names don't affect subtyping, only types matter
+
+
+
                 p1.len() == p2.len() &&
                 p1.iter().zip(p2.iter()).all(|((_n1, t1), (_n2, t2))| t2.is_subtype_of(t1)) && // contravariant
                 r1.is_subtype_of(r2) // covariant
             }
 
-            // Instance of class
+
             (Type::Instance(name1), Type::Class(name2)) => name1 == name2,
 
             _ => false,

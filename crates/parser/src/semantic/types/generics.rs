@@ -1,5 +1,3 @@
-// Generic types and constraints
-
 use super::context::Type;
 use std::collections::HashMap;
 
@@ -36,7 +34,6 @@ impl GenericContext {
                 variance,
             } => {
                 if let Some(concrete_ty) = self.lookup(name) {
-                    // Recursively apply in case the substitution contains type vars
                     self.apply(concrete_ty)
                 } else {
                     Type::TypeVar {
@@ -78,7 +75,7 @@ impl GenericContext {
                     params: new_params,
                 }
             }
-            // All other types are returned as-is
+
             _ => ty.clone(),
         }
     }
@@ -88,7 +85,7 @@ impl GenericContext {
         if bounds.is_empty() {
             return true;
         }
-        // Type must be a subtype of all bounds
+
         bounds.iter().all(|bound| ty.is_subtype_of(bound))
     }
 }

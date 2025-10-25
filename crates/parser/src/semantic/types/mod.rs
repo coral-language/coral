@@ -1,5 +1,3 @@
-// Type system implementation
-
 pub mod builtins;
 pub mod context;
 pub mod display;

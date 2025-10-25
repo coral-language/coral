@@ -204,7 +204,7 @@ impl<'a> Transformer<'a> {
         self.arena.alloc_slice_iter(transformed)
     }
 
-    // Builder methods for common AST node construction
+
 
     /// Create a constant expression.
     pub fn alloc_constant(&self, value: &str, span: TextRange) -> &'a Expr<'a> {
@@ -377,7 +377,7 @@ impl<'a> Transformer<'a> {
         }))
     }
 
-    // Utility methods for common transformations
+
 
     /// Desugar an augmented assignment into a regular assignment.
     ///
@@ -397,7 +397,7 @@ impl<'a> Transformer<'a> {
     pub fn fold_constant_binop(&self, binop: &BinOpExpr<'a>) -> Option<&'a Expr<'a>> {
         match (binop.left, binop.right) {
             (Expr::Constant(left), Expr::Constant(right)) => {
-                // Simple constant folding for numeric operations
+
                 if let (Ok(left_num), Ok(right_num)) =
                     (left.value.parse::<i64>(), right.value.parse::<i64>())
                 {
@@ -537,7 +537,7 @@ mod tests {
                 match &a.value {
                     Expr::BinOp(b) => {
                         assert_eq!(b.op, "+");
-                        // Check that the target appears on both sides
+
                         match (b.left, b.right) {
                             (Expr::Name(left_name), Expr::Constant(right_const)) => {
                                 assert_eq!(left_name.id, "x");

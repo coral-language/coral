@@ -1,5 +1,3 @@
-// Lexical scope tracking
-
 use crate::semantic::types::Type;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -151,7 +149,6 @@ impl Scope {
     pub fn define(&mut self, symbol: Symbol) -> Result<(), String> {
         let name = symbol.name.clone();
 
-        // Check for duplicate definition in same scope
         if self.symbols.read().unwrap().contains_key(&name) {
             return Err(format!("Name '{}' is already defined in this scope", name));
         }

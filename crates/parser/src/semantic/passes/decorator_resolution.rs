@@ -1,11 +1,3 @@
-// Decorator resolution and validation
-//
-// This pass validates decorator usage:
-// 1. Checks that decorators reference valid callables
-// 2. Validates decorator signatures are compatible with decorated items
-// 3. Detects common decorator errors (e.g., @property on classes)
-// 4. Validates decorator stacking order (e.g., @classmethod before @property)
-
 #![allow(clippy::only_used_in_recursion)]
 
 use crate::ast::expr::{CallExpr, Expr};
@@ -65,9 +57,8 @@ impl DecoratorKind {
     /// Check if this decorator must come before another in stacking order
     fn must_precede(&self, other: &Self) -> bool {
         match (self, other) {
-            // @classmethod or @staticmethod must come before @property
             (Self::ClassMethod | Self::StaticMethod, Self::Property) => true,
-            // @abstractmethod typically comes after other decorators
+
             (Self::Property | Self::ClassMethod | Self::StaticMethod, Self::AbstractMethod) => true,
             _ => false,
         }
@@ -99,14 +90,14 @@ impl<'a> DecoratorResolver<'a> {
         match stmt {
             Stmt::FuncDef(func) => {
                 self.check_function_decorators(func);
-                // Check nested functions
+
                 for s in func.body {
                     self.check_stmt(s);
                 }
             }
             Stmt::ClassDef(class) => {
                 self.check_class_decorators(class);
-                // Check methods
+
                 for s in class.body {
                     self.check_stmt(s);
                 }
@@ -177,10 +168,8 @@ impl<'a> DecoratorResolver<'a> {
         let mut decorator_kinds = Vec::new();
 
         for (i, decorator) in func.decorators.iter().enumerate() {
-            // Extract decorator name
             let (name, span) = self.extract_decorator_name(decorator);
 
-            // Check for duplicates
             if let Some(&first_idx) = seen_decorators.get(&name) {
                 self.errors.push(*error(
                     ErrorKind::DuplicateDecorator {
@@ -194,7 +183,6 @@ impl<'a> DecoratorResolver<'a> {
                 seen_decorators.insert(name.clone(), i);
             }
 
-            // Validate decorator expression
             if !self.is_valid_decorator_expr(decorator) {
                 self.errors.push(*error(
                     ErrorKind::InvalidDecoratorExpression {
@@ -205,12 +193,10 @@ impl<'a> DecoratorResolver<'a> {
                 continue;
             }
 
-            // Validate decorator factory arguments if it's a call expression
             if let Expr::Call(call) = decorator {
                 self.validate_decorator_factory_call(&name, call, span);
             }
 
-            // Check if decorator is defined
             if !self.is_decorator_defined(&name) {
                 self.errors.push(*error(
                     ErrorKind::UndefinedDecorator { name: name.clone() },
@@ -218,9 +204,7 @@ impl<'a> DecoratorResolver<'a> {
                 ));
             }
 
-            // Check decorator kind
             if let Some(kind) = DecoratorKind::from_name(&name) {
-                // Check if decorator is valid for functions
                 if kind.is_class_only() {
                     self.errors.push(*error(
                         ErrorKind::InvalidDecoratorTarget {
@@ -231,7 +215,6 @@ impl<'a> DecoratorResolver<'a> {
                     ));
                 }
 
-                // Validate @operator decorator usage
                 if kind == DecoratorKind::Operator {
                     use crate::ast::protocols::Protocols;
                     if !Protocols::is_special_method(func.name) {
@@ -247,7 +230,6 @@ impl<'a> DecoratorResolver<'a> {
                         ));
                     }
 
-                    // Validate operator method signature
                     self.validate_operator_signature(func);
                 }
 
@@ -255,10 +237,8 @@ impl<'a> DecoratorResolver<'a> {
             }
         }
 
-        // Check decorator stacking order
         self.check_decorator_order(&decorator_kinds);
 
-        // Check if special method names have @operator decorator
         self.check_special_method_decorator(func, &decorator_kinds);
     }
 
@@ -273,7 +253,6 @@ impl<'a> DecoratorResolver<'a> {
         for (i, decorator) in class.decorators.iter().enumerate() {
             let (name, span) = self.extract_decorator_name(decorator);
 
-            // Check for duplicates
             if let Some(&first_idx) = seen_decorators.get(&name) {
                 self.errors.push(*error(
                     ErrorKind::DuplicateDecorator {
@@ -287,7 +266,6 @@ impl<'a> DecoratorResolver<'a> {
                 seen_decorators.insert(name.clone(), i);
             }
 
-            // Validate decorator expression
             if !self.is_valid_decorator_expr(decorator) {
                 self.errors.push(*error(
                     ErrorKind::InvalidDecoratorExpression {
@@ -298,12 +276,10 @@ impl<'a> DecoratorResolver<'a> {
                 continue;
             }
 
-            // Validate decorator factory arguments if it's a call expression
             if let Expr::Call(call) = decorator {
                 self.validate_decorator_factory_call(&name, call, span);
             }
 
-            // Check if decorator is defined
             if !self.is_decorator_defined(&name) {
                 self.errors.push(*error(
                     ErrorKind::UndefinedDecorator { name: name.clone() },
@@ -311,9 +287,7 @@ impl<'a> DecoratorResolver<'a> {
                 ));
             }
 
-            // Check decorator kind
             if let Some(kind) = DecoratorKind::from_name(&name) {
-                // Check if decorator is valid for classes
                 if kind.is_function_only() {
                     self.errors.push(*error(
                         ErrorKind::InvalidDecoratorTarget {
@@ -333,7 +307,6 @@ impl<'a> DecoratorResolver<'a> {
                 let (kind1, name1, _) = &decorators[i];
                 let (kind2, name2, span2) = &decorators[j];
 
-                // Check if kind2 must come before kind1 (wrong order)
                 if kind2.must_precede(kind1) {
                     self.errors.push(*error(
                         ErrorKind::InvalidDecoratorOrder {
@@ -354,14 +327,11 @@ impl<'a> DecoratorResolver<'a> {
     ) {
         use crate::ast::protocols::Protocols;
 
-        // Skip constructor - it's a keyword, not a decorated method
         if func.name == "constructor" {
             return;
         }
 
-        // Check if this is a special method name
         if Protocols::is_special_method(func.name) {
-            // Check if it has @operator decorator
             let has_operator = decorator_kinds
                 .iter()
                 .any(|(kind, _, _)| *kind == DecoratorKind::Operator);
@@ -385,7 +355,6 @@ impl<'a> DecoratorResolver<'a> {
         match expr {
             Expr::Name(name) => (name.id.to_string(), name.span),
             Expr::Attribute(attr) => {
-                // Handle dotted names like abc.abstractmethod
                 let mut parts = Vec::new();
                 let mut current = expr;
                 loop {
@@ -404,10 +373,7 @@ impl<'a> DecoratorResolver<'a> {
                 parts.reverse();
                 (parts.join("."), attr.span)
             }
-            Expr::Call(call) => {
-                // Decorator with arguments: @decorator(args)
-                self.extract_decorator_name(call.func)
-            }
+            Expr::Call(call) => self.extract_decorator_name(call.func),
             _ => ("".to_string(), expr.span()),
         }
     }
@@ -423,7 +389,6 @@ impl<'a> DecoratorResolver<'a> {
 
     /// Check if a decorator name is defined (simplified check)
     fn is_decorator_defined(&self, name: &str) -> bool {
-        // Check for well-known builtins
         if matches!(
             name,
             "property"
@@ -438,7 +403,6 @@ impl<'a> DecoratorResolver<'a> {
             return true;
         }
 
-        // Check if it's a dotted name from known modules
         if name.starts_with("abc.")
             || name.starts_with("dataclasses.")
             || name.starts_with("typing.")
@@ -447,7 +411,6 @@ impl<'a> DecoratorResolver<'a> {
             return true;
         }
 
-        // Check symbol table
         self.symbol_table.lookup(name).is_some()
     }
 
@@ -474,15 +437,11 @@ impl<'a> DecoratorResolver<'a> {
         call: &CallExpr<'a>,
         span: TextRange,
     ) {
-        // Validate known decorator factories
         match decorator_name {
             "dataclass" => {
-                // @dataclass can accept keyword arguments like:
-                // @dataclass(frozen=True, order=True, etc.)
                 self.validate_dataclass_args(call, span);
             }
             "property" | "staticmethod" | "classmethod" | "abstractmethod" => {
-                // These decorators should NOT be called (no arguments)
                 self.errors.push(*error(
                     ErrorKind::InvalidDecoratorExpression {
                         decorator: format!(
@@ -494,7 +453,6 @@ impl<'a> DecoratorResolver<'a> {
                 ));
             }
             "operator" => {
-                // @operator should NOT be called
                 self.errors.push(*error(
                     ErrorKind::InvalidDecoratorExpression {
                         decorator: "'operator' should not be called with arguments".to_string(),
@@ -502,19 +460,12 @@ impl<'a> DecoratorResolver<'a> {
                     span,
                 ));
             }
-            _ => {
-                // For custom decorators, we can't validate arguments without type information
-                // This would require type inference integration to check:
-                // 1. The decorator returns a callable
-                // 2. The returned callable accepts the decorated function/class
-                // 3. The factory arguments match the decorator's signature
-            }
+            _ => {}
         }
     }
 
     /// Validate @dataclass decorator arguments
     fn validate_dataclass_args(&mut self, call: &CallExpr<'a>, span: TextRange) {
-        // Valid @dataclass keyword arguments (based on Python's dataclasses)
         let valid_kwargs = [
             "init",
             "repr",
@@ -527,7 +478,6 @@ impl<'a> DecoratorResolver<'a> {
             "slots",
         ];
 
-        // Check for positional arguments (not allowed for @dataclass)
         if !call.args.is_empty() {
             self.errors.push(*error(
                 ErrorKind::InvalidDecoratorExpression {
@@ -537,7 +487,6 @@ impl<'a> DecoratorResolver<'a> {
             ));
         }
 
-        // Validate keyword arguments
         for keyword in call.keywords {
             if let Some(arg_name) = keyword.arg {
                 if !valid_kwargs.contains(&arg_name) {
@@ -553,12 +502,9 @@ impl<'a> DecoratorResolver<'a> {
                     ));
                 }
 
-                // Validate argument types (should be bool for most)
                 match arg_name {
                     "init" | "repr" | "eq" | "order" | "unsafe_hash" | "frozen" | "match_args"
                     | "kw_only" | "slots" => {
-                        // These should all be boolean values (True/False)
-                        // We check if it's a Name expr with value "True" or "False"
                         let is_bool = match &keyword.value {
                             Expr::Name(name) => name.id == "True" || name.id == "False",
                             Expr::Constant(c) => c.value == "True" || c.value == "False",
@@ -588,7 +534,6 @@ impl<'a> DecoratorResolver<'a> {
         let func_name = func.name;
         let param_count = func.args.args.len();
 
-        // Operator methods must have at least self parameter
         if param_count == 0 {
             self.errors.push(*error(
                 ErrorKind::InvalidSyntax {
@@ -602,7 +547,6 @@ impl<'a> DecoratorResolver<'a> {
             return;
         }
 
-        // Binary operators need exactly 2 parameters (self + other)
         let binary_ops = [
             "__add__",
             "__sub__",
@@ -624,7 +568,6 @@ impl<'a> DecoratorResolver<'a> {
             "__ge__",
             "__matmul__",
             "__divmod__",
-            // Also check without underscores (if used)
             "add",
             "sub",
             "mul",
@@ -660,7 +603,6 @@ impl<'a> DecoratorResolver<'a> {
             return;
         }
 
-        // Unary operators need exactly 1 parameter (self)
         let unary_ops = [
             "__neg__",
             "__pos__",

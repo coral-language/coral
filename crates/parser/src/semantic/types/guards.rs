@@ -80,11 +80,8 @@ impl Default for TypeGuardRegistry {
 /// # Returns
 /// The guarded type if the annotation is TypeGuard[T], otherwise None
 pub fn extract_type_guard(return_annotation: &Type) -> Option<Type> {
-    // Check if this is a TypeGuard[T] type
-    // This would need proper generic type handling
     match return_annotation {
         Type::Generic { base, params } => {
-            // Check if base is TypeGuard
             if let Type::Class(name) = base.as_ref()
                 && name == "TypeGuard"
                 && params.len() == 1

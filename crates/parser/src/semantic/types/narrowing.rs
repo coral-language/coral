@@ -106,22 +106,15 @@ impl Default for TypeNarrowingContext {
 /// The narrowed type
 pub fn narrow_isinstance(original_ty: &Type, check_ty: &Type, is_true_branch: bool) -> Type {
     if is_true_branch {
-        // In the true branch, narrow to the check type if possible
         match original_ty {
             Type::Union(types) => {
-                // Filter union to only types that could match isinstance check
-                // A type matches if it's a subtype of check_ty (more specific)
                 let narrowed: Vec<Type> = types
                     .iter()
-                    .filter(|ty| {
-                        // Keep types that are subtypes of check_ty
-                        ty.is_subtype_of(check_ty) || *ty == check_ty
-                    })
+                    .filter(|ty| ty.is_subtype_of(check_ty) || *ty == check_ty)
                     .cloned()
                     .collect();
 
                 if narrowed.is_empty() {
-                    // If no exact matches, return check_ty (could be a parent type)
                     check_ty.clone()
                 } else if narrowed.len() == 1 {
                     narrowed.into_iter().next().unwrap()
@@ -135,16 +128,11 @@ pub fn narrow_isinstance(original_ty: &Type, check_ty: &Type, is_true_branch: bo
             _ => Type::Never, // isinstance check will fail
         }
     } else {
-        // In the false branch, exclude the check type and its subtypes
         match original_ty {
             Type::Union(types) => {
-                // Remove types that would match isinstance check
                 let remaining: Vec<Type> = types
                     .iter()
-                    .filter(|ty| {
-                        // Keep types that are not subtypes of check_ty and not equal
-                        !ty.is_subtype_of(check_ty) && *ty != check_ty
-                    })
+                    .filter(|ty| !ty.is_subtype_of(check_ty) && *ty != check_ty)
                     .cloned()
                     .collect();
 
@@ -172,7 +160,6 @@ pub fn narrow_isinstance(original_ty: &Type, check_ty: &Type, is_true_branch: bo
 /// The narrowed type
 pub fn narrow_is_none(original_ty: &Type, is_true_branch: bool) -> Type {
     if is_true_branch {
-        // In "is None" true branch, type must be None
         match original_ty {
             Type::None => Type::None,
             Type::Optional(_inner) => Type::None,
@@ -181,7 +168,6 @@ pub fn narrow_is_none(original_ty: &Type, is_true_branch: bool) -> Type {
             _ => Type::Never, // Will never be None
         }
     } else {
-        // In "is not None" branch, remove None from type
         match original_ty {
             Type::None => Type::Never,
             Type::Optional(inner) => (**inner).clone(),
@@ -215,7 +201,6 @@ pub fn narrow_is_none(original_ty: &Type, is_true_branch: bool) -> Type {
 /// The narrowed type
 pub fn narrow_truthiness(original_ty: &Type, is_true_branch: bool) -> Type {
     if is_true_branch {
-        // In truthy branch, remove None and empty container types
         match original_ty {
             Type::None => Type::Never,
             Type::Optional(inner) => (**inner).clone(),
@@ -237,7 +222,6 @@ pub fn narrow_truthiness(original_ty: &Type, is_true_branch: bool) -> Type {
             ty => ty.clone(), // Keep as-is for other types
         }
     } else {
-        // In falsy branch, narrow to None or empty types
         match original_ty {
             Type::Optional(_) => Type::None,
             Type::Union(types) if types.contains(&Type::None) => Type::None,
@@ -262,7 +246,6 @@ pub fn merge_types(types: Vec<Type>) -> Type {
         return types.into_iter().next().unwrap();
     }
 
-    // Flatten nested unions
     let mut flattened = Vec::new();
     for ty in types {
         match ty {
@@ -271,7 +254,6 @@ pub fn merge_types(types: Vec<Type>) -> Type {
         }
     }
 
-    // Deduplicate types while preserving order
     let mut seen = std::collections::HashSet::new();
     let mut deduplicated = Vec::new();
     for ty in flattened {
@@ -281,7 +263,6 @@ pub fn merge_types(types: Vec<Type>) -> Type {
         }
     }
 
-    // If all types are the same, return a single type
     if deduplicated.len() == 1 {
         deduplicated.into_iter().next().unwrap()
     } else {

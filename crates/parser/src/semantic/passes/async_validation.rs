@@ -109,7 +109,6 @@ impl<'a> AsyncValidator<'a> {
 
     /// Exit an async context
     fn exit_async_context(&mut self) {
-        // Never pop the base context (module-level)
         if self.async_context_stack.len() > 1 {
             self.async_context_stack.pop();
         }
@@ -182,7 +181,6 @@ impl<'a> AsyncValidator<'a> {
 
     /// Infer expression type using the type inference context
     fn infer_expr_type(&self, expr: &Expr) -> Type {
-        // Try to get the actual inferred type from the type context
         if let Some(type_ctx) = self.type_context {
             let span = expr.span();
             if let Some(inferred_ty) =
@@ -192,18 +190,13 @@ impl<'a> AsyncValidator<'a> {
             }
         }
 
-        // Fallback to pattern-based inference for known async patterns
         match expr {
-            // Async function calls return coroutines
             Expr::Call(call) => {
-                // If we have type context, we should have gotten the type above
-                // This is a fallback for when type inference hasn't run yet
                 if let Some(type_ctx) = self.type_context {
                     let func_span = call.func.span();
                     if let Some(func_ty) =
                         type_ctx.get_type_by_span(func_span.start().into(), func_span.end().into())
                     {
-                        // If it's a coroutine-returning function, return Coroutine type
                         if matches!(func_ty, Type::Coroutine(_)) {
                             return func_ty.clone();
                         }
@@ -211,26 +204,24 @@ impl<'a> AsyncValidator<'a> {
                 }
                 Type::Unknown
             }
-            // Attribute access on known async libraries
+
             Expr::Attribute(attr) => {
                 if let Expr::Name(name) = attr.value {
-                    // Check for known async library patterns
                     if ["asyncio", "aiohttp", "aiofiles"].contains(&name.id) {
                         return Type::Coroutine(Box::new(Type::Unknown));
                     }
                 }
                 Type::Unknown
             }
-            // Name could be a coroutine if it's an async function reference
+
             Expr::Name(_) => Type::Unknown,
-            // For other expressions, conservatively assume Unknown
+
             _ => Type::Unknown,
         }
     }
 
     /// Validate variable lifetimes across an await point using flow analysis
     fn validate_lifetime_across_await(&mut self, await_span: TextRange) {
-        // Record which variables are live before this await
         let live_vars: HashSet<String> = self
             .variable_lifetimes
             .iter()
@@ -241,14 +232,11 @@ impl<'a> AsyncValidator<'a> {
         self.variables_before_await
             .insert(await_span, live_vars.clone());
 
-        // Use CFG for flow-sensitive analysis if available
         if let Some(func_name) = &self.current_function
             && let Some(cfg) = self.cfg_cache.get(func_name)
         {
-            // Find all variables that are used after this await point
             let vars_used_after_await = self.find_variables_used_after_span(cfg, await_span);
 
-            // Check if any resource-holding variables are used after await
             for var_name in &vars_used_after_await {
                 if let Some(lifetime) = self.variable_lifetimes.get(var_name)
                     && lifetime.in_scope
@@ -289,11 +277,8 @@ impl<'a> AsyncValidator<'a> {
     ) -> HashSet<String> {
         let mut used_vars = HashSet::new();
 
-        // Iterate through all blocks in the CFG
         for block in cfg.blocks.values() {
-            // Check each statement in the block
             for stmt_info in &block.statements {
-                // If the statement comes after the await span, collect its uses
                 if stmt_info.span.start() > span.end() {
                     for var in &stmt_info.uses {
                         used_vars.insert(var.clone());
@@ -308,7 +293,6 @@ impl<'a> AsyncValidator<'a> {
     /// Check if a type is unsafe to hold across await points
     fn is_type_unsafe_across_await(&self, ty: &Type) -> bool {
         match ty {
-            // File handles, network streams, locks are unsafe across await
             Type::Class(name) => {
                 ["File", "Lock", "Mutex", "RwLock", "Socket"].contains(&name.as_str())
             }
@@ -336,7 +320,6 @@ impl<'a> AsyncValidator<'a> {
 
     /// Validate a module
     pub fn validate_module(&mut self, module: &Module) -> Vec<Error> {
-        // Validate all statements in the module
         for stmt in module.body {
             self.validate_stmt(stmt);
         }
@@ -347,24 +330,22 @@ impl<'a> AsyncValidator<'a> {
     fn validate_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Await(await_expr) => {
-                // Validate await is in async context
                 if !self.is_in_async_function() {
                     self.errors
                         .push(*error(ErrorKind::AwaitOutsideAsync, await_expr.span));
                 }
-                // Validate the awaited expression has an awaitable type
+
                 self.validate_await_type(await_expr.value, await_expr.span);
-                // Validate variable lifetimes across this await point
+
                 self.validate_lifetime_across_await(await_expr.span);
-                // Recursively validate the awaited expression
+
                 self.validate_expr(await_expr.value);
             }
             Expr::Call(call_expr) => {
-                // Check for blocking calls in async context
                 if self.is_in_async_function() {
                     self.check_blocking_call(call_expr);
                 }
-                // Validate function and arguments
+
                 self.validate_expr(call_expr.func);
                 for arg in call_expr.args {
                     self.validate_expr(arg);
@@ -500,11 +481,9 @@ impl<'a> AsyncValidator<'a> {
                 self.validate_expr(starred.value);
             }
             Expr::Name(name) => {
-                // Track variable usage
                 self.track_variable_use(name.id, name.span);
             }
-            // Literals (Constant, Complex, Bytes, TString), and ModuleIntrospection
-            // don't contain nested expressions
+
             _ => {}
         }
     }
@@ -516,54 +495,44 @@ impl<'a> AsyncValidator<'a> {
                 let func_name = func_def.name.to_string();
 
                 if func_def.is_async {
-                    // Enter async context for async functions
                     let name = Some(func_name.clone());
                     self.enter_async_context(name, func_def.span);
 
-                    // Set current function for CFG lookup
                     let old_function = self.current_function.replace(func_name);
 
-                    // Validate function body
                     for stmt in func_def.body {
                         self.validate_stmt(stmt);
                     }
 
-                    // Restore previous function
                     self.current_function = old_function;
 
-                    // Exit async context
                     self.exit_async_context();
                 } else {
-                    // Regular function - validate body but don't enter async context
-                    // Set current function for CFG lookup
                     let old_function = self.current_function.replace(func_name);
 
                     for stmt in func_def.body {
                         self.validate_stmt(stmt);
                     }
 
-                    // Restore previous function
                     self.current_function = old_function;
                 }
             }
             Stmt::For(for_stmt) => {
-                // Validate async for is in async context
                 if for_stmt.is_async && !self.is_in_async_function() {
                     self.errors
                         .push(*error(ErrorKind::AsyncForOutsideAsync, for_stmt.span));
                 }
-                // Validate body
+
                 for stmt in for_stmt.body {
                     self.validate_stmt(stmt);
                 }
             }
             Stmt::With(with_stmt) => {
-                // Validate async with is in async context
                 if with_stmt.is_async && !self.is_in_async_function() {
                     self.errors
                         .push(*error(ErrorKind::AsyncWithOutsideAsync, with_stmt.span));
                 }
-                // Validate body
+
                 for stmt in with_stmt.body {
                     self.validate_stmt(stmt);
                 }
@@ -572,7 +541,6 @@ impl<'a> AsyncValidator<'a> {
                 self.validate_expr(&expr_stmt.value);
             }
             Stmt::Assign(assign_stmt) => {
-                // Track variable assignments
                 for target in assign_stmt.targets {
                     if let Expr::Name(name) = target {
                         self.track_variable(name.id, target.span());
@@ -581,7 +549,6 @@ impl<'a> AsyncValidator<'a> {
                 self.validate_expr(&assign_stmt.value);
             }
             Stmt::AnnAssign(ann_assign) => {
-                // Track annotated variable assignment
                 if let Expr::Name(name) = &ann_assign.target {
                     self.track_variable(name.id, ann_assign.target.span());
                 }
@@ -640,15 +607,14 @@ impl<'a> AsyncValidator<'a> {
                 }
             }
             Stmt::ClassDef(class_def) => {
-                // Validate base classes
                 for base in class_def.bases {
                     self.validate_expr(base);
                 }
-                // Validate decorators
+
                 for decorator in class_def.decorators {
                     self.validate_expr(decorator);
                 }
-                // Validate class body
+
                 for stmt in class_def.body {
                     self.validate_stmt(stmt);
                 }
@@ -680,19 +646,16 @@ impl<'a> AsyncValidator<'a> {
                     self.validate_expr(value);
                 }
             }
-            // Pass, Break, Continue, Import, From, Export, Global, Nonlocal, TypeAlias
-            // don't contain expressions or nested statements that need validation
+
             _ => {}
         }
     }
 
     /// Check for blocking calls in async context
     fn check_blocking_call(&mut self, call_expr: &crate::ast::expr::CallExpr) {
-        // Extract function name for blocking call detection
         let (module_name, func_name) = match call_expr.func {
             Expr::Name(name) => (None, Some(name.id)),
             Expr::Attribute(attr) => {
-                // Handle cases like time.sleep, requests.get, etc.
                 if let Expr::Name(obj) = attr.value {
                     (Some(obj.id), Some(attr.attr))
                 } else {
@@ -703,19 +666,16 @@ impl<'a> AsyncValidator<'a> {
         };
 
         if let Some(func) = func_name {
-            // Known async-safe modules/patterns - don't flag these
             let async_safe_modules = &[
                 "asyncio", "aiofiles", "aiohttp", "httpx", "aiomysql", "aiopg",
             ];
 
-            // Check if this is from a known async library
             if let Some(module) = module_name
                 && async_safe_modules.contains(&module)
             {
                 return; // This is async-safe, skip validation
             }
 
-            // Blocking module.function combinations
             let blocking_module_funcs = &[
                 ("time", "sleep"),
                 ("threading", "Thread"),
@@ -734,7 +694,6 @@ impl<'a> AsyncValidator<'a> {
                 ("subprocess", "check_output"),
             ];
 
-            // Check module.function patterns
             if let Some(module) = module_name {
                 for (block_mod, block_func) in blocking_module_funcs {
                     if module == *block_mod && func == *block_func {
@@ -748,7 +707,6 @@ impl<'a> AsyncValidator<'a> {
                 }
             }
 
-            // Blocking built-in functions (no module prefix)
             let blocking_builtins = &[
                 "open",  // File I/O
                 "input", // Console input
@@ -766,10 +724,6 @@ impl<'a> AsyncValidator<'a> {
         }
     }
 }
-
-// Note: We don't implement Visitor trait as it requires immutable self,
-// but we need mutable self to collect errors. Instead, we provide our own
-// traversal methods.
 
 #[cfg(test)]
 mod tests {
@@ -956,7 +910,6 @@ async def level1():
         let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
-        // Stack should still have base context after validation
         assert!(
             !validator.async_context_stack.is_empty(),
             "Stack should never be empty"
@@ -981,7 +934,6 @@ async def process():
         let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
-        // Check that variables were tracked
         assert!(
             validator.variable_lifetimes.contains_key("x"),
             "Variable 'x' should be tracked"
@@ -1006,7 +958,6 @@ async def process():
         let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
-        // Variables should be tracked with usage information
         assert!(
             validator.variable_lifetimes.contains_key("data"),
             "Variable 'data' should be tracked"
@@ -1019,8 +970,6 @@ async def process():
 
     #[test]
     fn test_await_validates_expression_type() {
-        // This test verifies that the await validation type checker is called
-        // Type inference integration allows proper validation when context is provided
         let source = r#"
 async def process():
     result = await compute()
@@ -1031,7 +980,6 @@ async def process():
         let mut validator = AsyncValidator::new(None, &cfg_cache);
         let errors = validator.validate_module(parse_result.module);
 
-        // Should not report InvalidFutureType for unknown types (conservative approach)
         assert!(
             !errors
                 .iter()
@@ -1054,7 +1002,6 @@ async def multi_await():
         let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
-        // Should track await points
         assert!(
             !validator.variables_before_await.is_empty(),
             "Should record variables live before await points"
@@ -1074,7 +1021,6 @@ async def typed_function():
         let mut validator = AsyncValidator::new(None, &cfg_cache);
         let _errors = validator.validate_module(parse_result.module);
 
-        // Annotated assignments should also be tracked
         assert!(
             validator.variable_lifetimes.contains_key("x"),
             "Annotated variable 'x' should be tracked"

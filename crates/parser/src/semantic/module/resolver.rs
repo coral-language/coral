@@ -69,7 +69,6 @@ impl StandardResolver {
 
     /// Convert module name to file path relative to a root
     fn module_name_to_path(&self, module_name: &str) -> PathBuf {
-        // Replace dots with path separators
         let relative_path = module_name.replace('.', std::path::MAIN_SEPARATOR_STR);
         PathBuf::from(relative_path).with_extension("coral")
     }
@@ -82,7 +81,6 @@ impl ModulePathResolver for StandardResolver {
         _from_file: Option<&Path>,
         search_paths: &[PathBuf],
     ) -> ResolutionResult<PathBuf> {
-        // Try all root paths and search paths
         let all_paths = self.root_paths.iter().chain(search_paths.iter());
 
         for root in all_paths {
@@ -91,7 +89,6 @@ impl ModulePathResolver for StandardResolver {
                 return Ok(module_path);
             }
 
-            // Also try as a directory with __init__.coral
             let init_file = module_path.with_file_name("__init__.coral");
             if self.module_exists(&init_file) {
                 return Ok(init_file);
@@ -128,21 +125,9 @@ impl ModulePathResolver for RelativeResolver {
         from_file: Option<&Path>,
         search_paths: &[PathBuf],
     ) -> ResolutionResult<PathBuf> {
-        // For relative imports, we need the from_file and level information
-        // This resolver is designed to work with Coral's level-based system
-        // where the module_name is just the dotted path part (e.g., "sibling", "parent.module")
-        // and the level is passed separately by the caller
-
         let from_file = from_file.ok_or(ResolutionError::RelativeImportInRoot)?;
-
-        // Start from the directory containing the importing file
         let base_dir = from_file.parent().unwrap_or(from_file).to_path_buf();
 
-        // For now, this resolver assumes the level has already been processed
-        // by the caller (as seen in import_resolution.rs)
-        // We just resolve the module name relative to the given base directory
-
-        // Convert module name to path (foo.bar.baz -> foo/bar/baz)
         let module_path = if module_name.is_empty() {
             base_dir
         } else {
@@ -154,13 +139,11 @@ impl ModulePathResolver for RelativeResolver {
             path
         };
 
-        // Try to find the module file as .coral
         let file_path = module_path.with_extension("coral");
         if self.module_exists(&file_path) {
             return Ok(file_path);
         }
 
-        // Try search paths as fallback
         for search_path in search_paths {
             let search_file_path = search_path
                 .join(module_name.replace('.', std::path::MAIN_SEPARATOR_STR))
@@ -214,13 +197,10 @@ impl CompositeResolver {
             });
         }
 
-        // Calculate the base directory based on level
         let mut base_dir = from_file
             .parent()
             .ok_or(ResolutionError::RelativeImportInRoot)?;
 
-        // Go up 'level - 1' directories
-        // level 1 = current dir, level 2 = parent, level 3 = grandparent, etc.
         for _ in 1..level {
             base_dir = base_dir.parent().ok_or(ResolutionError::InvalidPath {
                 path: format!(
@@ -231,7 +211,6 @@ impl CompositeResolver {
             })?;
         }
 
-        // Convert module name to path (foo.bar.baz -> foo/bar/baz)
         let relative_path = if module_name.is_empty() {
             PathBuf::new()
         } else {
@@ -243,19 +222,16 @@ impl CompositeResolver {
             path
         };
 
-        // Try module as .coral file
         let module_file = base_dir.join(&relative_path).with_extension("coral");
         if self.module_exists(&module_file) {
             return Ok(module_file);
         }
 
-        // Try module as package directory with __init__.coral
         let init_file = base_dir.join(&relative_path).join("__init__.coral");
         if self.module_exists(&init_file) {
             return Ok(init_file);
         }
 
-        // Try search paths as fallback
         for search_path in search_paths {
             let search_file = search_path.join(&relative_path).with_extension("coral");
             if self.module_exists(&search_file) {
@@ -285,8 +261,6 @@ impl ModulePathResolver for CompositeResolver {
         from_file: Option<&Path>,
         search_paths: &[PathBuf],
     ) -> ResolutionResult<PathBuf> {
-        // For absolute imports, use the standard resolver
-        // Relative imports should be handled via resolve_relative method
         self.standard_resolver
             .resolve_module(module_name, from_file, search_paths)
     }
@@ -310,13 +284,10 @@ mod tests {
 
         let resolver = StandardResolver::new(vec![temp_dir.path().to_path_buf()]);
 
-        // Test simple module
         assert!(resolver.resolve_module("foo", None, &[]).is_ok());
 
-        // Test nested module
         assert!(resolver.resolve_module("foo.bar", None, &[]).is_ok());
 
-        // Test non-existent module
         assert!(resolver.resolve_module("nonexistent", None, &[]).is_err());
     }
 
@@ -331,7 +302,6 @@ mod tests {
 
         let composite = CompositeResolver::new(vec![temp_dir.path().to_path_buf()]);
 
-        // Test current directory import (level 1 = current dir)
         let from_file = temp_dir.path().join("main.coral");
         assert!(
             composite
@@ -339,14 +309,12 @@ mod tests {
                 .is_ok()
         );
 
-        // Test parent directory import (level 2 = parent dir)
         assert!(
             composite
                 .resolve_relative("sibling", 2, &subdir.join("child.coral"), &[])
                 .is_ok()
         );
 
-        // Test invalid relative import (trying to go beyond root)
         assert!(
             composite
                 .resolve_relative("nonexistent", 1, &from_file, &[])
@@ -363,11 +331,9 @@ mod tests {
 
         let resolver = CompositeResolver::new(vec![temp_dir.path().to_path_buf()]);
 
-        // Test absolute imports
         assert!(resolver.resolve_module("standard", None, &[]).is_ok());
         assert!(resolver.resolve_module("models.user", None, &[]).is_ok());
 
-        // Test relative import
         let from_file = temp_dir.path().join("main.coral");
         assert!(
             resolver

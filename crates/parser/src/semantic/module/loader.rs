@@ -54,7 +54,7 @@ impl<'a> ModuleLoader<'a> {
     ///
     /// If the module has already been loaded, returns the cached version.
     pub fn load_module(&mut self, module_path: &Path) -> Result<&Module<'a>, Vec<Error>> {
-        // Check cache first
+
         if self.module_cache.contains_key(module_path) {
             let (module, cache) = self.module_cache.get(module_path).unwrap();
             if cache.errors.is_empty() {
@@ -64,7 +64,7 @@ impl<'a> ModuleLoader<'a> {
             }
         }
 
-        // Read and parse the module
+
         let source = std::fs::read_to_string(module_path).map_err(|_e| {
             vec![*crate::error::error(
                 crate::error::UnifiedErrorKind::ModuleNotFound {
@@ -78,12 +78,12 @@ impl<'a> ModuleLoader<'a> {
         let mut parser = Parser::new(lexer, self.arena);
         let module = parser.parse_module().map_err(|e| vec![*e])?;
 
-        // Run name resolution
+
         let mut name_resolver = NameResolver::new();
         name_resolver.resolve_module(module);
         let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
 
-        // Validate module system
+
         let module_name = self.module_path_to_name(module_path);
         let checker = ModuleSystemChecker::with_registry(
             &symbol_table,
@@ -93,10 +93,10 @@ impl<'a> ModuleLoader<'a> {
         );
         let errors = checker.check(module);
 
-        // Extract and register exports from this module
+
         let exports = self.extract_exports_map(module, &module_name);
 
-        // Register exports in the registry
+
         for (export_name, export_type) in &exports {
             self.export_registry.register_export(
                 &module_name,
@@ -111,10 +111,10 @@ impl<'a> ModuleLoader<'a> {
             );
         }
 
-        // Run HIR lowering to extract class metadata
+
         let (class_attributes, class_mro) = self.extract_class_metadata(module);
 
-        // Create analysis cache with extracted metadata
+
         let analysis_cache = ModuleAnalysisCache {
             errors: errors.clone(),
             exports,
@@ -122,7 +122,7 @@ impl<'a> ModuleLoader<'a> {
             class_mro,
         };
 
-        // Cache the result with analysis metadata
+
         self.module_cache
             .insert(module_path.to_path_buf(), (module.clone(), analysis_cache));
 
@@ -206,27 +206,27 @@ impl<'a> ModuleLoader<'a> {
         use crate::arena::Interner;
         use crate::semantic::hir::HirLowerer;
 
-        // Create a temporary interner for HIR lowering
+
         let mut interner = Interner::new();
         let mut lowerer = HirLowerer::new(self.arena, &mut interner);
 
-        // Run HIR lowering and extract class information
+
         match lowerer.lower_module(module) {
             Ok(_typed_module) => {
-                // Extract comprehensive metadata from class analyzer
+
                 let class_analyzer = lowerer.into_class_analyzer();
                 let metadata_map = class_analyzer.export_metadata();
 
-                // Convert to flat structure for compatibility
+
                 let mut class_attributes = HashMap::new();
                 let mut class_mro = HashMap::new();
 
                 for (class_name, metadata) in metadata_map {
-                    // Store MRO
+
                     class_mro.insert(class_name.clone(), metadata.mro.clone());
 
-                    // Flatten all attributes with priority-based merging
-                    // Priority: Properties > Methods > Class Attrs > Instance Attrs
+
+
                     for (prop_name, prop_desc) in &metadata.properties {
                         let key = (class_name.clone(), prop_name.clone());
                         let attr_type = crate::semantic::types::Type::AttributeDescriptor {
@@ -270,7 +270,7 @@ impl<'a> ModuleLoader<'a> {
                 (class_attributes, class_mro)
             }
             Err(_errors) => {
-                // If HIR lowering fails, return empty maps
+
                 (HashMap::new(), HashMap::new())
             }
         }
@@ -282,7 +282,7 @@ impl<'a> ModuleLoader<'a> {
 
         for stmt in module.body {
             if let Stmt::Export(export) = stmt {
-                // Handle regular exports
+
                 if export.module.is_none() {
                     for (name, alias) in export.names {
                         let exported_name = alias.unwrap_or(name);
@@ -300,8 +300,8 @@ impl<'a> ModuleLoader<'a> {
                         );
                     }
                 }
-                // Re-exports are handled by looking up in the registry
-                // during validation
+
+
             }
         }
     }
@@ -331,7 +331,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let module_path = temp_dir.path().join("test.coral");
 
-        // Create a simple module
+
         std::fs::write(
             &module_path,
             r#"
@@ -346,11 +346,11 @@ export my_function
         let arena = Arena::new();
         let mut loader = ModuleLoader::new(temp_dir.path().to_path_buf(), &arena);
 
-        // Load the module
+
         let result = loader.load_module(&module_path);
         assert!(result.is_ok());
 
-        // Check that exports were registered
+
         let registry = loader.export_registry();
         assert!(registry.is_exported("test", "my_function"));
     }
@@ -365,7 +365,7 @@ export my_function
         let arena = Arena::new();
         let mut loader = ModuleLoader::new(temp_dir.path().to_path_buf(), &arena);
 
-        // Load twice - second should come from cache
+
         let result1 = loader.load_module(&module_path).is_ok();
         let result2 = loader.load_module(&module_path).is_ok();
         let cache_len = loader.module_cache.len();

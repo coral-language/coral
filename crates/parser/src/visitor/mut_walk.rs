@@ -155,7 +155,7 @@ pub fn walk_stmt<'a, V: MutVisitor<'a> + ?Sized>(visitor: &mut V, stmt: &Stmt<'a
             }
         }
         Stmt::Import(_) | Stmt::From(_) | Stmt::Export(_) => {
-            // Import/Export names are tuples, not separate nodes
+
         }
         Stmt::Global(_)
         | Stmt::Nonlocal(_)
@@ -163,7 +163,7 @@ pub fn walk_stmt<'a, V: MutVisitor<'a> + ?Sized>(visitor: &mut V, stmt: &Stmt<'a
         | Stmt::Break(_)
         | Stmt::Continue(_)
         | Stmt::Yield(_) => {
-            // These statements have no child nodes to visit
+
         }
         Stmt::Expr(e) => {
             visitor.visit_expr(&e.value);
@@ -277,7 +277,7 @@ pub fn walk_expr<'a, V: MutVisitor<'a> + ?Sized>(visitor: &mut V, expr: &Expr<'a
             }
         }
         Expr::Constant(_) | Expr::Complex(_) | Expr::Bytes(_) => {
-            // Constants have no child nodes
+
         }
         Expr::TString(t) => {
             for value in t.values {
@@ -295,7 +295,7 @@ pub fn walk_expr<'a, V: MutVisitor<'a> + ?Sized>(visitor: &mut V, expr: &Expr<'a
             visitor.visit_expr(s.value);
         }
         Expr::Name(_) => {
-            // Names have no child nodes
+
         }
         Expr::List(l) => {
             for elt in l.elts {
@@ -319,7 +319,7 @@ pub fn walk_expr<'a, V: MutVisitor<'a> + ?Sized>(visitor: &mut V, expr: &Expr<'a
             }
         }
         Expr::ModuleIntrospection(_) => {
-            // Module introspection has no child nodes to visit
+
         }
     }
 }
@@ -331,7 +331,7 @@ pub fn walk_pattern<'a, V: MutVisitor<'a> + ?Sized>(visitor: &mut V, pattern: &P
             visitor.visit_expr(&m.value);
         }
         Pattern::MatchSingleton(_) => {
-            // No child nodes
+
         }
         Pattern::MatchSequence(m) => {
             for pattern in m.patterns {

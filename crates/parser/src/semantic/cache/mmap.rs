@@ -19,13 +19,13 @@ pub struct MmapPersistentCache {
     #[allow(dead_code)]
     config: CacheConfig,
     cache_file: std::path::PathBuf,
-    // Memory map of the cache file
+
     mmap: Option<Mmap>,
-    // In-memory index for quick lookups (maps cache keys to file offsets)
+
     index: HashMap<ModuleCacheKey, u64>,
-    // Fallback in-memory cache for entries added after startup
+
     fallback_cache: HashMap<ModuleCacheKey, ModuleCacheResult>,
-    // Whether the cache has been modified since last sync
+
     dirty: bool,
 }
 
@@ -34,10 +34,10 @@ impl MmapPersistentCache {
     pub fn new(config: CacheConfig) -> Result<Self, CacheError> {
         let cache_file = config.cache_dir.join("mmap_cache.bin");
 
-        // Ensure cache directory exists
+
         fs::create_dir_all(&config.cache_dir)?;
 
-        // Try to load existing cache or create new one
+
         let (mmap, index) = if cache_file.exists() {
             Self::load_existing_cache(&cache_file)?
         } else {
@@ -61,7 +61,7 @@ impl MmapPersistentCache {
         let file = fs::File::open(cache_file)?;
         let mmap = unsafe { MmapOptions::new().map(&file)? };
 
-        // Parse the memory-mapped data to build the index
+
         let index = Self::build_index_from_mmap(&mmap)?;
 
         Ok((Some(mmap), index))
@@ -75,7 +75,7 @@ impl MmapPersistentCache {
             return Ok(index); // Empty cache
         }
 
-        // Read number of entries (first 8 bytes as u64)
+
         let num_entries = u64::from_le_bytes(mmap[0..8].try_into().unwrap()) as usize;
 
         let mut offset = 8; // Start after entry count
@@ -85,7 +85,7 @@ impl MmapPersistentCache {
                 break; // Corrupted data
             }
 
-            // Read entry size
+
             let entry_size =
                 u64::from_le_bytes(mmap[offset..offset + 8].try_into().unwrap()) as usize;
             offset += 8;
@@ -94,7 +94,7 @@ impl MmapPersistentCache {
                 break; // Corrupted data
             }
 
-            // Deserialize the entry
+
             let entry_data = &mmap[offset..offset + entry_size];
             if let Ok(((key, _result), _bytes_read)) =
                 bincode::serde::decode_from_slice::<(ModuleCacheKey, ModuleCacheResult), _>(
@@ -113,7 +113,7 @@ impl MmapPersistentCache {
 
     /// Get a cached result by key
     pub fn get(&self, key: &ModuleCacheKey) -> Option<ModuleCacheResult> {
-        // Check fallback cache first for recent entries
+
         if let Some(result) = self.fallback_cache.get(key) {
             return Some(result.clone());
         }
@@ -121,7 +121,7 @@ impl MmapPersistentCache {
         if let Some(&offset) = self.index.get(key)
             && let Some(mmap) = &self.mmap
         {
-            // Read entry size
+
             let offset = offset as usize;
             if offset + 8 > mmap.len() {
                 return None;
@@ -135,7 +135,7 @@ impl MmapPersistentCache {
                 return None;
             }
 
-            // Deserialize the entry
+
             let entry_data = &mmap[data_offset..data_offset + entry_size];
             if let Ok(((_key, result), _bytes_read)) =
                 bincode::serde::decode_from_slice::<(ModuleCacheKey, ModuleCacheResult), _>(
@@ -155,11 +155,11 @@ impl MmapPersistentCache {
         key: ModuleCacheKey,
         result: ModuleCacheResult,
     ) -> Result<(), CacheError> {
-        // Store in fallback cache for new/updated entries
-        // The persist method will rebuild the mmap file with all entries
+
+
         self.fallback_cache.insert(key, result);
 
-        // Mark as dirty to indicate we need to rebuild the memory map
+
         self.dirty = true;
 
         Ok(())
@@ -182,7 +182,7 @@ impl MmapPersistentCache {
         self.dirty = true;
         self.fallback_cache.clear();
 
-        // Remove the cache file
+
         let _ = fs::remove_file(&self.cache_file);
     }
 
@@ -192,10 +192,10 @@ impl MmapPersistentCache {
             return Ok(());
         }
 
-        // Collect all entries: from both index (mmap) and fallback cache
+
         let mut all_entries = Vec::new();
 
-        // Add entries from existing mmap
+
         if let Some(mmap) = &self.mmap {
             for &offset in self.index.values() {
                 let offset = offset as usize;
@@ -219,26 +219,26 @@ impl MmapPersistentCache {
             }
         }
 
-        // Add entries from fallback cache
+
         for (key, result) in &self.fallback_cache {
             all_entries.push((key.clone(), result.clone()));
         }
 
-        // Remove duplicates: keep fallback cache versions (more recent)
+
         let mut unique_entries: HashMap<ModuleCacheKey, ModuleCacheResult> = HashMap::new();
         for (key, result) in all_entries {
             unique_entries.insert(key, result);
         }
 
-        // Write to a temporary file first
+
         let temp_file = self.cache_file.with_extension("tmp");
         let mut file = fs::File::create(&temp_file)?;
 
-        // Write header: number of entries
+
         let num_entries = unique_entries.len() as u64;
         file.write_all(&num_entries.to_le_bytes())?;
 
-        // Write each entry
+
         for (key, result) in unique_entries.iter() {
             let entry_data = bincode::serde::encode_to_vec((key, result), bincode::config::standard())?;
             let entry_size = entry_data.len() as u64;
@@ -247,10 +247,10 @@ impl MmapPersistentCache {
             file.write_all(&entry_data)?;
         }
 
-        // Atomically replace the old file
+
         std::fs::rename(&temp_file, &self.cache_file)?;
 
-        // Reload the memory-mapped file
+
         self.mmap = if self.cache_file.exists() {
             let f = fs::File::open(&self.cache_file)?;
             Some(unsafe { MmapOptions::new().map(&f)? })
@@ -258,14 +258,14 @@ impl MmapPersistentCache {
             None
         };
 
-        // Rebuild index
+
         if let Some(mmap) = &self.mmap {
             self.index = Self::build_index_from_mmap(mmap)?;
         } else {
             self.index.clear();
         }
 
-        // Clear fallback cache since everything is now in mmap
+
         self.fallback_cache.clear();
 
         self.dirty = false;
@@ -298,7 +298,7 @@ pub struct MmapCacheStats {
 
 impl Drop for MmapPersistentCache {
     fn drop(&mut self) {
-        // Try to persist on drop, but ignore errors since we're in a destructor
+
         let _ = self.persist();
     }
 }
@@ -361,7 +361,7 @@ mod tests {
         let key = create_test_cache_key("test_module");
         let result = create_test_cache_result();
 
-        // Insert should work (though persistence is simplified)
+
         cache.insert(key.clone(), result.clone()).unwrap();
         assert!(cache.stats().is_dirty);
     }

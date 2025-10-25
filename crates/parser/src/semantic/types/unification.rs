@@ -1,5 +1,3 @@
-// Type unification
-
 use super::context::Type;
 use super::generics::GenericContext;
 
@@ -28,18 +26,14 @@ pub fn unify(ty1: &Type, ty2: &Type) -> UnificationResult {
 
 /// Internal unification with context
 fn unify_with_context(ty1: &Type, ty2: &Type, ctx: &mut GenericContext) -> bool {
-    // Apply current substitutions first
     let ty1 = ctx.apply(ty1);
     let ty2 = ctx.apply(ty2);
 
     match (&ty1, &ty2) {
-        // Identical types unify
         (a, b) if a == b => true,
 
-        // Unknown unifies with anything
         (Type::Unknown, _) | (_, Type::Unknown) => true,
 
-        // Type variable unification
         (
             Type::TypeVar {
                 name,
@@ -56,11 +50,10 @@ fn unify_with_context(ty1: &Type, ty2: &Type, ctx: &mut GenericContext) -> bool 
                 variance: _,
             },
         ) => {
-            // Check bounds
             if !GenericContext::satisfies_bounds(ty, bounds) {
                 return false;
             }
-            // Occurs check: make sure the variable doesn't appear in the type
+
             if occurs_check(name, ty) {
                 return false;
             }
@@ -68,7 +61,6 @@ fn unify_with_context(ty1: &Type, ty2: &Type, ctx: &mut GenericContext) -> bool 
             true
         }
 
-        // Structural unification
         (Type::List(t1), Type::List(t2)) => unify_with_context(t1, t2, ctx),
 
         (Type::Set(t1), Type::Set(t2)) => unify_with_context(t1, t2, ctx),
@@ -111,7 +103,6 @@ fn unify_with_context(ty1: &Type, ty2: &Type, ctx: &mut GenericContext) -> bool 
             params_unify && unify_with_context(r1, r2, ctx)
         }
 
-        // Subtyping can allow unification in some cases
         (t1, t2) if t1.is_subtype_of(t2) || t2.is_subtype_of(t1) => true,
 
         _ => false,
