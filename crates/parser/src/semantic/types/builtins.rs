@@ -70,7 +70,6 @@ impl BuiltinAttributeRegistry {
     fn init_str_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
 
-
         for method in [
             "upper",
             "lower",
@@ -82,12 +81,10 @@ impl BuiltinAttributeRegistry {
             attrs.insert(method, Type::function(vec![], Type::Str));
         }
 
-
         attrs.insert("len", Type::function(vec![], Type::Int));
         for method in ["count", "find", "rfind", "index", "rindex"] {
             attrs.insert(method, Type::function(vec![Type::Str], Type::Int));
         }
-
 
         for method in [
             "startswith",
@@ -108,11 +105,9 @@ impl BuiltinAttributeRegistry {
             attrs.insert(method, Type::function(vec![], Type::Bool));
         }
 
-
         attrs.insert("split", Type::function(vec![], Type::list(Type::Str)));
         attrs.insert("rsplit", Type::function(vec![], Type::list(Type::Str)));
         attrs.insert("splitlines", Type::function(vec![], Type::list(Type::Str)));
-
 
         attrs.insert("strip", Type::function(vec![], Type::Str));
         attrs.insert("lstrip", Type::function(vec![], Type::Str));
@@ -139,21 +134,17 @@ impl BuiltinAttributeRegistry {
     fn init_list_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
 
-
         for method in [
             "append", "extend", "insert", "remove", "pop", "clear", "reverse", "sort",
         ] {
             attrs.insert(method, Type::function(vec![], Type::None));
         }
 
-
         attrs.insert("count", Type::function(vec![], Type::Int));
         attrs.insert("index", Type::function(vec![], Type::Int));
         attrs.insert("len", Type::function(vec![], Type::Int));
 
-
         attrs.insert("contains", Type::function(vec![], Type::Bool));
-
 
         attrs.insert(
             "copy",
@@ -167,17 +158,13 @@ impl BuiltinAttributeRegistry {
     fn init_dict_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
 
-
         for method in ["clear", "pop", "popitem", "update"] {
             attrs.insert(method, Type::function(vec![], Type::None));
         }
 
-
         attrs.insert("len", Type::function(vec![], Type::Int));
 
-
         attrs.insert("contains", Type::function(vec![], Type::Bool));
-
 
         attrs.insert("keys", Type::function(vec![], Type::list(Type::Unknown)));
         attrs.insert("values", Type::function(vec![], Type::list(Type::Unknown)));
@@ -189,7 +176,6 @@ impl BuiltinAttributeRegistry {
             ),
         );
 
-
         attrs.insert("get", Type::function(vec![], Type::Unknown));
         attrs.insert("setdefault", Type::function(vec![], Type::Unknown));
 
@@ -200,9 +186,7 @@ impl BuiltinAttributeRegistry {
     fn init_int_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
 
-
         for method in ["is_integer", "is_even", "is_odd"] {
-
             attrs.insert(method, Type::function(vec![], Type::Bool));
         }
 
@@ -212,7 +196,6 @@ impl BuiltinAttributeRegistry {
     /// Initialize float attributes and methods
     fn init_float_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
-
 
         for method in ["is_integer", "is_finite", "is_infinite", "is_nan"] {
             attrs.insert(method, Type::function(vec![], Type::Bool));
@@ -230,14 +213,11 @@ impl BuiltinAttributeRegistry {
     fn init_set_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
 
-
         for method in ["add", "remove", "discard", "clear", "pop", "update"] {
             attrs.insert(method, Type::function(vec![], Type::None));
         }
 
-
         attrs.insert("len", Type::function(vec![], Type::Int));
-
 
         attrs.insert("contains", Type::function(vec![], Type::Bool));
         attrs.insert(
@@ -252,7 +232,6 @@ impl BuiltinAttributeRegistry {
             "isdisjoint",
             Type::function(vec![Type::Set(Box::new(Type::Unknown))], Type::Bool),
         );
-
 
         attrs.insert(
             "union",
@@ -283,11 +262,9 @@ impl BuiltinAttributeRegistry {
     fn init_tuple_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
 
-
         attrs.insert("count", Type::function(vec![], Type::Int));
         attrs.insert("index", Type::function(vec![], Type::Int));
         attrs.insert("len", Type::function(vec![], Type::Int));
-
 
         attrs.insert("contains", Type::function(vec![], Type::Bool));
 
@@ -298,12 +275,9 @@ impl BuiltinAttributeRegistry {
     fn init_bytes_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
 
-
         attrs.insert("len", Type::function(vec![], Type::Int));
 
-
         attrs.insert("contains", Type::function(vec![], Type::Bool));
-
 
         attrs.insert("decode", Type::function(vec![], Type::Str));
 
@@ -313,7 +287,6 @@ impl BuiltinAttributeRegistry {
     /// Initialize complex attributes and methods
     fn init_complex_attributes() -> HashMap<&'static str, Type> {
         let mut attrs = HashMap::new();
-
 
         attrs.insert("real", Type::Float);
         attrs.insert("imag", Type::Float);
@@ -341,7 +314,6 @@ mod tests {
     fn test_str_attributes() {
         let registry = BuiltinAttributeRegistry::new();
 
-
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::Str, "upper"),
             Some(Type::function(vec![], Type::Str))
@@ -354,7 +326,6 @@ mod tests {
             registry.lookup_builtin_attribute(&Type::Str, "strip"),
             Some(Type::function(vec![], Type::Str))
         );
-
 
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::Str, "len"),
@@ -369,12 +340,10 @@ mod tests {
             Some(Type::function(vec![Type::Str], Type::Int))
         );
 
-
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::Str, "startswith"),
             Some(Type::function(vec![], Type::Bool))
         );
-
 
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::Str, "nonexistent"),
@@ -386,7 +355,6 @@ mod tests {
     fn test_list_attributes() {
         let registry = BuiltinAttributeRegistry::new();
 
-
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::list(Type::Int), "append"),
             Some(Type::function(vec![], Type::None))
@@ -396,7 +364,6 @@ mod tests {
             Some(Type::function(vec![], Type::None))
         );
 
-
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::list(Type::Int), "count"),
             Some(Type::function(vec![], Type::Int))
@@ -405,7 +372,6 @@ mod tests {
             registry.lookup_builtin_attribute(&Type::list(Type::Int), "len"),
             Some(Type::function(vec![], Type::Int))
         );
-
 
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::list(Type::Int), "contains"),
@@ -417,18 +383,15 @@ mod tests {
     fn test_dict_attributes() {
         let registry = BuiltinAttributeRegistry::new();
 
-
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::dict(Type::Str, Type::Int), "clear"),
             Some(Type::function(vec![], Type::None))
         );
 
-
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::dict(Type::Str, Type::Int), "len"),
             Some(Type::function(vec![], Type::Int))
         );
-
 
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::dict(Type::Str, Type::Int), "keys"),
@@ -444,7 +407,6 @@ mod tests {
     fn test_set_attributes() {
         let registry = BuiltinAttributeRegistry::new();
 
-
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::set(Type::Int), "add"),
             Some(Type::function(vec![], Type::None))
@@ -454,12 +416,10 @@ mod tests {
             Some(Type::function(vec![], Type::None))
         );
 
-
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::set(Type::Int), "len"),
             Some(Type::function(vec![], Type::Int))
         );
-
 
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::set(Type::Int), "contains"),
@@ -470,7 +430,6 @@ mod tests {
     #[test]
     fn test_non_builtin_types() {
         let registry = BuiltinAttributeRegistry::new();
-
 
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::Int, "some_attr"),
@@ -489,7 +448,6 @@ mod tests {
     #[test]
     fn test_complex_attributes() {
         let registry = BuiltinAttributeRegistry::new();
-
 
         assert_eq!(
             registry.lookup_builtin_attribute(&Type::Complex, "real"),

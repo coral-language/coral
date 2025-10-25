@@ -128,13 +128,12 @@ impl<'a> ProtocolChecker<'a> {
                 if name.id == "Protocol" {
                     return true;
                 }
-            } else if let Expr::Attribute(attr) = base {
-                if attr.attr == "Protocol"
-                    && let Expr::Name(module) = attr.value
-                    && module.id == "typing"
-                {
-                    return true;
-                }
+            } else if let Expr::Attribute(attr) = base
+                && attr.attr == "Protocol"
+                && let Expr::Name(module) = attr.value
+                && module.id == "typing"
+            {
+                return true;
             }
         }
         false

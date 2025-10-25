@@ -133,7 +133,6 @@ impl<V: Visitor<'static>> VisitorRunner<V> {
     }
 
     pub fn visit_module(&self, module: &Module<'static>) {
-
         self.visitor.visit_module(module);
     }
 }

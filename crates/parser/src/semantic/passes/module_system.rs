@@ -278,20 +278,15 @@ impl<'a> ModuleSystemChecker<'a> {
     }
 
     fn check_export(&mut self, export: &ExportStmt<'a>) {
-
         if let Some(source_module) = export.module {
             self.validate_reexport(export, source_module);
             return;
         }
 
-
         for (name, alias) in export.names {
-
             let exported_name = alias.unwrap_or(name);
 
-
             self.check_duplicate_export(exported_name, export.span);
-
 
             if self
                 .symbol_table
@@ -313,12 +308,10 @@ impl<'a> ModuleSystemChecker<'a> {
     fn validate_reexport(&mut self, export: &ExportStmt<'a>, source_module: &'a str) {
         use crate::semantic::module::ReexportError;
 
-
         for (name, alias) in export.names {
             let exported_name = alias.unwrap_or(name);
             self.check_duplicate_export(exported_name, export.span);
         }
-
 
         if let Some(current_module) = self.current_module_name
             && source_module == current_module
@@ -332,13 +325,11 @@ impl<'a> ModuleSystemChecker<'a> {
             return; // Don't continue validation if it's a self-reference
         }
 
-
         if let Some(registry) = self.export_registry {
             for (name, _alias) in export.names {
                 match registry.resolve_reexport_chain(source_module, name, self.max_reexport_depth)
                 {
                     Ok((_origin_module, _info, chain)) => {
-
                         if let Some(current_module) = self.current_module_name
                             && chain.contains(&current_module.to_string())
                         {
@@ -378,7 +369,6 @@ impl<'a> ModuleSystemChecker<'a> {
     }
 
     fn check_duplicate_export(&mut self, name: &'a str, span: TextRange) {
-
         if let Some((_, first_span)) = self.exported_names.iter().find(|(n, _)| *n == name) {
             self.errors.push(*error(
                 ErrorKind::DuplicateExport {
@@ -394,7 +384,6 @@ impl<'a> ModuleSystemChecker<'a> {
 
     fn check_module_introspection(&mut self, intro: &ModuleIntrospectionExpr<'a>) {
         if !VALID_INTROSPECTION_FUNCTIONS.contains(&intro.function) {
-
             let suggestion = VALID_INTROSPECTION_FUNCTIONS
                 .iter()
                 .min_by_key(|valid| levenshtein_distance(intro.function, valid))
@@ -467,11 +456,9 @@ mod tests {
         let mut parser = Parser::new(lexer, &arena);
         let module = parser.parse_module().expect("Parse failed");
 
-
         let mut name_resolver = NameResolver::new();
         name_resolver.resolve_module(module);
         let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
-
 
         let checker = ModuleSystemChecker::new(&symbol_table);
         let errors = checker.check(module);
@@ -627,8 +614,6 @@ result = module::invalid_function()
 
     #[test]
     fn test_export_before_definition_ok() {
-
-
         let source = r#"
 export x
 x = 42
@@ -646,8 +631,6 @@ x = 42
         assert_eq!(levenshtein_distance("path", "pth"), 1);
     }
 
-
-
     fn check_module_system_with_registry(
         source: &str,
         registry: &ModuleExportRegistry,
@@ -658,11 +641,9 @@ x = 42
         let mut parser = Parser::new(lexer, &arena);
         let module = parser.parse_module().expect("Parse failed");
 
-
         let mut name_resolver = NameResolver::new();
         name_resolver.resolve_module(module);
         let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
-
 
         let checker = ModuleSystemChecker::with_registry(&symbol_table, registry, module_name, 10);
         let errors = checker.check(module);
@@ -683,7 +664,6 @@ x = 42
         let source = r#"
 export add, subtract from math
 "#;
-
 
         let mut registry = ModuleExportRegistry::new();
         registry.register_export(
@@ -709,7 +689,6 @@ export add, subtract from math
             },
         );
 
-
         assert!(check_module_system_with_registry(source, &registry, "mymodule").is_ok());
     }
 
@@ -722,7 +701,6 @@ export add, subtract from math
         let source = r#"
 export add, nonexistent from math
 "#;
-
 
         let mut registry = ModuleExportRegistry::new();
         registry.register_export(
@@ -758,7 +736,6 @@ export add, nonexistent from math
         let source = r#"
 export User from models
 "#;
-
 
         let registry = ModuleExportRegistry::new();
 
@@ -801,7 +778,6 @@ export User as U from models
             },
         );
 
-
         assert!(check_module_system_with_registry(source, &registry, "api").is_ok());
     }
 
@@ -814,7 +790,6 @@ export User as U from models
         let source = r#"
 export add from mymodule
 "#;
-
 
         let mut registry = ModuleExportRegistry::new();
         registry.register_export(
@@ -915,7 +890,6 @@ export add from math
                 span: TextRange::new(TextSize::from(0), TextSize::from(10)),
             },
         );
-
 
         assert!(check_module_system_with_registry(source, &registry, "mymodule").is_ok());
     }

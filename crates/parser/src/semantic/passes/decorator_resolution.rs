@@ -56,12 +56,14 @@ impl DecoratorKind {
 
     /// Check if this decorator must come before another in stacking order
     fn must_precede(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::ClassMethod | Self::StaticMethod, Self::Property) => true,
-
-            (Self::Property | Self::ClassMethod | Self::StaticMethod, Self::AbstractMethod) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (Self::ClassMethod | Self::StaticMethod, Self::Property)
+                | (
+                    Self::Property | Self::ClassMethod | Self::StaticMethod,
+                    Self::AbstractMethod
+                )
+        )
     }
 }
 
@@ -287,16 +289,16 @@ impl<'a> DecoratorResolver<'a> {
                 ));
             }
 
-            if let Some(kind) = DecoratorKind::from_name(&name) {
-                if kind.is_function_only() {
-                    self.errors.push(*error(
-                        ErrorKind::InvalidDecoratorTarget {
-                            decorator: name,
-                            target: "class".to_string(),
-                        },
-                        span,
-                    ));
-                }
+            if let Some(kind) = DecoratorKind::from_name(&name)
+                && kind.is_function_only()
+            {
+                self.errors.push(*error(
+                    ErrorKind::InvalidDecoratorTarget {
+                        decorator: name,
+                        target: "class".to_string(),
+                    },
+                    span,
+                ));
             }
         }
     }

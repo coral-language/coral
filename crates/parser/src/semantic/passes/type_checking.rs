@@ -1,5 +1,3 @@
-
-
 use crate::ast::*;
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
 use crate::semantic::passes::type_inference::{TypeInferenceContext, parse_annotation};
@@ -70,11 +68,9 @@ impl<'a> TypeCheckContext<'a> {
         import_name: &str,
         span: TextRange,
     ) -> Option<Type> {
-
         if module_name.is_empty() {
             return None;
         }
-
 
         let export_type = self
             .inference_ctx
@@ -83,13 +79,7 @@ impl<'a> TypeCheckContext<'a> {
             .and_then(|exports| exports.get(import_name))
             .cloned();
 
-
-
-
-
-
         if self.inference_ctx.module_exports.contains_key(module_name) && export_type.is_none() {
-
             self.add_error(*error(
                 ErrorKind::UndefinedName {
                     name: format!("{}::{}", module_name, import_name),
@@ -123,7 +113,9 @@ impl<'a> TypeCheckContext<'a> {
 
     /// Get a class attribute by name
     pub fn get_class_attribute(&self, class_name: &str, attr_name: &str) -> Option<Type> {
-        self.class_attributes.get(&(class_name.to_string(), attr_name.to_string())).cloned()
+        self.class_attributes
+            .get(&(class_name.to_string(), attr_name.to_string()))
+            .cloned()
     }
 }
 
@@ -139,7 +131,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
 
     /// Check types for a module
     pub fn check_module(&mut self, module: &Module) {
-
         for stmt in module.body {
             match stmt {
                 Stmt::Import(import) => {
@@ -152,35 +143,22 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             }
         }
 
-
         for stmt in module.body {
             self.check_stmt(stmt);
         }
     }
 
     /// Validate import statement types
-    fn check_import_types(&mut self, _import: &ImportStmt) {
-
-
-
-
-
-
-
-    }
+    fn check_import_types(&mut self, _import: &ImportStmt) {}
 
     /// Validate from-import statement types
     fn check_from_import_types(&mut self, from: &FromStmt) {
         let module_name = from.module.unwrap_or("");
 
-
         for (name, _alias) in from.names {
             if *name != "*" {
-
                 self.context.validate_import(module_name, name, from.span);
             }
-
-
         }
     }
 
@@ -188,7 +166,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     fn check_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Assign(assign) => {
-
                 self.check_expr(&assign.value);
 
                 let value_type = self.context.get_expr_type(assign.value.span());
@@ -201,9 +178,7 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 if let Some(ref value) = ann.value {
                     let value_type = self.context.get_expr_type(value.span());
 
-
                     let annotated_type = parse_annotation(&ann.annotation);
-
 
                     if !value_type.is_subtype_of(&annotated_type)
                         && !matches!(value_type, Type::Unknown)
@@ -229,7 +204,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             }
             Stmt::Return(ret) => {
                 if let Some(ref value) = ret.value {
-
                     self.check_expr(value);
 
                     let return_type = self.context.get_expr_type(value.span());
@@ -247,7 +221,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 }
             }
             Stmt::FuncDef(func) => {
-
                 let return_type = if let Some(returns) = &func.returns {
                     crate::semantic::passes::type_inference::parse_annotation(returns)
                 } else {
@@ -270,7 +243,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             }
             Stmt::For(for_stmt) => {
                 let iter_type = self.context.get_expr_type(for_stmt.iter.span());
-
 
                 let is_iterable = matches!(
                     iter_type,
@@ -325,8 +297,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 for item in with_stmt.items {
                     let ctx_type = self.context.get_expr_type(item.context_expr.span());
 
-
-
                     self.check_context_manager_protocol(&ctx_type, item.context_expr.span());
                 }
                 for stmt in with_stmt.body {
@@ -358,7 +328,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 }
             }
             Stmt::Expr(expr_stmt) => {
-
                 self.check_expr(&expr_stmt.value);
             }
             _ => {}
@@ -369,10 +338,8 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     fn check_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::BinOp(binop) => {
-
                 self.check_expr(binop.left);
                 self.check_expr(binop.right);
-
 
                 let left_ty = self.context.get_expr_type(binop.left.span());
                 let right_ty = self.context.get_expr_type(binop.right.span());
@@ -381,19 +348,16 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             Expr::UnaryOp(unary) => {
                 self.check_expr(unary.operand);
 
-
                 let operand_ty = self.context.get_expr_type(unary.operand.span());
                 let valid = match unary.op {
                     "not" => true, // 'not' works on any type
                     "-" | "+" => {
-
                         matches!(
                             operand_ty,
                             Type::Int | Type::Float | Type::Complex | Type::Bool
                         )
                     }
                     "~" => {
-
                         matches!(operand_ty, Type::Int | Type::Bool)
                     }
                     _ => true, // Unknown operator, accept
@@ -418,7 +382,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                     self.check_expr(&keyword.value);
                 }
 
-
                 self.check_function_call(call);
             }
             Expr::Subscript(subscript) => {
@@ -432,9 +395,7 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             Expr::Attribute(attr) => {
                 self.check_expr(attr.value);
 
-
                 let obj_ty = self.context.get_expr_type(attr.value.span());
-
 
                 let attr_ty =
                     BUILTIN_ATTRIBUTE_REGISTRY.lookup_builtin_attribute(&obj_ty, attr.attr);
@@ -442,50 +403,32 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 let has_attr = match &obj_ty {
                     Type::Unknown | Type::Any => true, // Can't verify, assume valid
                     Type::Instance(class_name) => {
-
-
                         let key = (class_name.clone(), attr.attr.to_string());
 
                         if self.context.class_attributes.contains_key(&key) {
-
                             true
+                        } else if self.context.strict_attribute_checking {
+                            self.context.add_error(*error(
+                                ErrorKind::InvalidAttribute {
+                                    obj_type: class_name.clone(),
+                                    attribute: attr.attr.to_string(),
+                                },
+                                attr.span,
+                            ));
+                            false
                         } else {
-
-                            if self.context.strict_attribute_checking {
-
-                                self.context.add_error(*error(
-                                    ErrorKind::InvalidAttribute {
-                                        obj_type: class_name.clone(),
-                                        attribute: attr.attr.to_string(),
-                                    },
-                                    attr.span,
-                                ));
-                                false
-                            } else {
-
-                                true
-                            }
+                            true
                         }
                     }
-                    Type::Module(_) => {
-
-
-                        true
-                    }
-                    Type::Union(types) => {
-
-                        types.iter().all(|ty| {
-                            BUILTIN_ATTRIBUTE_REGISTRY
-                                .lookup_builtin_attribute(ty, attr.attr)
-                                .is_some()
-                        })
-                    }
-                    Type::Optional(inner_ty) => {
-
+                    Type::Module(_) => true,
+                    Type::Union(types) => types.iter().all(|ty| {
                         BUILTIN_ATTRIBUTE_REGISTRY
-                            .lookup_builtin_attribute(inner_ty, attr.attr)
+                            .lookup_builtin_attribute(ty, attr.attr)
                             .is_some()
-                    }
+                    }),
+                    Type::Optional(inner_ty) => BUILTIN_ATTRIBUTE_REGISTRY
+                        .lookup_builtin_attribute(inner_ty, attr.attr)
+                        .is_some(),
                     _ => attr_ty.is_some(), // Check builtin registry for other types
                 };
 
@@ -547,9 +490,7 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 self.check_expr(ifexp.body);
                 self.check_expr(ifexp.orelse);
             }
-            _ => {
-
-            }
+            _ => {}
         }
     }
 
@@ -557,32 +498,25 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     fn check_assignment_target(&mut self, target: &Expr, value_type: &Type) {
         match target {
             Expr::Name(name) => {
-
-
                 if let Some(declared_type) = self
                     .context
                     .inference_ctx
                     .symbol_table()
                     .get_symbol_type(name.id)
+                    && !value_type.is_subtype_of(&declared_type)
+                    && !matches!(value_type, Type::Unknown)
+                    && !matches!(declared_type, Type::Unknown)
                 {
-
-                    if !value_type.is_subtype_of(&declared_type)
-                        && !matches!(value_type, Type::Unknown)
-                        && !matches!(declared_type, Type::Unknown)
-                    {
-                        self.context.add_error(*error(
-                            ErrorKind::TypeMismatch {
-                                expected: declared_type.to_string(),
-                                found: value_type.to_string(),
-                            },
-                            target.span(),
-                        ));
-                    }
+                    self.context.add_error(*error(
+                        ErrorKind::TypeMismatch {
+                            expected: declared_type.to_string(),
+                            found: value_type.to_string(),
+                        },
+                        target.span(),
+                    ));
                 }
-
             }
             Expr::Tuple(tuple) => {
-
                 if let Type::Tuple(types) = value_type {
                     if tuple.elts.len() != types.len() {
                         self.context.add_error(*error(
@@ -599,7 +533,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                         }
                     }
                 } else {
-
                     self.context.add_error(*error(
                         ErrorKind::TypeMismatch {
                             expected: Type::Tuple(vec![]).to_string(),
@@ -610,7 +543,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 }
             }
             Expr::List(list) => {
-
                 if let Type::List(elem_ty) = value_type {
                     for elem in list.elts {
                         self.check_assignment_target(elem, elem_ty);
@@ -631,14 +563,11 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 self.check_subscript(&container_type, &index_type, subscript.span);
             }
             Expr::Attribute(attr) => {
-
                 self.check_expr(attr.value);
 
                 let obj_type = self.context.get_expr_type(attr.value.span());
 
-
                 if let Type::Instance(class_name) = &obj_type {
-
                     let attr_key = (class_name.clone(), attr.attr.to_string());
 
                     if let Some(Type::AttributeDescriptor {
@@ -647,9 +576,7 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                         setter_type,
                     }) = self.context.inference_ctx.class_attributes.get(&attr_key)
                     {
-
                         if setter_type.is_none() {
-
                             self.context.add_error(*error(
                                 ErrorKind::ReadOnlyProperty {
                                     name: attr.attr.to_string(),
@@ -657,29 +584,24 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                                 },
                                 attr.span,
                             ));
-                        } else if let Some(setter_ty) = setter_type {
+                        } else if let Some(setter_ty) = setter_type
+                            && let Type::Function { params, .. } = setter_ty.as_ref()
+                            && params.len() >= 2
+                        {
+                            let (_self_param, value_param_type) = &params[1];
 
-
-                            if let Type::Function { params, .. } = setter_ty.as_ref() {
-
-                                if params.len() >= 2 {
-                                    let (_self_param, value_param_type) = &params[1];
-
-
-                                    if !value_type.is_subtype_of(value_param_type)
-                                        && !matches!(value_type, Type::Unknown)
-                                        && !matches!(value_param_type, Type::Unknown)
-                                    {
-                                        self.context.add_error(*error(
-                                            ErrorKind::PropertySetterTypeMismatch {
-                                                property_name: attr.attr.to_string(),
-                                                expected: value_param_type.to_string(),
-                                                found: value_type.to_string(),
-                                            },
-                                            attr.span,
-                                        ));
-                                    }
-                                }
+                            if !value_type.is_subtype_of(value_param_type)
+                                && !matches!(value_type, Type::Unknown)
+                                && !matches!(value_param_type, Type::Unknown)
+                            {
+                                self.context.add_error(*error(
+                                    ErrorKind::PropertySetterTypeMismatch {
+                                        property_name: attr.attr.to_string(),
+                                        expected: value_param_type.to_string(),
+                                        found: value_type.to_string(),
+                                    },
+                                    attr.span,
+                                ));
                             }
                         }
                     }
@@ -691,10 +613,8 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
 
     /// Check binary operation type compatibility
     fn check_binop_types(&mut self, op: &str, left: &Type, right: &Type, span: TextRange) {
-
         let valid = match op {
             "+" => {
-
                 matches!(
                     (left, right),
                     (
@@ -705,7 +625,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 ) || self.has_operator_overload(left, "add")
             }
             "-" => {
-
                 matches!(
                     (left, right),
                     (
@@ -715,7 +634,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 ) || self.has_operator_overload(left, "sub")
             }
             "*" => {
-
                 matches!(
                     (left, right),
                     (
@@ -725,7 +643,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 ) || self.has_operator_overload(left, "mul")
             }
             "/" | "//" | "%" | "**" => {
-
                 matches!(
                     (left, right),
                     (
@@ -735,17 +652,12 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 )
             }
             "|" | "^" | "&" | "<<" | ">>" => {
-
                 matches!(
                     (left, right),
                     (Type::Int | Type::Bool, Type::Int | Type::Bool)
                 )
             }
-            "@" => {
-
-
-                true
-            }
+            "@" => true,
             _ => true, // Unknown operator, accept
         };
 
@@ -764,12 +676,10 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     /// Check if a type has an operator overload method
     fn has_operator_overload(&self, ty: &Type, method_name: &str) -> bool {
         match ty {
-            Type::Instance(class_name) => {
-
-                self.context
-                    .class_attributes
-                    .contains_key(&(class_name.clone(), method_name.to_string()))
-            }
+            Type::Instance(class_name) => self
+                .context
+                .class_attributes
+                .contains_key(&(class_name.clone(), method_name.to_string())),
             _ => false,
         }
     }
@@ -778,15 +688,10 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     fn check_subscript(&mut self, container: &Type, index: &Type, span: TextRange) {
         let valid = match container {
             Type::List(_) | Type::Tuple(_) => {
-
                 matches!(index, Type::Int | Type::Bool)
             }
-            Type::Dict(key_type, _) => {
-
-                index.is_subtype_of(key_type)
-            }
+            Type::Dict(key_type, _) => index.is_subtype_of(key_type),
             Type::Str => {
-
                 matches!(index, Type::Int | Type::Bool)
             }
             Type::Unknown | Type::Any => true,
@@ -808,12 +713,9 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     /// In Coral, context managers need @operator enter and @operator exit methods
     fn check_context_manager_protocol(&mut self, ctx_type: &Type, span: TextRange) {
         match ctx_type {
-            Type::Unknown | Type::Any => {
-
-            }
+            Type::Unknown | Type::Any => {}
 
             Type::Instance(class_name) => {
-
                 let has_enter = self
                     .context
                     .get_class_attribute(class_name, "enter")
@@ -844,7 +746,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             }
 
             Type::Module(_) => {
-
                 self.context.add_error(*error(
                     ErrorKind::TypeMismatch {
                         expected: "ContextManager (requires @operator enter and @operator exit)"
@@ -856,7 +757,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             }
 
             Type::Int | Type::Float | Type::Bool | Type::Str | Type::Bytes | Type::None => {
-
                 self.context.add_error(*error(
                     ErrorKind::TypeMismatch {
                         expected: "ContextManager (requires @operator enter and @operator exit)"
@@ -868,8 +768,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             }
 
             _ => {
-
-
                 self.context.add_error(*error(
                     ErrorKind::TypeMismatch {
                         expected: "ContextManager (requires @operator enter and @operator exit)"
@@ -884,11 +782,9 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
 
     /// Check if a type satisfies another type (including protocol compliance)
     fn type_satisfies(&self, actual: &Type, expected: &Type) -> bool {
-
         if actual.is_subtype_of(expected) {
             return true;
         }
-
 
         if let (Type::Instance(actual_class), Type::Instance(protocol_name)) = (actual, expected) {
             return self.check_protocol_compliance(actual_class, protocol_name);
@@ -899,8 +795,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
 
     /// Check if a class implements a protocol (structurally)
     fn check_protocol_compliance(&self, class_name: &str, protocol_name: &str) -> bool {
-
-
         let protocol_methods: Vec<String> = self
             .context
             .class_attributes
@@ -909,11 +803,9 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             .map(|((_, method), _)| method.clone())
             .collect();
 
-
         if protocol_methods.is_empty() {
             return false;
         }
-
 
         for required_method in protocol_methods {
             let class_key = (class_name.to_string(), required_method);
@@ -935,13 +827,11 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
             captures: _,
         } = func_ty
         {
-
             let positional_args: Vec<(Type, TextRange)> = call
                 .args
                 .iter()
                 .map(|arg| (self.context.get_expr_type(arg.span()), arg.span()))
                 .collect();
-
 
             let keyword_args: Vec<(Option<&str>, Type, TextRange)> = call
                 .keywords
@@ -955,11 +845,8 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 })
                 .collect();
 
-
             let num_positional = positional_args.len();
             let num_params = params.len();
-
-
 
             if num_positional > num_params {
                 self.context.add_error(*error(
@@ -972,37 +859,30 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 return;
             }
 
-
             for (i, (arg_ty, arg_span)) in positional_args.iter().enumerate() {
-                if let Some((_param_name, expected_ty)) = params.get(i) {
-
-
-                    if !self.type_satisfies(arg_ty, expected_ty)
-                        && !matches!(arg_ty, Type::Unknown)
-                        && !matches!(expected_ty, Type::Unknown)
-                    {
-                        self.context.add_error(*error(
-                            ErrorKind::InvalidArgumentType {
-                                param_index: i,
-                                expected: expected_ty.to_string(),
-                                found: arg_ty.to_string(),
-                            },
-                            *arg_span,
-                        ));
-                    }
+                if let Some((_param_name, expected_ty)) = params.get(i)
+                    && !self.type_satisfies(arg_ty, expected_ty)
+                    && !matches!(arg_ty, Type::Unknown)
+                    && !matches!(expected_ty, Type::Unknown)
+                {
+                    self.context.add_error(*error(
+                        ErrorKind::InvalidArgumentType {
+                            param_index: i,
+                            expected: expected_ty.to_string(),
+                            found: arg_ty.to_string(),
+                        },
+                        *arg_span,
+                    ));
                 }
             }
 
-
             for (arg_name, arg_ty, arg_span) in keyword_args.iter() {
-
                 let param_match = params
                     .iter()
                     .enumerate()
                     .find(|(_idx, (param_name, _ty))| param_name.as_deref() == *arg_name);
 
                 if let Some((idx, (_param_name, param_ty))) = param_match {
-
                     if !self.type_satisfies(arg_ty, param_ty)
                         && !matches!(arg_ty, Type::Unknown)
                         && !matches!(param_ty, Type::Unknown)
@@ -1017,7 +897,6 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                         ));
                     }
                 } else if let Some(name) = arg_name {
-
                     self.context.add_error(*error(
                         ErrorKind::UnexpectedKeywordArgument {
                             name: name.to_string(),
@@ -1032,19 +911,16 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     /// Validate generator protocol
     #[allow(dead_code)]
     fn validate_generator_protocol(&mut self, gen_type: &Type, span: TextRange) {
-        if let Type::Generator(elem_ty) = gen_type {
-
-
-
-            if matches!(elem_ty.as_ref(), Type::Never) {
-                self.context.add_error(*error(
-                    ErrorKind::TypeMismatch {
-                        expected: "Any non-Never type".to_string(),
-                        found: "Never".to_string(),
-                    },
-                    span,
-                ));
-            }
+        if let Type::Generator(elem_ty) = gen_type
+            && matches!(elem_ty.as_ref(), Type::Never)
+        {
+            self.context.add_error(*error(
+                ErrorKind::TypeMismatch {
+                    expected: "Any non-Never type".to_string(),
+                    found: "Never".to_string(),
+                },
+                span,
+            ));
         }
     }
 }
@@ -1063,16 +939,13 @@ mod tests {
         let mut parser = Parser::new(lexer, &arena);
         let module = parser.parse_module().expect("Parse failed");
 
-
         let mut name_resolver = NameResolver::new();
         name_resolver.resolve_module(module);
         let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
 
-
         let mut infer_ctx = TypeInferenceContext::new(symbol_table);
         let mut inference = TypeInference::new(&mut infer_ctx);
         inference.infer_module(module);
-
 
         let mut check_ctx = TypeCheckContext::new(&infer_ctx);
         let mut checker = TypeChecker::new(&mut check_ctx);
@@ -1114,7 +987,6 @@ a, b, c = (1, 2)
 
     #[test]
     fn test_invalid_binop() {
-
         let source = r#"
 s1 = "hello"
 s2 = "world"
@@ -1321,7 +1193,6 @@ def outer(x: int):
     return inner()
 "#;
         let errors = check_types(source);
-
 
         assert_eq!(errors.len(), 0);
     }

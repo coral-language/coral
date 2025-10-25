@@ -32,7 +32,6 @@ use std::collections::HashMap;
 
 /// Parse a constant string literal to infer its type
 fn infer_constant_from_str(value: &str) -> Type {
-
     if value == "True" || value == "False" {
         return Type::Bool;
     }
@@ -48,8 +47,6 @@ fn infer_constant_from_str(value: &str) -> Type {
         return Type::Float;
     }
 
-
-
     Type::Str
 }
 
@@ -57,7 +54,6 @@ fn infer_constant_from_str(value: &str) -> Type {
 pub fn parse_annotation(annotation: &Expr) -> Type {
     match annotation {
         Expr::Name(name) => {
-
             match name.id {
                 "int" => Type::Int,
                 "str" => Type::Str,
@@ -73,12 +69,10 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                 "dict" | "Dict" => Type::dict(Type::Unknown, Type::Unknown),
                 "set" | "Set" => Type::set(Type::Unknown),
 
-
                 _ => Type::Instance(name.id.to_string()),
             }
         }
         Expr::Subscript(subscript) => {
-
             if let Expr::Name(name) = subscript.value {
                 match name.id {
                     "list" | "List" => {
@@ -86,7 +80,6 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                         Type::list(elem_ty)
                     }
                     "dict" | "Dict" => {
-
                         if let Expr::Tuple(tuple) = subscript.slice
                             && tuple.elts.len() == 2
                         {
@@ -101,7 +94,6 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                         Type::set(elem_ty)
                     }
                     "tuple" | "Tuple" => {
-
                         if let Expr::Tuple(tuple) = subscript.slice {
                             let types: Vec<Type> =
                                 tuple.elts.iter().map(parse_annotation).collect();
@@ -115,7 +107,6 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                         Type::optional(inner)
                     }
                     "Union" => {
-
                         if let Expr::Tuple(tuple) = subscript.slice {
                             let types: Vec<Type> =
                                 tuple.elts.iter().map(parse_annotation).collect();
@@ -131,7 +122,6 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
             }
         }
         Expr::Constant(constant) => {
-
             if constant.value == "None" {
                 Type::None
             } else {
@@ -139,7 +129,6 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
             }
         }
         Expr::BinOp(binop) if binop.op == "|" => {
-
             let left = parse_annotation(binop.left);
             let right = parse_annotation(binop.right);
             Type::union(vec![left, right])
@@ -275,13 +264,10 @@ impl<'a> TypeInference<'a> {
     fn resolve_attribute_type(&mut self, base_ty: &Type, attr_name: &str) -> Type {
         match base_ty {
             Type::Instance(class_name) => {
-
-
                 let key = (class_name.to_string(), attr_name.to_string());
                 if let Some(attr_type) = self.context.class_attributes.get(&key) {
                     return attr_type.clone();
                 }
-
 
                 if let Some(mro) = self.context.class_mro.get(class_name.as_str()) {
                     for base_class in mro {
@@ -292,29 +278,19 @@ impl<'a> TypeInference<'a> {
                     }
                 }
 
-
                 Type::Unknown
             }
-            Type::Class(_class_name) => {
-
-                BUILTIN_ATTRIBUTE_REGISTRY
-                    .lookup_builtin_attribute(base_ty, attr_name)
-                    .unwrap_or(Type::Unknown)
-            }
-            Type::Module(module_name) => {
-
-
-                self.context
-                    .module_exports
-                    .get(module_name.as_str())
-                    .and_then(|exports| exports.get(attr_name))
-                    .cloned()
-
-
-                    .unwrap_or(Type::Unknown)
-            }
+            Type::Class(_class_name) => BUILTIN_ATTRIBUTE_REGISTRY
+                .lookup_builtin_attribute(base_ty, attr_name)
+                .unwrap_or(Type::Unknown),
+            Type::Module(module_name) => self
+                .context
+                .module_exports
+                .get(module_name.as_str())
+                .and_then(|exports| exports.get(attr_name))
+                .cloned()
+                .unwrap_or(Type::Unknown),
             Type::Union(types) => {
-
                 let mut result_types = Vec::new();
                 for ty in types {
                     let attr_ty = self.resolve_attribute_type(ty, attr_name);
@@ -330,33 +306,26 @@ impl<'a> TypeInference<'a> {
                     Type::Union(result_types)
                 }
             }
-            Type::Optional(inner_ty) => {
-
-                self.resolve_attribute_type(inner_ty, attr_name)
-            }
+            Type::Optional(inner_ty) => self.resolve_attribute_type(inner_ty, attr_name),
             Type::List(elem_ty) => {
-
                 let _ = elem_ty;
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
             Type::Dict(key_ty, val_ty) => {
-
                 let _ = (key_ty, val_ty);
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
             Type::Set(elem_ty) => {
-
                 let _ = elem_ty;
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
                     .unwrap_or(Type::Unknown)
             }
             Type::Tuple(elem_types) => {
-
                 let _ = elem_types;
                 BUILTIN_ATTRIBUTE_REGISTRY
                     .lookup_builtin_attribute(base_ty, attr_name)
@@ -380,7 +349,6 @@ impl<'a> TypeInference<'a> {
     fn infer_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Assign(assign) => {
-
                 let value_type = self.infer_expr_val(&assign.value);
 
                 for target in assign.targets {
@@ -388,16 +356,12 @@ impl<'a> TypeInference<'a> {
                 }
             }
             Stmt::AnnAssign(ann) => {
-
                 let annotated_type = parse_annotation(&ann.annotation);
-
 
                 if let Some(ref value) = ann.value {
                     let _value_type = self.infer_expr_val(value);
 
-
                     self.infer_target(&ann.target, &annotated_type);
-
 
                     if let Expr::Name(name) = &ann.target {
                         self.context
@@ -405,7 +369,6 @@ impl<'a> TypeInference<'a> {
                             .set_symbol_type(name.id, annotated_type);
                     }
                 } else {
-
                     self.infer_target(&ann.target, &annotated_type);
                 }
             }
@@ -422,27 +385,20 @@ impl<'a> TypeInference<'a> {
                 let _ = self.infer_expr_val(&expr_stmt.value);
             }
             Stmt::FuncDef(func) => {
-
                 let entered = self
                     .context
                     .symbol_table_mut()
                     .enter_child_scope(crate::semantic::symbol::ScopeType::Function, func.name);
 
                 if !entered {
-
                     return;
                 }
-
 
                 let declared_return_ty = if let Some(returns) = &func.returns {
                     parse_annotation(returns)
                 } else {
-
-
-
                     Type::Unknown
                 };
-
 
                 let return_ty = if func.is_async {
                     Type::Coroutine(Box::new(declared_return_ty))
@@ -450,17 +406,14 @@ impl<'a> TypeInference<'a> {
                     declared_return_ty
                 };
 
-
                 let func_ty = self.build_function_type_from_args(&func.args, return_ty);
                 self.context
                     .symbol_table_mut()
                     .set_symbol_type(func.name, func_ty);
 
-
                 for stmt in func.body {
                     self.infer_stmt(stmt);
                 }
-
 
                 if self.context.is_generator_function(func.name) {
                     let yield_ty = self
@@ -468,9 +421,7 @@ impl<'a> TypeInference<'a> {
                         .get_generator_yield_type(func.name)
                         .unwrap_or(Type::Unknown);
 
-
                     let generator_ty = Type::generator(yield_ty);
-
 
                     let func_ty = self.build_function_type_from_args(&func.args, generator_ty);
                     self.context
@@ -478,16 +429,12 @@ impl<'a> TypeInference<'a> {
                         .set_symbol_type(func.name, func_ty);
                 }
 
-
                 self.context.symbol_table_mut().pop_scope();
             }
             Stmt::ClassDef(class) => {
-
-
                 self.context
                     .symbol_table_mut()
                     .set_symbol_type(class.name, Type::Class(class.name.to_string()));
-
 
                 let entered = self
                     .context
@@ -499,16 +446,13 @@ impl<'a> TypeInference<'a> {
                         self.infer_stmt(stmt);
                     }
 
-
                     self.context.symbol_table_mut().pop_scope();
                 }
             }
             Stmt::For(for_stmt) => {
                 let iter_type = self.infer_expr_val(&for_stmt.iter);
 
-
                 let elem_type = Self::infer_iterable_element_type(iter_type);
-
 
                 self.infer_target(&for_stmt.target, &elem_type);
 
@@ -564,9 +508,7 @@ impl<'a> TypeInference<'a> {
             Stmt::Match(match_stmt) => {
                 let subject_ty = self.infer_expr_val(&match_stmt.subject);
                 for case in match_stmt.cases {
-
                     self.infer_pattern_types(&case.pattern, &subject_ty);
-
 
                     if let Some(ref guard) = case.guard {
                         let _ = self.infer_expr(guard);
@@ -579,24 +521,20 @@ impl<'a> TypeInference<'a> {
             }
             Stmt::Yield(yield_stmt) => {
                 if let Some(ref value) = yield_stmt.value {
-
                     match value {
                         Expr::YieldFrom(yield_from) => {
-
                             let iter_ty = self.infer_expr(yield_from.value);
                             let elem_ty = Self::infer_iterable_element_type(iter_ty);
                             self.context
                                 .mark_current_function_as_generator(elem_ty.clone());
                         }
                         _ => {
-
                             let value_ty = self.infer_expr(value);
                             self.context
                                 .mark_current_function_as_generator(value_ty.clone());
                         }
                     }
                 } else {
-
                     self.context.mark_current_function_as_generator(Type::None);
                 }
             }
@@ -608,19 +546,16 @@ impl<'a> TypeInference<'a> {
     fn infer_target(&mut self, target: &Expr, ty: &Type) {
         match target {
             Expr::Name(name) => {
-
                 self.context
                     .symbol_table_mut()
                     .set_symbol_type(name.id, ty.clone());
             }
             Expr::Tuple(tuple) => {
-
                 if let Type::Tuple(types) = ty {
                     for (elem, elem_ty) in tuple.elts.iter().zip(types.iter()) {
                         self.infer_target(elem, elem_ty);
                     }
                 } else {
-
                     let elem_ty = Self::infer_iterable_element_type(ty.clone());
                     for elem in tuple.elts {
                         self.infer_target(elem, &elem_ty);
@@ -628,33 +563,26 @@ impl<'a> TypeInference<'a> {
                 }
             }
             Expr::List(list) => {
-
                 if let Type::List(elem_ty) = ty {
-
                     let starred_count = list
                         .elts
                         .iter()
                         .filter(|e| matches!(e, Expr::Starred(_)))
                         .count();
                     if starred_count == 0 {
-
                         for elem in list.elts {
                             self.infer_target(elem, elem_ty);
                         }
                     } else if starred_count == 1 {
-
                         for elem in list.elts {
                             if let Expr::Starred(starred) = elem {
-
                                 self.infer_target(starred.value, &Type::List(elem_ty.clone()));
                             } else {
-
                                 self.infer_target(elem, elem_ty);
                             }
                         }
                     }
                 } else {
-
                     let elem_ty = Self::infer_iterable_element_type(ty.clone());
                     for elem in list.elts {
                         if let Expr::Starred(starred) = elem {
@@ -669,19 +597,13 @@ impl<'a> TypeInference<'a> {
                 }
             }
             Expr::Dict(dict) => {
-
                 if let Type::Dict(_key_ty, val_ty) = ty {
-
                     for (_key, value) in dict.keys.iter().zip(dict.values.iter()) {
-
-
                         self.infer_target(value, val_ty);
                     }
                 }
             }
             Expr::Starred(starred) => {
-
-
                 if let Type::List(elem_ty) = ty {
                     self.infer_target(starred.value, &Type::List(elem_ty.clone()));
                 } else {
@@ -713,7 +635,6 @@ impl<'a> TypeInference<'a> {
             Type::Generator(elem) => *elem, // Support generator iteration
             Type::Any => Type::Any,         // Support gradual typing
             Type::Union(types) => {
-
                 let elem_types: Vec<Type> = types
                     .into_iter()
                     .map(Self::infer_iterable_element_type)
@@ -736,7 +657,6 @@ impl<'a> TypeInference<'a> {
         self.infer_expr(expr)
     }
 
-
     fn infer_expr_with_expected(&mut self, expr: &Expr, expected: Option<Type>) -> Type {
         self.context.push_expected_type(expected);
         let ty = self.infer_expr(expr);
@@ -747,24 +667,19 @@ impl<'a> TypeInference<'a> {
     /// Infer type from an expression
     fn infer_expr(&mut self, expr: &Expr) -> Type {
         let ty = match expr {
-
             Expr::Constant(constant) => infer_constant_from_str(constant.value),
             Expr::Complex(_) => Type::Complex,
             Expr::Bytes(_) => Type::Bytes,
-            Expr::Name(name) => {
-
-                self.context
-                    .symbol_table()
-                    .get_symbol_type(name.id)
-                    .unwrap_or(Type::Unknown)
-            }
-
+            Expr::Name(name) => self
+                .context
+                .symbol_table()
+                .get_symbol_type(name.id)
+                .unwrap_or(Type::Unknown),
 
             Expr::List(list) => {
                 if list.elts.is_empty() {
                     Type::list(Type::Unknown)
                 } else {
-
                     let elem_ty = self.infer_expr(&list.elts[0]);
                     Type::list(elem_ty)
                 }
@@ -785,7 +700,6 @@ impl<'a> TypeInference<'a> {
                 if dict.keys.is_empty() {
                     Type::dict(Type::Unknown, Type::Unknown)
                 } else {
-
                     let key_ty = if let Some(ref key) = dict.keys[0] {
                         self.infer_expr(key)
                     } else {
@@ -796,20 +710,16 @@ impl<'a> TypeInference<'a> {
                 }
             }
 
-
             Expr::ListComp(comp) => {
-
                 let entered = self
                     .context
                     .symbol_table_mut()
                     .enter_child_scope(crate::semantic::symbol::ScopeType::Comprehension, "<comp>");
 
                 if !entered {
-
                     let elem_ty = self.infer_expr(comp.elt);
                     return Type::list(elem_ty);
                 }
-
 
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
@@ -817,25 +727,21 @@ impl<'a> TypeInference<'a> {
                     let elem_ty = Self::infer_iterable_element_type(iter_ty);
                     self.infer_target(&generator.target, &elem_ty);
 
-
                     for cond in generator.ifs {
                         let _cond_ty = self.infer_expr(cond);
                     }
                 }
                 let elem_ty = self.infer_expr(comp.elt);
-
 
                 self.context.symbol_table_mut().pop_scope();
 
                 Type::list(elem_ty)
             }
             Expr::SetComp(comp) => {
-
                 self.context.symbol_table_mut().push_scope(
                     crate::semantic::symbol::ScopeType::Comprehension,
                     "<comp>".to_string(),
                 );
-
 
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
@@ -847,18 +753,15 @@ impl<'a> TypeInference<'a> {
                 }
                 let elem_ty = self.infer_expr(comp.elt);
 
-
                 self.context.symbol_table_mut().pop_scope();
 
                 Type::set(elem_ty)
             }
             Expr::DictComp(comp) => {
-
                 self.context.symbol_table_mut().push_scope(
                     crate::semantic::symbol::ScopeType::Comprehension,
                     "<comp>".to_string(),
                 );
-
 
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
@@ -871,18 +774,15 @@ impl<'a> TypeInference<'a> {
                 let key_ty = self.infer_expr(comp.key);
                 let value_ty = self.infer_expr(comp.value);
 
-
                 self.context.symbol_table_mut().pop_scope();
 
                 Type::dict(key_ty, value_ty)
             }
             Expr::GeneratorExp(comp) => {
-
                 self.context.symbol_table_mut().push_scope(
                     crate::semantic::symbol::ScopeType::Comprehension,
                     "<comp>".to_string(),
                 );
-
 
                 for generator in comp.generators {
                     let iter_ty = self.infer_expr(&generator.iter);
@@ -893,20 +793,16 @@ impl<'a> TypeInference<'a> {
                     }
                 }
 
-
                 let elem_ty = self.infer_expr(comp.elt);
-
 
                 self.context.symbol_table_mut().pop_scope();
 
                 Type::generator(elem_ty) // Return proper generator type
             }
 
-
             Expr::BinOp(binop) => self.infer_binop(binop),
             Expr::UnaryOp(unary) => self.infer_unaryop(unary),
             Expr::Compare(compare) => {
-
                 let _left_ty = self.infer_expr(compare.left);
                 for comparator in compare.comparators {
                     let _comp_ty = self.infer_expr(comparator);
@@ -915,7 +811,6 @@ impl<'a> TypeInference<'a> {
                 Type::Bool
             }
             Expr::BoolOp(boolop) => {
-
                 for value in boolop.values {
                     let _val_ty = self.infer_expr(value);
                 }
@@ -923,17 +818,13 @@ impl<'a> TypeInference<'a> {
                 Type::Bool
             }
 
-
             Expr::Call(call) => {
-
                 let func_ty = self.infer_expr(call.func);
-
 
                 let param_types = match &func_ty {
                     Type::Function { params, .. } => Some(params.as_slice()),
                     _ => None,
                 };
-
 
                 for (i, arg) in call.args.iter().enumerate() {
                     let expected =
@@ -941,32 +832,21 @@ impl<'a> TypeInference<'a> {
                     self.infer_expr_with_expected(arg, expected);
                 }
 
-
                 for keyword in call.keywords {
-
-
-
                     let _kwarg_ty = self.infer_expr(&keyword.value);
-
                 }
-
 
                 match func_ty {
                     Type::Function { returns, .. } => *returns,
-                    Type::Class(class_name) => {
-
-                        Type::Instance(class_name)
-                    }
+                    Type::Class(class_name) => Type::Instance(class_name),
                     _ => Type::Unknown,
                 }
             }
-
 
             Expr::Attribute(attr) => {
                 let value_ty = self.infer_expr(attr.value);
                 self.resolve_attribute_type(&value_ty, attr.attr)
             }
-
 
             Expr::Subscript(subscript) => {
                 let value_ty = self.infer_expr(subscript.value);
@@ -977,7 +857,6 @@ impl<'a> TypeInference<'a> {
                     Type::List(elem_ty) => *elem_ty,
                     Type::Dict(_, val_ty) => *val_ty,
                     Type::Tuple(types) => {
-
                         if let Expr::Constant(constant) = subscript.slice
                             && let Ok(index) = constant.value.parse::<usize>()
                             && index < types.len()
@@ -1009,14 +888,11 @@ impl<'a> TypeInference<'a> {
                 }
             }
 
-
             Expr::Lambda(lambda) => {
-
                 self.context.symbol_table_mut().push_scope(
                     crate::semantic::symbol::ScopeType::Function,
                     "<lambda>".to_string(),
                 );
-
 
                 let expected_params =
                     if let Some(Type::Function { params, .. }) = self.context.expected_type() {
@@ -1027,18 +903,14 @@ impl<'a> TypeInference<'a> {
 
                 let mut param_types = Vec::new();
 
-
                 for (i, arg) in lambda.args.args.iter().enumerate() {
                     let param_type = if let Some(annotation) = &arg.annotation {
-
                         parse_annotation(annotation)
                     } else if let Some((_name, expected_ty)) =
                         expected_params.as_ref().and_then(|p| p.get(i))
                     {
-
                         expected_ty.clone()
                     } else {
-
                         Type::Unknown
                     };
 
@@ -1047,7 +919,6 @@ impl<'a> TypeInference<'a> {
                         .symbol_table_mut()
                         .set_symbol_type(arg.arg, param_type);
                 }
-
 
                 for arg in lambda.args.posonlyargs {
                     let param_type = arg
@@ -1061,7 +932,6 @@ impl<'a> TypeInference<'a> {
                         .set_symbol_type(arg.arg, param_type);
                 }
 
-
                 for arg in lambda.args.kwonlyargs {
                     let param_type = arg
                         .annotation
@@ -1074,12 +944,9 @@ impl<'a> TypeInference<'a> {
                         .set_symbol_type(arg.arg, param_type);
                 }
 
-
                 let return_ty = self.infer_expr(lambda.body);
 
-
                 self.context.symbol_table_mut().analyze_closures();
-
 
                 let mut captures = Vec::new();
                 {
@@ -1094,13 +961,10 @@ impl<'a> TypeInference<'a> {
                     }
                 }
 
-
                 self.context.symbol_table_mut().pop_scope();
-
 
                 Type::function_with_captures(param_types, return_ty, captures)
             }
-
 
             Expr::IfExp(ifexp) => {
                 let _test_ty = self.infer_expr(ifexp.test);
@@ -1122,7 +986,6 @@ impl<'a> TypeInference<'a> {
                         .mark_current_function_as_generator(value_ty.clone());
                     Type::generator(value_ty)
                 } else {
-
                     self.context.mark_current_function_as_generator(Type::None);
                     Type::generator(Type::None)
                 }
@@ -1137,33 +1000,25 @@ impl<'a> TypeInference<'a> {
                 Type::generator(elem_ty)
             }
 
-
             Expr::TString(_) => Type::Str,
             Expr::JoinedStr(_) => Type::Str,
             Expr::FormattedValue(_) => Type::Str,
 
-
             Expr::Starred(starred) => self.infer_expr(starred.value),
-
 
             Expr::Await(await_expr) => {
                 let awaited_type = self.infer_expr(await_expr.value);
 
-
                 match awaited_type {
-
                     Type::Coroutine(inner) => *inner,
 
                     Type::Instance(ref name)
                         if name == "Future" || name == "Task" || name == "Coroutine" =>
                     {
-
                         Type::Unknown
                     }
 
-                    Type::Generic { base, params } if matches!(*base, Type::Instance(ref n) if n == "Future" || n == "Task" || n == "Coroutine") =>
-                    {
-
+                    Type::Generic { base, params } if matches!(*base, Type::Instance(ref n) if n == "Future" || n == "Task" || n == "Coroutine") => {
                         params.first().cloned().unwrap_or(Type::Unknown)
                     }
 
@@ -1173,15 +1028,12 @@ impl<'a> TypeInference<'a> {
                 }
             }
 
-
             Expr::Slice(_) => Type::Unknown, // Slices don't have a direct type
-
 
             Expr::NamedExpr(named) => self.infer_expr(named.value),
 
             _ => Type::Unknown,
         };
-
 
         let span = expr.span();
         self.context
@@ -1195,42 +1047,29 @@ impl<'a> TypeInference<'a> {
         let left_ty = self.infer_expr(binop.left);
         let right_ty = self.infer_expr(binop.right);
 
-
         match binop.op {
             "+" => {
-
                 if left_ty == Type::Str && right_ty == Type::Str {
                     return Type::Str;
                 }
 
                 Self::infer_numeric_binop(&left_ty, &right_ty, false)
             }
-            "/" => {
-
-                Type::Float
-            }
+            "/" => Type::Float,
             "-" | "*" | "//" | "%" | "**" => Self::infer_numeric_binop(&left_ty, &right_ty, false),
-            "|" | "^" | "&" | "<<" | ">>" => {
+            "|" | "^" | "&" | "<<" | ">>" => match (&left_ty, &right_ty) {
+                (Type::Int, Type::Int) | (Type::Bool, Type::Bool) => Type::Int,
+                (Type::Bool, Type::Int) | (Type::Int, Type::Bool) => Type::Int,
 
-                match (&left_ty, &right_ty) {
-                    (Type::Int, Type::Int) | (Type::Bool, Type::Bool) => Type::Int,
-                    (Type::Bool, Type::Int) | (Type::Int, Type::Bool) => Type::Int,
+                (Type::Any, _) | (_, Type::Any) => Type::Any,
+                _ => Type::Unknown,
+            },
+            "@" => match (&left_ty, &right_ty) {
+                (Type::Any, _) | (_, Type::Any) => Type::Any,
 
-                    (Type::Any, _) | (_, Type::Any) => Type::Any,
-                    _ => Type::Unknown,
-                }
-            }
-            "@" => {
-
-
-                match (&left_ty, &right_ty) {
-
-                    (Type::Any, _) | (_, Type::Any) => Type::Any,
-
-                    (Type::List(_), Type::List(_)) => left_ty,
-                    _ => Type::Unknown,
-                }
-            }
+                (Type::List(_), Type::List(_)) => left_ty,
+                _ => Type::Unknown,
+            },
             _ => Type::Unknown,
         }
     }
@@ -1254,7 +1093,6 @@ impl<'a> TypeInference<'a> {
             (Type::Any, _) | (_, Type::Any) => Type::Any,
 
             (Type::Union(types), other) | (other, Type::Union(types)) => {
-
                 let all_numeric = types.iter().all(|t| {
                     matches!(
                         t,
@@ -1262,7 +1100,6 @@ impl<'a> TypeInference<'a> {
                     )
                 });
                 if all_numeric {
-
                     if types.iter().any(|t| matches!(t, Type::Complex)) {
                         Type::Complex
                     } else if types.iter().any(|t| matches!(t, Type::Float)) {
@@ -1270,16 +1107,13 @@ impl<'a> TypeInference<'a> {
                     } else {
                         Type::Int
                     }
+                } else if matches!(
+                    other,
+                    Type::Int | Type::Float | Type::Complex | Type::Bool | Type::Any
+                ) {
+                    Type::Union(types.clone())
                 } else {
-
-                    if matches!(
-                        other,
-                        Type::Int | Type::Float | Type::Complex | Type::Bool | Type::Any
-                    ) {
-                        Type::Union(types.clone())
-                    } else {
-                        Type::Unknown
-                    }
+                    Type::Unknown
                 }
             }
             _ => Type::Unknown,
@@ -1292,22 +1126,16 @@ impl<'a> TypeInference<'a> {
 
         match unary.op {
             "not" => Type::Bool,
-            "+" | "-" => {
-
-                match &operand_ty {
-                    Type::Int | Type::Float | Type::Complex | Type::Bool => operand_ty,
-                    Type::Any => Type::Any,
-                    _ => Type::Unknown,
-                }
-            }
-            "~" => {
-
-                match &operand_ty {
-                    Type::Int | Type::Bool => Type::Int,
-                    Type::Any => Type::Any,
-                    _ => Type::Unknown,
-                }
-            }
+            "+" | "-" => match &operand_ty {
+                Type::Int | Type::Float | Type::Complex | Type::Bool => operand_ty,
+                Type::Any => Type::Any,
+                _ => Type::Unknown,
+            },
+            "~" => match &operand_ty {
+                Type::Int | Type::Bool => Type::Int,
+                Type::Any => Type::Any,
+                _ => Type::Unknown,
+            },
             _ => Type::Unknown,
         }
     }
@@ -1319,7 +1147,6 @@ impl<'a> TypeInference<'a> {
         return_ty: Type,
     ) -> Type {
         let mut params: Vec<(Option<String>, Type)> = Vec::new();
-
 
         for arg in args.posonlyargs {
             let ty = arg
@@ -1333,7 +1160,6 @@ impl<'a> TypeInference<'a> {
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
 
-
         for arg in args.args {
             let ty = arg
                 .annotation
@@ -1346,7 +1172,6 @@ impl<'a> TypeInference<'a> {
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
 
-
         for arg in args.kwonlyargs {
             let ty = arg
                 .annotation
@@ -1358,7 +1183,6 @@ impl<'a> TypeInference<'a> {
 
             self.context.symbol_table_mut().set_symbol_type(arg.arg, ty);
         }
-
 
         if let Some(vararg) = &args.vararg {
             let ty = vararg
@@ -1393,7 +1217,6 @@ impl<'a> TypeInference<'a> {
 
         match pattern {
             Pattern::MatchAs(match_as) => {
-
                 if let Some(name) = match_as.name {
                     self.context
                         .symbol_table_mut()
@@ -1404,75 +1227,56 @@ impl<'a> TypeInference<'a> {
                     self.infer_pattern_types(inner_pattern, subject_ty);
                 }
             }
-            Pattern::MatchValue(_) => {
-
-            }
+            Pattern::MatchValue(_) => {}
             Pattern::MatchOr(match_or) => {
-
                 for alt_pattern in match_or.patterns {
                     self.infer_pattern_types(alt_pattern, subject_ty);
                 }
             }
             Pattern::MatchSequence(match_seq) => {
-
                 let elem_ty = match subject_ty {
                     Type::List(elem) => (**elem).clone(),
                     Type::Tuple(elems) => {
-
                         if elems.len() == match_seq.patterns.len() {
-
                             for (pat, ty) in match_seq.patterns.iter().zip(elems.iter()) {
                                 self.infer_pattern_types(pat, ty);
                             }
                             return;
+                        } else if elems.is_empty() {
+                            Type::Unknown
                         } else {
-
-                            if elems.is_empty() {
-                                Type::Unknown
-                            } else {
-                                Type::Union(elems.clone())
-                            }
+                            Type::Union(elems.clone())
                         }
                     }
                     Type::Set(elem) => (**elem).clone(),
                     _ => Self::infer_iterable_element_type(subject_ty.clone()),
                 };
 
-
                 for pat in match_seq.patterns {
                     self.infer_pattern_types(pat, &elem_ty);
                 }
             }
             Pattern::MatchMapping(match_map) => {
-
                 let val_ty = match subject_ty {
                     Type::Dict(_, val) => (**val).clone(),
                     _ => Type::Unknown,
                 };
 
-
                 for pat in match_map.patterns {
                     self.infer_pattern_types(pat, &val_ty);
                 }
 
-
                 if let Some(rest_name) = match_map.rest {
-
                     self.context
                         .symbol_table_mut()
                         .set_symbol_type(rest_name, subject_ty.clone());
                 }
             }
             Pattern::MatchClass(match_class) => {
-
-
                 let _class_name = match &match_class.cls {
                     crate::ast::Expr::Name(name) => name.id,
                     _ => "",
                 };
-
-
-
 
                 for pat in match_class.patterns {
                     self.infer_pattern_types(pat, &Type::Unknown);
@@ -1481,9 +1285,7 @@ impl<'a> TypeInference<'a> {
                     self.infer_pattern_types(pat, &Type::Unknown);
                 }
             }
-            Pattern::MatchSingleton(_singleton) => {
-
-            }
+            Pattern::MatchSingleton(_singleton) => {}
         }
     }
 }
@@ -1519,17 +1321,13 @@ n = None
 "#;
         let context = infer_types(source);
 
-
         assert!(!context.expr_types.is_empty(), "Should have inferred types");
-
-
 
         assert!(
             context.expr_types.len() >= 5,
             "Should have inferred at least 5 literal types, got {}",
             context.expr_types.len()
         );
-
 
         let has_int = context.expr_types.values().any(|t| matches!(t, Type::Int));
         let has_float = context
@@ -1557,9 +1355,7 @@ dct = {"a": 1, "b": 2}
 "#;
         let context = infer_types(source);
 
-
         assert!(!context.expr_types.is_empty(), "Should have inferred types");
-
 
         let has_list = context
             .expr_types
@@ -1593,9 +1389,7 @@ c = "hello" + "world"
 "#;
         let context = infer_types(source);
 
-
         assert!(!context.expr_types.is_empty(), "Should have inferred types");
-
 
         let has_int = context.expr_types.values().any(|t| matches!(t, Type::Int));
         let has_float = context
@@ -1618,8 +1412,6 @@ c = "hello" + "world"
 gen = (x * 2 for x in [1, 2, 3])
 "#;
         let _context = infer_types(source);
-
-
     }
 
     #[test]
@@ -1628,7 +1420,6 @@ gen = (x * 2 for x in [1, 2, 3])
 result = [x for gen in [(y for y in [1,2,3])] for x in gen]
 "#;
         let _ctx = infer_types(source);
-
     }
 
     #[test]
@@ -1640,8 +1431,6 @@ def takes_int(x: int) -> int:
 result = takes_int(42)
 "#;
         let _ctx = infer_types(source);
-
-
     }
 
     #[test]
@@ -1650,8 +1439,6 @@ result = takes_int(42)
 f = lambda x: x + 1
 "#;
         let _ctx = infer_types(source);
-
-
     }
 
     #[test]
@@ -1660,7 +1447,6 @@ f = lambda x: x + 1
 g = lambda x: int: x * 2
 "#;
         let _ctx = infer_types(source);
-
     }
 
     #[test]
@@ -1672,7 +1458,6 @@ def apply(f, x: int) -> int:
 result = apply(lambda x: x * 2, 5)
 "#;
         let _ctx = infer_types(source);
-
     }
 
     #[test]
@@ -1684,7 +1469,6 @@ def make_adder(n: int):
 add_five = make_adder(5)
 "#;
         let _ctx = infer_types(source);
-
     }
 
     #[test]
@@ -1702,9 +1486,6 @@ keys = d.keys()
 "#;
         let ctx = infer_types(source);
 
-
-
-
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1715,9 +1496,6 @@ s = "hello"
 result = s.upper()
 "#;
         let ctx = infer_types(source);
-
-
-
 
         assert!(!ctx.expr_types.is_empty());
     }
@@ -1730,7 +1508,6 @@ count = lst.count(1)
 "#;
         let ctx = infer_types(source);
 
-
         assert!(!ctx.expr_types.is_empty());
     }
 
@@ -1741,7 +1518,6 @@ d = {"a": 1, "b": 2}
 keys = d.keys()
 "#;
         let ctx = infer_types(source);
-
 
         assert!(!ctx.expr_types.is_empty());
     }
@@ -1754,7 +1530,6 @@ class Person:
     age: int = 30
 "#;
         let ctx = infer_types(source);
-
 
         let _ = ctx; // Just ensure it parses without panicking
     }

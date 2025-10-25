@@ -226,7 +226,6 @@ impl ControlFlowGraph {
         constant_defs: Vec<String>,
     ) {
         if let Some(b) = self.blocks.get_mut(&block) {
-
             for def in &defs {
                 b.defs.insert(def.clone());
             }
@@ -243,7 +242,6 @@ impl ControlFlowGraph {
                 defs,
                 uses,
             });
-
 
             if matches!(
                 kind,
@@ -383,8 +381,6 @@ impl ControlFlowAnalyzer {
         self.function_cfgs.get(function_name)
     }
 
-
-
     /// Extract variables defined and used by a statement
     fn extract_defs_uses(&self, stmt: &Stmt) -> (Vec<String>, Vec<String>) {
         match stmt {
@@ -442,7 +438,6 @@ impl ControlFlowAnalyzer {
                 (Vec::new(), uses)
             }
             Stmt::Delete(delete) => {
-
                 let uses = delete
                     .targets
                     .iter()
@@ -450,23 +445,15 @@ impl ControlFlowAnalyzer {
                     .collect();
                 (Vec::new(), uses)
             }
-            Stmt::Global(global) => {
-
-                (
-                    global.names.iter().map(|n| n.to_string()).collect(),
-                    Vec::new(),
-                )
-            }
-            Stmt::Nonlocal(nonlocal) => {
-
-                (
-                    nonlocal.names.iter().map(|n| n.to_string()).collect(),
-                    Vec::new(),
-                )
-            }
+            Stmt::Global(global) => (
+                global.names.iter().map(|n| n.to_string()).collect(),
+                Vec::new(),
+            ),
+            Stmt::Nonlocal(nonlocal) => (
+                nonlocal.names.iter().map(|n| n.to_string()).collect(),
+                Vec::new(),
+            ),
             Stmt::FuncDef(func) => {
-
-
                 let defs = vec![func.name.to_string()];
                 let uses = func
                     .decorators
@@ -476,16 +463,12 @@ impl ControlFlowAnalyzer {
                 (defs, uses)
             }
             Stmt::ClassDef(class) => {
-
-
                 let defs = vec![class.name.to_string()];
                 let mut uses: Vec<String> = Vec::new();
-
 
                 for base in class.bases {
                     uses.extend(self.extract_expr_vars(base));
                 }
-
 
                 for decorator in class.decorators {
                     uses.extend(self.extract_expr_vars(decorator));
@@ -520,14 +503,8 @@ impl ControlFlowAnalyzer {
                 .iter()
                 .flat_map(|e| self.extract_expr_vars_as_names(e))
                 .collect(),
-            Expr::Subscript(sub) => {
-
-                self.extract_expr_vars_as_names(&sub.value)
-            }
-            Expr::Attribute(attr) => {
-
-                self.extract_expr_vars_as_names(&attr.value)
-            }
+            Expr::Subscript(sub) => self.extract_expr_vars_as_names(&sub.value),
+            Expr::Attribute(attr) => self.extract_expr_vars_as_names(&attr.value),
             _ => Vec::new(),
         }
     }
@@ -542,10 +519,7 @@ impl ControlFlowAnalyzer {
                 vars
             }
             Expr::UnaryOp(unary) => self.extract_expr_vars(&unary.operand),
-            Expr::Lambda(lambda) => {
-
-                self.extract_expr_vars(&lambda.body)
-            }
+            Expr::Lambda(lambda) => self.extract_expr_vars(&lambda.body),
             Expr::IfExp(if_exp) => {
                 let mut vars = self.extract_expr_vars(&if_exp.test);
                 vars.extend(self.extract_expr_vars(&if_exp.body));
@@ -673,10 +647,7 @@ impl ControlFlowAnalyzer {
 
             Expr::Constant(_) | Expr::TString(_) | Expr::Complex(_) | Expr::Bytes(_) => Vec::new(),
 
-            Expr::NamedExpr(named) => {
-
-                self.extract_expr_vars(&named.value)
-            }
+            Expr::NamedExpr(named) => self.extract_expr_vars(&named.value),
 
             Expr::BoolOp(boolop) => boolop
                 .values
@@ -691,13 +662,11 @@ impl ControlFlowAnalyzer {
     /// Extract condition information from an expression for type narrowing
     fn extract_condition_info(&self, expr: &Expr, var_name: &str) -> Option<ConditionInfo> {
         match expr {
-
             Expr::Call(call) => {
                 if let Expr::Name(func_name) = &*call.func {
                     if func_name.id == "isinstance" && call.args.len() >= 2 {
                         if let Expr::Name(arg_name) = &call.args[0] {
                             if arg_name.id == var_name {
-
                                 let type_name = if let Expr::Name(type_name) = &call.args[1] {
                                     type_name.id.to_string()
                                 } else {
@@ -721,7 +690,6 @@ impl ControlFlowAnalyzer {
                     if left_name.id == var_name {
                         if compare.ops.len() == 1 {
                             if let Some(Expr::Constant(c)) = compare.comparators.first() {
-
                                 if format!("{:?}", c.value).contains("None") {
                                     return Some(ConditionInfo {
                                         variable: var_name.to_string(),
@@ -775,94 +743,73 @@ impl ControlFlowAnalyzer {
         let full_span = stmt.span();
 
         match stmt {
-
             Stmt::Pass(_) | Stmt::Break(_) | Stmt::Continue(_) => full_span,
 
-
             Stmt::Return(_) => {
-
                 let end = full_span.start() + TextSize::from(6u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Raise(_) => {
-
                 let end = full_span.start() + TextSize::from(5u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::If(_) => {
-
                 let end = full_span.start() + TextSize::from(2u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::While(_) => {
-
                 let end = full_span.start() + TextSize::from(5u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::For(_) => {
-
                 let end = full_span.start() + TextSize::from(3u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Try(_) => {
-
                 let end = full_span.start() + TextSize::from(3u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::With(_) => {
-
                 let end = full_span.start() + TextSize::from(4u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Match(_) => {
-
                 let end = full_span.start() + TextSize::from(5u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Assert(_) => {
-
                 let end = full_span.start() + TextSize::from(6u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Import(_) => {
-
                 let end = full_span.start() + TextSize::from(6u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::From(_) => {
-
                 let end = full_span.start() + TextSize::from(4u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::Export(_) => {
-
                 let end = full_span.start() + TextSize::from(6u32);
                 TextRange::new(full_span.start(), end.min(full_span.end()))
             }
             Stmt::FuncDef(func) => {
-
                 let def_offset = TextSize::from(4u32);
                 let name_len = TextSize::from(func.name.len() as u32);
                 let name_start = full_span.start() + def_offset;
                 TextRange::new(name_start, name_start + name_len)
             }
             Stmt::ClassDef(class) => {
-
                 let class_offset = TextSize::from(6u32);
                 let name_len = TextSize::from(class.name.len() as u32);
                 let name_start = full_span.start() + class_offset;
                 TextRange::new(name_start, name_start + name_len)
             }
 
-            Stmt::Expr(expr_stmt) => {
-                match &expr_stmt.value {
-                    Expr::Call(call) => {
-
-                        call.func.span()
-                    }
-                    _ => full_span,
-                }
-            }
+            Stmt::Expr(expr_stmt) => match &expr_stmt.value {
+                Expr::Call(call) => call.func.span(),
+                _ => full_span,
+            },
 
             Stmt::Assign(assign) => {
                 if let Some(first_target) = assign.targets.first() {
@@ -923,9 +870,7 @@ impl ControlFlowAnalyzer {
                 }
                 self.in_protocol = prev_protocol;
             }
-            _ => {
-
-            }
+            _ => {}
         }
     }
 
@@ -935,19 +880,12 @@ impl ControlFlowAnalyzer {
         let function_name = func.name.to_string();
         self.current_function = Some(function_name.clone());
 
-
         let mut cfg = ControlFlowGraph::new();
         let entry = cfg.entry.clone();
 
-
         let _exit = self.build_cfg_from_stmts(func.body, &mut cfg, entry);
 
-
         self.check_unreachable_code_cfg(&cfg);
-
-
-
-
 
         let is_empty_body =
             func.body.iter().all(|stmt| matches!(stmt, Stmt::Pass(_))) || func.body.is_empty();
@@ -958,12 +896,10 @@ impl ControlFlowAnalyzer {
             && !self.is_none_type(returns)
             && !self.check_all_paths_return_cfg(&cfg)
         {
-
             let def_offset = TextSize::from(4u32);
             let name_len = TextSize::from(func.name.len() as u32);
             let name_start = func.span.start() + def_offset;
             let signature_span = TextRange::new(name_start, name_start + name_len);
-
 
             let expected_type = self.extract_type_name(returns);
 
@@ -975,7 +911,6 @@ impl ControlFlowAnalyzer {
                 signature_span,
             ));
         }
-
 
         self.function_cfgs.insert(function_name, cfg);
 
@@ -995,19 +930,16 @@ impl ControlFlowAnalyzer {
                 format!("{}.{}", self.extract_type_name(attr.value), attr.attr)
             }
             Expr::Subscript(sub) => {
-
                 let base = self.extract_type_name(sub.value);
                 let param = self.extract_type_name(sub.slice);
                 format!("{}[{}]", base, param)
             }
             Expr::Tuple(tup) => {
-
                 let types: Vec<String> =
                     tup.elts.iter().map(|e| self.extract_type_name(e)).collect();
                 format!("({})", types.join(", "))
             }
             Expr::BinOp(binop) if binop.op == "|" => {
-
                 format!(
                     "{} | {}",
                     self.extract_type_name(binop.left),
@@ -1023,7 +955,6 @@ impl ControlFlowAnalyzer {
     /// This is used for constant propagation analysis
     fn is_constant_expr(&self, expr: &Expr) -> bool {
         match expr {
-
             Expr::Constant(_) | Expr::Complex(_) | Expr::Bytes(_) => true,
 
             Expr::Name(name) if matches!(name.id, "True" | "False" | "None") => true,
@@ -1049,8 +980,6 @@ impl ControlFlowAnalyzer {
         }
     }
 
-
-
     /// Build CFG from a sequence of statements
     /// Returns the exit block (last block that doesn't terminate)
     fn build_cfg_from_stmts(
@@ -1060,7 +989,6 @@ impl ControlFlowAnalyzer {
         mut current: BlockId,
     ) -> BlockId {
         for stmt in stmts {
-
             if let Some(block) = cfg.blocks.get(&current)
                 && block.terminates
             {
@@ -1080,13 +1008,10 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-
         let (defs, uses) = self.extract_defs_uses(stmt);
 
         match stmt {
-
             Stmt::Assign(assign) => {
-
                 let constant_defs = if self.is_constant_expr(&assign.value) {
                     defs.clone()
                 } else {
@@ -1103,7 +1028,6 @@ impl ControlFlowAnalyzer {
                 current
             }
             Stmt::AnnAssign(ann_assign) => {
-
                 let constant_defs = if let Some(ref value) = ann_assign.value
                     && self.is_constant_expr(value)
                 {
@@ -1122,7 +1046,6 @@ impl ControlFlowAnalyzer {
                 current
             }
 
-
             Stmt::Expr(_)
             | Stmt::AugAssign(_)
             | Stmt::Pass(_)
@@ -1138,7 +1061,6 @@ impl ControlFlowAnalyzer {
                 cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal, defs, uses);
                 current
             }
-
 
             Stmt::Return(_) => {
                 cfg.add_statement(current.clone(), stmt.span(), StmtKind::Return, defs, uses);
@@ -1176,14 +1098,12 @@ impl ControlFlowAnalyzer {
                 current
             }
 
-
             Stmt::If(if_stmt) => self.build_cfg_if(if_stmt, cfg, current),
             Stmt::While(while_stmt) => self.build_cfg_while(while_stmt, cfg, current),
             Stmt::For(for_stmt) => self.build_cfg_for(for_stmt, cfg, current),
             Stmt::Try(try_stmt) => self.build_cfg_try(try_stmt, cfg, current),
             Stmt::With(with_stmt) => self.build_cfg_with(with_stmt, cfg, current),
             Stmt::Match(match_stmt) => self.build_cfg_match(match_stmt, cfg, current),
-
 
             Stmt::FuncDef(_) | Stmt::ClassDef(_) => {
                 cfg.add_statement(current.clone(), stmt.span(), StmtKind::Normal, defs, uses);
@@ -1199,22 +1119,16 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-
         let then_block = cfg.new_block();
         let else_block = cfg.new_block();
         let merge_block = cfg.new_block();
 
-
         cfg.add_edge(current.clone(), then_block.clone(), EdgeType::True);
         cfg.add_edge(current.clone(), else_block.clone(), EdgeType::False);
 
-
-
         if let Some(var_name) = self.extract_simple_var_name(&if_stmt.test) {
             if let Some(condition_info) = self.extract_condition_info(&if_stmt.test, &var_name) {
-
                 cfg.set_edge_condition(current.clone(), then_block.clone(), condition_info.clone());
-
 
                 let negated_kind = match condition_info.kind {
                     ConditionKind::IsNone => Some(ConditionKind::IsNotNone),
@@ -1236,9 +1150,7 @@ impl ControlFlowAnalyzer {
             }
         }
 
-
         let then_exit = self.build_cfg_from_stmts(if_stmt.body, cfg, then_block);
-
 
         if let Some(block) = cfg.blocks.get(&then_exit)
             && !block.terminates
@@ -1246,13 +1158,11 @@ impl ControlFlowAnalyzer {
             cfg.add_edge(then_exit, merge_block.clone(), EdgeType::Normal);
         }
 
-
         let else_exit = if !if_stmt.orelse.is_empty() {
             self.build_cfg_from_stmts(if_stmt.orelse, cfg, else_block)
         } else {
             else_block
         };
-
 
         if let Some(block) = cfg.blocks.get(&else_exit)
             && !block.terminates
@@ -1275,7 +1185,6 @@ impl ControlFlowAnalyzer {
                 }
             }
             Expr::Call(call) => {
-
                 if call.args.is_empty() {
                     return None;
                 }
@@ -1303,18 +1212,14 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-
         let header_block = cfg.new_block();
         let body_block = cfg.new_block();
         let exit_block = cfg.new_block();
 
-
         cfg.add_edge(current, header_block.clone(), EdgeType::Normal);
-
 
         cfg.add_edge(header_block.clone(), body_block.clone(), EdgeType::True);
         cfg.add_edge(header_block.clone(), exit_block.clone(), EdgeType::False);
-
 
         self.loop_stack.push(LoopContext {
             break_target: exit_block.clone(),
@@ -1322,9 +1227,7 @@ impl ControlFlowAnalyzer {
         });
         self.loop_depth += 1;
 
-
         let body_exit = self.build_cfg_from_stmts(while_stmt.body, cfg, body_block);
-
 
         if let Some(block) = cfg.blocks.get(&body_exit)
             && !block.terminates
@@ -1332,10 +1235,8 @@ impl ControlFlowAnalyzer {
             cfg.add_edge(body_exit, header_block, EdgeType::Loop);
         }
 
-
         self.loop_depth -= 1;
         self.loop_stack.pop();
-
 
         if !while_stmt.orelse.is_empty() {
             self.build_cfg_from_stmts(while_stmt.orelse, cfg, exit_block.clone())
@@ -1351,18 +1252,14 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-
         let header_block = cfg.new_block();
         let body_block = cfg.new_block();
         let exit_block = cfg.new_block();
 
-
         cfg.add_edge(current, header_block.clone(), EdgeType::Normal);
-
 
         cfg.add_edge(header_block.clone(), body_block.clone(), EdgeType::True);
         cfg.add_edge(header_block.clone(), exit_block.clone(), EdgeType::False);
-
 
         self.loop_stack.push(LoopContext {
             break_target: exit_block.clone(),
@@ -1370,9 +1267,7 @@ impl ControlFlowAnalyzer {
         });
         self.loop_depth += 1;
 
-
         let body_exit = self.build_cfg_from_stmts(for_stmt.body, cfg, body_block);
-
 
         if let Some(block) = cfg.blocks.get(&body_exit)
             && !block.terminates
@@ -1380,10 +1275,8 @@ impl ControlFlowAnalyzer {
             cfg.add_edge(body_exit, header_block, EdgeType::Loop);
         }
 
-
         self.loop_depth -= 1;
         self.loop_stack.pop();
-
 
         if !for_stmt.orelse.is_empty() {
             self.build_cfg_from_stmts(for_stmt.orelse, cfg, exit_block.clone())
@@ -1399,7 +1292,6 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-
         let try_block = cfg.new_block();
         let mut handler_blocks = Vec::new();
         let finally_block = if !try_stmt.finalbody.is_empty() {
@@ -1409,23 +1301,18 @@ impl ControlFlowAnalyzer {
         };
         let exit_block = cfg.new_block();
 
-
         cfg.add_edge(current, try_block.clone(), EdgeType::Normal);
-
 
         for _ in try_stmt.handlers {
             handler_blocks.push(cfg.new_block());
         }
-
 
         self.try_stack.push(TryContext {
             handler_blocks: handler_blocks.clone(),
             finally_block: finally_block.clone(),
         });
 
-
         let try_exit = self.build_cfg_from_stmts(try_stmt.body, cfg, try_block.clone());
-
 
         for handler_block in &handler_blocks {
             cfg.add_edge(
@@ -1435,7 +1322,6 @@ impl ControlFlowAnalyzer {
             );
         }
 
-
         let mut handler_exits = Vec::new();
         for (i, handler) in try_stmt.handlers.iter().enumerate() {
             let handler_exit =
@@ -1443,19 +1329,15 @@ impl ControlFlowAnalyzer {
             handler_exits.push(handler_exit);
         }
 
-
         let else_exit = if !try_stmt.orelse.is_empty() {
             self.build_cfg_from_stmts(try_stmt.orelse, cfg, try_exit.clone())
         } else {
             try_exit.clone()
         };
 
-
         self.try_stack.pop();
 
-
         if let Some(finally) = finally_block {
-
             if let Some(block) = cfg.blocks.get(&else_exit)
                 && !block.terminates
             {
@@ -1470,9 +1352,7 @@ impl ControlFlowAnalyzer {
                 }
             }
 
-
             let finally_exit = self.build_cfg_from_stmts(try_stmt.finalbody, cfg, finally);
-
 
             if let Some(block) = cfg.blocks.get(&finally_exit)
                 && !block.terminates
@@ -1480,7 +1360,6 @@ impl ControlFlowAnalyzer {
                 cfg.add_edge(finally_exit, exit_block.clone(), EdgeType::Normal);
             }
         } else {
-
             if let Some(block) = cfg.blocks.get(&else_exit)
                 && !block.terminates
             {
@@ -1506,14 +1385,12 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-
         let body_block = cfg.new_block();
         let exit_block = cfg.new_block();
 
         cfg.add_edge(current, body_block.clone(), EdgeType::Normal);
 
         let body_exit = self.build_cfg_from_stmts(with_stmt.body, cfg, body_block);
-
 
         if let Some(block) = cfg.blocks.get(&body_exit)
             && !block.terminates
@@ -1531,7 +1408,6 @@ impl ControlFlowAnalyzer {
         cfg: &mut ControlFlowGraph,
         current: BlockId,
     ) -> BlockId {
-
         let merge_block = cfg.new_block();
 
         for case in match_stmt.cases {
@@ -1550,16 +1426,12 @@ impl ControlFlowAnalyzer {
         merge_block
     }
 
-
-
     /// Check for unreachable code using CFG
     fn check_unreachable_code_cfg(&mut self, cfg: &ControlFlowGraph) {
         let reachable = cfg.reachable_blocks();
 
-
         for (block_id, block) in &cfg.blocks {
             if !reachable.contains(block_id) {
-
                 for stmt_info in &block.statements {
                     self.errors.push(*error(
                         ErrorKind::UnreachableCode {
@@ -1574,21 +1446,15 @@ impl ControlFlowAnalyzer {
 
     /// Check if all paths return using CFG
     fn check_all_paths_return_cfg(&self, cfg: &ControlFlowGraph) -> bool {
-
         let mut has_return_on_all_paths = true;
 
         for (block_id, block) in &cfg.blocks {
-
             let reachable = cfg.reachable_blocks();
             if !reachable.contains(block_id) {
                 continue;
             }
 
-
-
             if block.successors.is_empty() && block.terminator != Some(Terminator::Return) {
-
-
                 let has_only_normal_stmts = block
                     .statements
                     .iter()
@@ -1612,8 +1478,6 @@ impl ControlFlowAnalyzer {
 
         for stmt in stmts {
             if found_terminator {
-
-
                 self.errors.push(*error(
                     ErrorKind::UnreachableCode {
                         reason: terminator_reason.clone(),
@@ -1622,7 +1486,6 @@ impl ControlFlowAnalyzer {
                 ));
                 continue;
             }
-
 
             match stmt {
                 Stmt::Return(_) => {
@@ -1644,7 +1507,6 @@ impl ControlFlowAnalyzer {
                 _ => {}
             }
 
-
             self.analyze_stmt(stmt);
         }
     }
@@ -1656,12 +1518,10 @@ impl ControlFlowAnalyzer {
             return false;
         }
 
-
         for stmt in stmts {
             match stmt {
                 Stmt::Return(_) => return true,
                 Stmt::If(if_stmt) => {
-
                     let then_returns = self.check_all_paths_return(if_stmt.body);
                     let else_returns = if !if_stmt.orelse.is_empty() {
                         self.check_all_paths_return(if_stmt.orelse)
@@ -1669,13 +1529,11 @@ impl ControlFlowAnalyzer {
                         false
                     };
 
-
                     if then_returns && else_returns {
                         return true;
                     }
                 }
                 Stmt::Try(try_stmt) => {
-
                     let try_returns = self.check_all_paths_return(try_stmt.body);
                     let all_handlers_return = try_stmt
                         .handlers
@@ -1723,18 +1581,14 @@ impl ControlFlowAnalyzer {
 
     /// Analyze a try/except/finally statement
     fn analyze_try(&mut self, try_stmt: &crate::ast::nodes::TryStmt) {
-
         self.check_unreachable_in_block(try_stmt.body);
-
 
         let mut caught_exceptions = HashSet::new();
         for handler in try_stmt.handlers {
-
             if let Some(ref exc_type) = handler.typ
                 && let Expr::Name(name) = exc_type
                 && !caught_exceptions.insert(name.id.to_string())
             {
-
                 self.errors.push(*error(
                     ErrorKind::UnreachableExceptionHandler {
                         exception_type: name.id.to_string(),
@@ -1746,11 +1600,9 @@ impl ControlFlowAnalyzer {
             self.check_unreachable_in_block(handler.body);
         }
 
-
         if !try_stmt.orelse.is_empty() {
             self.check_unreachable_in_block(try_stmt.orelse);
         }
-
 
         if !try_stmt.finalbody.is_empty() {
             self.check_unreachable_in_block(try_stmt.finalbody);
@@ -1792,8 +1644,6 @@ impl ControlFlowWarning {
         }
     }
 }
-
-
 
 /// Trait for dataflow analyses
 ///
@@ -1838,15 +1688,12 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
     let mut in_values: HashMap<BlockId, A::Value> = HashMap::new();
     let mut out_values: HashMap<BlockId, A::Value> = HashMap::new();
 
-
     for block_id in cfg.blocks.keys() {
         in_values.insert(block_id.clone(), analysis.initial_value());
         out_values.insert(block_id.clone(), analysis.initial_value());
     }
 
-
     in_values.insert(cfg.entry.clone(), analysis.initial_value());
-
 
     let mut worklist: VecDeque<BlockId> = cfg.blocks.keys().cloned().collect();
     let mut iteration = 0;
@@ -1861,7 +1708,6 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
 
         let block = cfg.blocks.get(&block_id).unwrap();
 
-
         let predecessors = cfg.get_predecessors(&block_id);
         let pred_values: Vec<A::Value> = predecessors
             .iter()
@@ -1869,7 +1715,6 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
             .collect();
 
         let new_in = if pred_values.is_empty() {
-
             if block_id == cfg.entry {
                 analysis.initial_value()
             } else {
@@ -1879,9 +1724,7 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
             analysis.meet(pred_values)
         };
 
-
         let new_out = analysis.transfer(block, new_in.clone());
-
 
         let in_changed = in_values.get(&block_id) != Some(&new_in);
         let out_changed = out_values.get(&block_id) != Some(&new_out);
@@ -1889,7 +1732,6 @@ pub fn solve_dataflow<A: DataflowAnalysis>(
         if in_changed || out_changed {
             in_values.insert(block_id.clone(), new_in);
             out_values.insert(block_id.clone(), new_out);
-
 
             for (succ, _) in &block.successors {
                 if !worklist.contains(succ) {
@@ -1919,7 +1761,6 @@ impl DataflowAnalysis for DefiniteAssignmentAnalysis {
     }
 
     fn transfer(&self, block: &BasicBlock, mut input: Self::Value) -> Self::Value {
-
         for def in &block.defs {
             input.insert(def.clone());
         }
@@ -1930,7 +1771,6 @@ impl DataflowAnalysis for DefiniteAssignmentAnalysis {
         if values.is_empty() {
             return HashSet::new();
         }
-
 
         let mut result = values[0].clone();
         for value in values.iter().skip(1) {
@@ -1960,12 +1800,9 @@ impl DataflowAnalysis for AvailableExpressionsAnalysis {
     }
 
     fn transfer(&self, block: &BasicBlock, mut input: Self::Value) -> Self::Value {
-
         for def in &block.defs {
             input.remove(def);
         }
-
-
 
         for const_def in &block.constant_defs {
             input.insert(const_def.clone());
@@ -1978,7 +1815,6 @@ impl DataflowAnalysis for AvailableExpressionsAnalysis {
         if values.is_empty() {
             return HashSet::new();
         }
-
 
         let mut result = values[0].clone();
         for value in values.iter().skip(1) {

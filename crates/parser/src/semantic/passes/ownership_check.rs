@@ -1,15 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
 use crate::ast::expr::Expr;
 use crate::ast::nodes::{Module, Stmt};
 use crate::ast::patterns::Pattern;
@@ -206,15 +194,11 @@ impl OwnershipChecker {
             self.analyze_stmt(stmt);
         }
 
-
         self.finalize_recommendations();
-
 
         self.detect_cycles();
 
-
         self.optimize_references();
-
 
         self.check_resource_cleanup();
 
@@ -233,9 +217,7 @@ impl OwnershipChecker {
             escaped_vars: HashSet::new(),
         };
 
-
         let last_uses = self.compute_last_uses(cfg);
-
 
         let escaped = self.compute_escaped_vars(func_def, cfg);
 
@@ -246,7 +228,6 @@ impl OwnershipChecker {
             .function_analyses
             .insert(func_name.to_string(), analysis.clone());
 
-
         self.mark_move_candidates(&analysis);
     }
 
@@ -254,11 +235,9 @@ impl OwnershipChecker {
     fn compute_last_uses(&self, cfg: &ControlFlowGraph) -> HashMap<String, Vec<TextRange>> {
         let mut last_uses: HashMap<String, Vec<TextRange>> = HashMap::new();
 
-
         for (block_id, block) in &cfg.blocks {
             for stmt in &block.statements {
                 for var_used in &stmt.uses {
-
                     if self.is_last_use_in_paths(var_used, block_id, stmt.span, cfg) {
                         last_uses
                             .entry(var_used.clone())
@@ -280,7 +259,6 @@ impl OwnershipChecker {
         use_span: TextRange,
         cfg: &ControlFlowGraph,
     ) -> bool {
-
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
         queue.push_back(from_block.clone());
@@ -295,13 +273,11 @@ impl OwnershipChecker {
                 None => continue,
             };
 
-
             for stmt in &block.statements {
                 if stmt.span.start() > use_span.end() && stmt.uses.contains(&var_name.to_string()) {
                     return false; // Used again - not last use
                 }
             }
-
 
             for (succ_id, _) in &block.successors {
                 queue.push_back(succ_id.clone());
@@ -319,7 +295,6 @@ impl OwnershipChecker {
     ) -> HashSet<String> {
         let mut escaped = HashSet::new();
 
-
         for block in cfg.blocks.values() {
             if let Some(Terminator::Return) = block.terminator {
                 for stmt in &block.statements {
@@ -330,13 +305,7 @@ impl OwnershipChecker {
             }
         }
 
-
-
         self.detect_nested_function_captures(func_def, &mut escaped);
-
-
-
-
 
         escaped
     }
@@ -356,11 +325,9 @@ impl OwnershipChecker {
     fn find_captured_vars_in_stmt(&self, stmt: &Stmt, escaped: &mut HashSet<String>) {
         match stmt {
             Stmt::FuncDef(nested_func) => {
-
                 self.find_captured_vars_in_function(nested_func, escaped);
             }
             Stmt::ClassDef(class_def) => {
-
                 for stmt in class_def.body {
                     self.find_captured_vars_in_stmt(stmt, escaped);
                 }
@@ -424,16 +391,13 @@ impl OwnershipChecker {
         nested_func: &crate::ast::nodes::FuncDefStmt,
         escaped: &mut HashSet<String>,
     ) {
-
         let mut param_names = HashSet::new();
         for param in nested_func.args.args {
             param_names.insert(param.arg.to_string());
         }
 
-
         let mut used_vars = HashSet::new();
         self.collect_used_vars_in_stmts(nested_func.body, &mut used_vars);
-
 
         for var in used_vars {
             if !param_names.contains(&var) {
@@ -543,17 +507,14 @@ impl OwnershipChecker {
     /// Mark variables as move candidates based on last-use analysis
     fn mark_move_candidates(&mut self, function_analysis: &FunctionOwnershipAnalysis) {
         for (var_name, last_use_locations) in &function_analysis.last_uses {
-
             if function_analysis.escaped_vars.contains(var_name) {
                 continue;
             }
-
 
             let ref_info = match self.references.get(var_name) {
                 Some(info) => info,
                 None => continue,
             };
-
 
             if ref_info.ref_count == 1 && !ref_info.in_cycle {
                 for location in last_use_locations {
@@ -575,14 +536,11 @@ impl OwnershipChecker {
         &self,
         func_def: &crate::ast::nodes::FuncDefStmt,
     ) -> ControlFlowGraph {
-
         let func_name = func_def.name.to_string();
 
         if let Some(cfg) = self.cfg_cache.get(&func_name) {
             return cfg.clone();
         }
-
-
 
         ControlFlowGraph::default()
     }
@@ -591,21 +549,17 @@ impl OwnershipChecker {
     fn analyze_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::FuncDef(func_def) => {
-
                 let cfg = self.build_cfg_for_function(func_def);
 
                 self.enter_scope();
-
 
                 for param in func_def.args.args {
                     self.declare_variable(param.arg, func_def.span, None);
                 }
 
-
                 for stmt in func_def.body {
                     self.analyze_stmt(stmt);
                 }
-
 
                 let func_name = func_def.name.to_string();
                 self.analyze_function(&func_name, func_def, &cfg);
@@ -620,9 +574,7 @@ impl OwnershipChecker {
                 self.exit_scope(class_def.span);
             }
             Stmt::For(for_stmt) => {
-
                 self.analyze_expr(&for_stmt.iter);
-
 
                 if let Expr::Name(name_expr) = &for_stmt.target {
                     self.declare_variable(name_expr.id, for_stmt.target.span(), None);
@@ -633,7 +585,6 @@ impl OwnershipChecker {
                     self.analyze_stmt(stmt);
                 }
                 self.exit_scope(for_stmt.span);
-
 
                 for stmt in for_stmt.orelse {
                     self.analyze_stmt(stmt);
@@ -664,7 +615,6 @@ impl OwnershipChecker {
                 }
             }
             Stmt::With(with_stmt) => {
-
                 for item in with_stmt.items {
                     self.analyze_expr(&item.context_expr);
                     if let Some(optional_vars) = &item.optional_vars
@@ -683,13 +633,11 @@ impl OwnershipChecker {
                 self.exit_scope(with_stmt.span);
             }
             Stmt::Try(try_stmt) => {
-
                 self.enter_scope();
                 for stmt in try_stmt.body {
                     self.analyze_stmt(stmt);
                 }
                 self.exit_scope(try_stmt.span);
-
 
                 for handler in try_stmt.handlers {
                     self.enter_scope();
@@ -701,7 +649,6 @@ impl OwnershipChecker {
                     }
                     self.exit_scope(handler.span);
                 }
-
 
                 if !try_stmt.finalbody.is_empty() {
                     self.enter_scope();
@@ -723,28 +670,19 @@ impl OwnershipChecker {
                 }
             }
             Stmt::Assign(assign_stmt) => {
-
                 self.analyze_expr(&assign_stmt.value);
 
-
                 if let Some((_, target)) = self.is_weak_reference(&assign_stmt.value) {
-
                     for assign_target in assign_stmt.targets {
                         if let Some(source) = self.extract_var_name(assign_target) {
                             self.create_weak_reference(&source, &target, assign_target.span());
                         }
                     }
                 } else {
-
-
                     for target in assign_stmt.targets {
                         if let Some(var_name) = self.extract_var_name(target) {
-
                             if self.lifetime_states.contains_key(&var_name) {
-
-
                                 let can_be_freed = self.release_reference(&var_name);
-
 
                                 if can_be_freed {
                                     self.mark_resource_cleaned(&var_name);
@@ -753,10 +691,8 @@ impl OwnershipChecker {
 
                             self.declare_variable(&var_name, target.span(), None);
 
-
                             if let Some(rhs_var) = self.extract_var_name(&assign_stmt.value) {
                                 self.add_reference(&rhs_var, assign_stmt.value.span());
-
 
                                 if let Some(ref_info) = self.references.get_mut(&var_name) {
                                     ref_info.references_to.push(rhs_var.clone());
@@ -772,7 +708,6 @@ impl OwnershipChecker {
                 }
 
                 if let Some(var_name) = self.extract_var_name(&ann_assign.target) {
-
                     let type_name = if let Expr::Name(name_expr) = &ann_assign.annotation {
                         Some(name_expr.id)
                     } else {
@@ -786,34 +721,26 @@ impl OwnershipChecker {
                 if let Some(value) = &return_stmt.value {
                     self.analyze_expr(value);
 
-
                     if let Some(var_name) = self.extract_var_name(value)
                         && let Some(lifetime) = self.lifetimes.get(&var_name)
                         && lifetime.scope_depth > 0
+                        && let Some(state) = self.lifetime_states.get(&var_name)
+                        && matches!(state, LifetimeState::OutOfScope { .. })
                     {
-
-
-
-                        if let Some(state) = self.lifetime_states.get(&var_name)
-                            && matches!(state, LifetimeState::OutOfScope { .. })
-                        {
-                            self.errors.push(*error(
-                                ErrorKind::DanglingReference {
-                                    var_name,
-                                    scope_end_span: lifetime.end_span.unwrap_or(value.span()),
-                                },
-                                value.span(),
-                            ));
-                        }
+                        self.errors.push(*error(
+                            ErrorKind::DanglingReference {
+                                var_name,
+                                scope_end_span: lifetime.end_span.unwrap_or(value.span()),
+                            },
+                            value.span(),
+                        ));
                     }
                 }
             }
             Stmt::Expr(expr_stmt) => {
                 self.analyze_expr(&expr_stmt.value);
             }
-            _ => {
-
-            }
+            _ => {}
         }
     }
 
@@ -821,7 +748,6 @@ impl OwnershipChecker {
     fn analyze_pattern(&mut self, pattern: &Pattern) {
         match pattern {
             Pattern::MatchAs(p) => {
-
                 if let Some(name) = &p.name {
                     self.declare_variable(name, p.span, None);
                 }
@@ -831,18 +757,10 @@ impl OwnershipChecker {
                 }
             }
             Pattern::MatchOr(p) => {
-
-
                 for pat in p.patterns {
                     self.analyze_pattern(pat);
                 }
             }
-
-
-
-
-
-
 
             _ => {}
         }
@@ -852,21 +770,17 @@ impl OwnershipChecker {
     fn analyze_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Name(name_expr) => {
-
                 self.check_variable_use(name_expr.id, expr.span());
             }
             Expr::Call(call_expr) => {
                 self.analyze_expr(call_expr.func);
 
-
                 for arg in call_expr.args {
                     if let Some(_arg_var) = self.extract_var_name(arg) {
                         let _call_span = call_expr.span;
-
                     }
                     self.analyze_expr(arg);
                 }
-
 
                 if let Expr::Attribute(attr_expr) = call_expr.func
                     && (attr_expr.attr == "close"
@@ -880,7 +794,6 @@ impl OwnershipChecker {
             }
             Expr::Attribute(attr_expr) => {
                 self.analyze_expr(attr_expr.value);
-
 
                 if let Some(base_var) = self.extract_var_name(attr_expr.value) {
                     self.add_reference(&base_var, attr_expr.span);
@@ -921,21 +834,11 @@ impl OwnershipChecker {
                 self.analyze_expr(subscript_expr.value);
                 self.analyze_expr(subscript_expr.slice);
 
-
                 if let Some(coll_var) = self.extract_var_name(subscript_expr.value) {
                     self.add_reference(&coll_var, subscript_expr.span);
                 }
             }
-            _ => {
-
-
-
-
-
-
-
-
-            }
+            _ => {}
         }
     }
 
@@ -946,7 +849,6 @@ impl OwnershipChecker {
 
     /// Exit current scope, automatically inserting cleanup for local variables
     fn exit_scope(&mut self, scope_end_span: TextRange) {
-
         let vars_to_cleanup: Vec<String> = self
             .lifetimes
             .iter()
@@ -955,7 +857,6 @@ impl OwnershipChecker {
             })
             .map(|(name, _)| name.clone())
             .collect();
-
 
         for var_name in vars_to_cleanup {
             if let Some(lifetime) = self.lifetimes.get_mut(&var_name) {
@@ -967,7 +868,6 @@ impl OwnershipChecker {
                     end_span: scope_end_span,
                 },
             );
-
 
             if let Some(ref_info) = self.references.get_mut(&var_name) {
                 ref_info.ref_count = ref_info.ref_count.saturating_sub(1);
@@ -1009,7 +909,6 @@ impl OwnershipChecker {
             },
         );
 
-
         if let Some(type_name) = type_name
             && let Some(resource_type) = ResourceType::from_type_name(type_name)
         {
@@ -1036,7 +935,6 @@ impl OwnershipChecker {
                     ));
                 }
                 LifetimeState::Alive => {
-
                     if let Some(ref_info) = self.references.get_mut(name) {
                         ref_info.ref_count += 1;
                         ref_info.ref_spans.push(use_span);
@@ -1061,7 +959,6 @@ impl OwnershipChecker {
             && ref_info.ref_count > 0
         {
             ref_info.ref_count -= 1;
-
 
             return ref_info.ref_count == 0;
         }
@@ -1102,17 +999,14 @@ impl OwnershipChecker {
 
     /// Create a weak reference to break reference cycles
     fn create_weak_reference(&mut self, source: &str, target: &str, _ref_span: TextRange) {
-
         self.weak_references
             .entry(source.to_string())
             .or_default()
             .push(target.to_string());
 
-
         if let Some(ref_info) = self.references.get_mut(target) {
             ref_info.weak_ref_count += 1;
         }
-
 
         if let Some(ref_info) = self.references.get_mut(source) {
             ref_info.references_to.push(target.to_string());
@@ -1121,7 +1015,6 @@ impl OwnershipChecker {
 
     /// Check if an expression represents a weak reference creation
     fn is_weak_reference(&self, expr: &Expr) -> Option<(String, String)> {
-
         if let Expr::Call(call) = expr {
             if let Expr::Attribute(attr) = call.func {
                 if let Expr::Name(name) = attr.value
@@ -1145,27 +1038,22 @@ impl OwnershipChecker {
 
     /// Analyze escape behavior of a variable
     fn analyze_escape(&mut self, var_name: &str) -> EscapeStatus {
-
         if let Some(status) = self.escape_status.get(var_name) {
             return *status;
         }
 
         let mut status = EscapeStatus::NoEscape;
 
-
         if let Some(lifetime) = self.lifetimes.get(var_name) {
             if let Some(ref_info) = self.references.get(var_name) {
-
                 if ref_info.ref_count > 1 {
                     status = EscapeStatus::Escapes;
                 }
-
 
                 if !ref_info.references_to.is_empty() {
                     status = EscapeStatus::Escapes;
                 }
             }
-
 
             if lifetime.scope_depth > 1
                 && matches!(
@@ -1183,12 +1071,10 @@ impl OwnershipChecker {
 
     /// Detect reference cycles in the object graph
     fn detect_cycles(&mut self) {
-
         let mut graph: HashMap<String, Vec<String>> = HashMap::new();
         for (var, ref_info) in &self.references {
             graph.insert(var.clone(), ref_info.references_to.clone());
         }
-
 
         let mut visited = HashMap::new();
         let mut rec_stack = HashMap::new();
@@ -1218,10 +1104,8 @@ impl OwnershipChecker {
                 if !visited.contains_key(neighbor) {
                     self.dfs_cycle_detect(neighbor, graph, visited, rec_stack, path);
                 } else if *rec_stack.get(neighbor).unwrap_or(&false) {
-
                     let cycle_start = path.iter().position(|v| v == neighbor).unwrap_or(0);
                     let cycle_vars: Vec<String> = path[cycle_start..].to_vec();
-
 
                     for cycle_var in &cycle_vars {
                         if let Some(ref_info) = self.references.get_mut(cycle_var) {
@@ -1229,21 +1113,17 @@ impl OwnershipChecker {
                         }
                     }
 
-
                     let has_weak_ref = cycle_vars
                         .iter()
                         .any(|v| self.weak_references.contains_key(v));
 
-                    if !has_weak_ref {
-
-                        if let Some(lifetime) = self.lifetimes.get(var) {
-                            self.errors.push(*error(
-                                ErrorKind::CircularReference {
-                                    var_names: cycle_vars,
-                                },
-                                lifetime.creation_span,
-                            ));
-                        }
+                    if !has_weak_ref && let Some(lifetime) = self.lifetimes.get(var) {
+                        self.errors.push(*error(
+                            ErrorKind::CircularReference {
+                                var_names: cycle_vars,
+                            },
+                            lifetime.creation_span,
+                        ));
                     }
                 }
             }
@@ -1256,23 +1136,19 @@ impl OwnershipChecker {
     /// Optimize reference counting operations
     fn optimize_references(&mut self) {
         for (var_name, ref_info) in &mut self.references {
-
             if ref_info.ref_count <= 1
                 && ref_info.weak_ref_count == 0
                 && let Some(escape) = self.escape_status.get(var_name)
                 && matches!(escape, EscapeStatus::NoEscape)
+                && let Some(lifetime) = self.lifetimes.get_mut(var_name)
             {
-
-                if let Some(lifetime) = self.lifetimes.get_mut(var_name) {
-                    lifetime.needs_cleanup = false;
-                }
+                lifetime.needs_cleanup = false;
             }
         }
     }
 
     /// Finalize recommendations from analysis results
     fn finalize_recommendations(&mut self) {
-
         for (source, targets) in &self.weak_references {
             for target in targets {
                 self.recommendations
@@ -1280,7 +1156,6 @@ impl OwnershipChecker {
                     .push((source.clone(), target.clone()));
             }
         }
-
 
         let var_names: Vec<String> = self.references.keys().cloned().collect();
         for var_name in var_names {

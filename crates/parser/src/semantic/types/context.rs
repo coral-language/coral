@@ -1,5 +1,3 @@
-
-
 /// Type identifier for fast equality checks
 pub type TypeId = usize;
 
@@ -263,57 +261,39 @@ impl Type {
     /// Check if this is a subtype of another type
     pub fn is_subtype_of(&self, other: &Type) -> bool {
         match (self, other) {
-
             (_, Type::Any) => !matches!(self, Type::Never),
-
 
             (Type::Never, _) => true,
 
-
             (Type::Unknown, _) | (_, Type::Unknown) => true,
 
-
             (a, b) if a == b => true,
-
 
             (Type::Bool, Type::Int | Type::Float | Type::Complex) => true,
             (Type::Int, Type::Float | Type::Complex) => true,
             (Type::Float, Type::Complex) => true,
 
-
             (Type::Optional(t), Type::Union(types)) => {
                 types.contains(&Type::None) && types.iter().any(|ty| t.is_subtype_of(ty))
             }
 
-
             (t, Type::Optional(opt_t)) => t.is_subtype_of(opt_t) || *t == Type::None,
-
 
             (Type::Union(types1), Type::Union(types2)) => types1
                 .iter()
                 .all(|t1| types2.iter().any(|t2| t1.is_subtype_of(t2))),
 
-
             (t, Type::Union(types)) => types.iter().any(|ty| t.is_subtype_of(ty)),
-
-
 
             (Type::List(t1), Type::List(t2)) => t1 == t2,
 
-
-
             (Type::Set(t1), Type::Set(t2)) => t1 == t2,
 
-
-
             (Type::Dict(k1, v1), Type::Dict(k2, v2)) => k1 == k2 && v1 == v2,
-
-
 
             (Type::Tuple(t1), Type::Tuple(t2)) => {
                 t1.len() == t2.len() && t1.iter().zip(t2.iter()).all(|(a, b)| a.is_subtype_of(b))
             }
-
 
             (
                 Type::Function {
@@ -327,14 +307,10 @@ impl Type {
                     captures: _c2,
                 },
             ) => {
-
-
-
                 p1.len() == p2.len() &&
                 p1.iter().zip(p2.iter()).all(|((_n1, t1), (_n2, t2))| t2.is_subtype_of(t1)) && // contravariant
                 r1.is_subtype_of(r2) // covariant
             }
-
 
             (Type::Instance(name1), Type::Class(name2)) => name1 == name2,
 

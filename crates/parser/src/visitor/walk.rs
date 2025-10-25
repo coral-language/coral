@@ -151,17 +151,13 @@ pub fn walk_stmt<'a, V: Visitor<'a> + ?Sized>(visitor: &V, stmt: &Stmt<'a>) {
                 visitor.visit_expr(msg);
             }
         }
-        Stmt::Import(_) | Stmt::From(_) | Stmt::Export(_) => {
-
-        }
+        Stmt::Import(_) | Stmt::From(_) | Stmt::Export(_) => {}
         Stmt::Global(_)
         | Stmt::Nonlocal(_)
         | Stmt::Pass(_)
         | Stmt::Break(_)
         | Stmt::Continue(_)
-        | Stmt::Yield(_) => {
-
-        }
+        | Stmt::Yield(_) => {}
         Stmt::Expr(e) => {
             visitor.visit_expr(&e.value);
         }
@@ -273,9 +269,7 @@ pub fn walk_expr<'a, V: Visitor<'a> + ?Sized>(visitor: &V, expr: &Expr<'a>) {
                 visitor.visit_expr(value);
             }
         }
-        Expr::Constant(_) | Expr::Complex(_) | Expr::Bytes(_) => {
-
-        }
+        Expr::Constant(_) | Expr::Complex(_) | Expr::Bytes(_) => {}
         Expr::TString(t) => {
             for value in t.values {
                 visitor.visit_expr(value);
@@ -291,9 +285,7 @@ pub fn walk_expr<'a, V: Visitor<'a> + ?Sized>(visitor: &V, expr: &Expr<'a>) {
         Expr::Starred(s) => {
             visitor.visit_expr(s.value);
         }
-        Expr::Name(_) => {
-
-        }
+        Expr::Name(_) => {}
         Expr::List(l) => {
             for elt in l.elts {
                 visitor.visit_expr(elt);
@@ -315,9 +307,7 @@ pub fn walk_expr<'a, V: Visitor<'a> + ?Sized>(visitor: &V, expr: &Expr<'a>) {
                 visitor.visit_expr(step);
             }
         }
-        Expr::ModuleIntrospection(_) => {
-
-        }
+        Expr::ModuleIntrospection(_) => {}
     }
 }
 
@@ -327,9 +317,7 @@ pub fn walk_pattern<'a, V: Visitor<'a> + ?Sized>(visitor: &V, pattern: &Pattern<
         Pattern::MatchValue(m) => {
             visitor.visit_expr(&m.value);
         }
-        Pattern::MatchSingleton(_) => {
-
-        }
+        Pattern::MatchSingleton(_) => {}
         Pattern::MatchSequence(m) => {
             for pattern in m.patterns {
                 visitor.visit_pattern(pattern);

@@ -54,7 +54,6 @@ impl<'a> ModuleLoader<'a> {
     ///
     /// If the module has already been loaded, returns the cached version.
     pub fn load_module(&mut self, module_path: &Path) -> Result<&Module<'a>, Vec<Error>> {
-
         if self.module_cache.contains_key(module_path) {
             let (module, cache) = self.module_cache.get(module_path).unwrap();
             if cache.errors.is_empty() {
@@ -63,7 +62,6 @@ impl<'a> ModuleLoader<'a> {
                 return Err(cache.errors.clone());
             }
         }
-
 
         let source = std::fs::read_to_string(module_path).map_err(|_e| {
             vec![*crate::error::error(
@@ -78,11 +76,9 @@ impl<'a> ModuleLoader<'a> {
         let mut parser = Parser::new(lexer, self.arena);
         let module = parser.parse_module().map_err(|e| vec![*e])?;
 
-
         let mut name_resolver = NameResolver::new();
         name_resolver.resolve_module(module);
         let (symbol_table, _name_errors) = name_resolver.into_symbol_table();
-
 
         let module_name = self.module_path_to_name(module_path);
         let checker = ModuleSystemChecker::with_registry(
@@ -93,9 +89,7 @@ impl<'a> ModuleLoader<'a> {
         );
         let errors = checker.check(module);
 
-
         let exports = self.extract_exports_map(module, &module_name);
-
 
         for (export_name, export_type) in &exports {
             self.export_registry.register_export(
@@ -111,9 +105,7 @@ impl<'a> ModuleLoader<'a> {
             );
         }
 
-
         let (class_attributes, class_mro) = self.extract_class_metadata(module);
-
 
         let analysis_cache = ModuleAnalysisCache {
             errors: errors.clone(),
@@ -121,7 +113,6 @@ impl<'a> ModuleLoader<'a> {
             class_attributes,
             class_mro,
         };
-
 
         self.module_cache
             .insert(module_path.to_path_buf(), (module.clone(), analysis_cache));
@@ -145,8 +136,8 @@ impl<'a> ModuleLoader<'a> {
         _module_name: &str,
     ) -> HashMap<String, Type> {
         use crate::ast::Stmt;
-        use crate::semantic::passes::type_inference::TypeInferenceContext;
         use crate::semantic::passes::name_resolution::NameResolver;
+        use crate::semantic::passes::type_inference::TypeInferenceContext;
 
         let mut exports = HashMap::new();
 
@@ -206,26 +197,19 @@ impl<'a> ModuleLoader<'a> {
         use crate::arena::Interner;
         use crate::semantic::hir::HirLowerer;
 
-
         let mut interner = Interner::new();
         let mut lowerer = HirLowerer::new(self.arena, &mut interner);
 
-
         match lowerer.lower_module(module) {
             Ok(_typed_module) => {
-
                 let class_analyzer = lowerer.into_class_analyzer();
                 let metadata_map = class_analyzer.export_metadata();
-
 
                 let mut class_attributes = HashMap::new();
                 let mut class_mro = HashMap::new();
 
                 for (class_name, metadata) in metadata_map {
-
                     class_mro.insert(class_name.clone(), metadata.mro.clone());
-
-
 
                     for (prop_name, prop_desc) in &metadata.properties {
                         let key = (class_name.clone(), prop_name.clone());
@@ -269,10 +253,7 @@ impl<'a> ModuleLoader<'a> {
 
                 (class_attributes, class_mro)
             }
-            Err(_errors) => {
-
-                (HashMap::new(), HashMap::new())
-            }
+            Err(_errors) => (HashMap::new(), HashMap::new()),
         }
     }
 
@@ -281,27 +262,24 @@ impl<'a> ModuleLoader<'a> {
         use crate::ast::Stmt;
 
         for stmt in module.body {
-            if let Stmt::Export(export) = stmt {
-
-                if export.module.is_none() {
-                    for (name, alias) in export.names {
-                        let exported_name = alias.unwrap_or(name);
-                        let info = ExportInfo {
-                            original_name: name.to_string(),
-                            ty: Type::Unknown, // Type inference would provide actual type
-                            source_module: None,
-                            reexport_chain: Vec::new(),
-                            span: export.span,
-                        };
-                        self.export_registry.register_export(
-                            module_name,
-                            exported_name.to_string(),
-                            info,
-                        );
-                    }
+            if let Stmt::Export(export) = stmt
+                && export.module.is_none()
+            {
+                for (name, alias) in export.names {
+                    let exported_name = alias.unwrap_or(name);
+                    let info = ExportInfo {
+                        original_name: name.to_string(),
+                        ty: Type::Unknown, // Type inference would provide actual type
+                        source_module: None,
+                        reexport_chain: Vec::new(),
+                        span: export.span,
+                    };
+                    self.export_registry.register_export(
+                        module_name,
+                        exported_name.to_string(),
+                        info,
+                    );
                 }
-
-
             }
         }
     }
@@ -331,7 +309,6 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let module_path = temp_dir.path().join("test.coral");
 
-
         std::fs::write(
             &module_path,
             r#"
@@ -346,10 +323,8 @@ export my_function
         let arena = Arena::new();
         let mut loader = ModuleLoader::new(temp_dir.path().to_path_buf(), &arena);
 
-
         let result = loader.load_module(&module_path);
         assert!(result.is_ok());
-
 
         let registry = loader.export_registry();
         assert!(registry.is_exported("test", "my_function"));
@@ -364,7 +339,6 @@ export my_function
 
         let arena = Arena::new();
         let mut loader = ModuleLoader::new(temp_dir.path().to_path_buf(), &arena);
-
 
         let result1 = loader.load_module(&module_path).is_ok();
         let result2 = loader.load_module(&module_path).is_ok();

@@ -275,25 +275,25 @@ impl SymbolTable {
         };
 
         for (name, usages) in symbols_snapshot {
-            if let Some((_parent_sym, parent_scope_id)) = self.lookup_from_scope(&name, scope_id) {
-                if parent_scope_id != scope_id && !usages.is_empty() {
-                    self.scopes[parent_scope_id].lookup_local_mut(&name, |sym| {
-                        sym.mark_captured();
-                    });
+            if let Some((_parent_sym, parent_scope_id)) = self.lookup_from_scope(&name, scope_id)
+                && parent_scope_id != scope_id
+                && !usages.is_empty()
+            {
+                self.scopes[parent_scope_id].lookup_local_mut(&name, |sym| {
+                    sym.mark_captured();
+                });
 
-                    self.scopes[scope_id]
-                        .symbols
-                        .write()
-                        .unwrap()
-                        .entry(name.clone())
-                        .or_insert_with(|| {
-                            let mut sym =
-                                Symbol::new(name.clone(), BindingKind::Parameter, usages[0]);
-                            sym.mark_free_var();
-                            sym
-                        })
-                        .mark_free_var();
-                }
+                self.scopes[scope_id]
+                    .symbols
+                    .write()
+                    .unwrap()
+                    .entry(name.clone())
+                    .or_insert_with(|| {
+                        let mut sym = Symbol::new(name.clone(), BindingKind::Parameter, usages[0]);
+                        sym.mark_free_var();
+                        sym
+                    })
+                    .mark_free_var();
             }
         }
     }

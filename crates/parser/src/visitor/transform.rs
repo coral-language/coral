@@ -204,8 +204,6 @@ impl<'a> Transformer<'a> {
         self.arena.alloc_slice_iter(transformed)
     }
 
-
-
     /// Create a constant expression.
     pub fn alloc_constant(&self, value: &str, span: TextRange) -> &'a Expr<'a> {
         self.arena.alloc(Expr::Constant(ConstantExpr {
@@ -377,8 +375,6 @@ impl<'a> Transformer<'a> {
         }))
     }
 
-
-
     /// Desugar an augmented assignment into a regular assignment.
     ///
     /// Converts `target += value` to `target = target + value`.
@@ -397,7 +393,6 @@ impl<'a> Transformer<'a> {
     pub fn fold_constant_binop(&self, binop: &BinOpExpr<'a>) -> Option<&'a Expr<'a>> {
         match (binop.left, binop.right) {
             (Expr::Constant(left), Expr::Constant(right)) => {
-
                 if let (Ok(left_num), Ok(right_num)) =
                     (left.value.parse::<i64>(), right.value.parse::<i64>())
                 {

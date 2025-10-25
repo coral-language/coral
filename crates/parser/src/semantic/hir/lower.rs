@@ -67,13 +67,6 @@ impl<'a> HirLowerer<'a> {
     /// Note: HIR lowering assumes name resolution has already validated all names.
     /// It doesn't perform name validation - that's the job of the name_resolution pass.
     pub fn new(arena: &'a Arena, interner: &'a mut Interner) -> Self {
-
-
-
-
-
-
-
         let interner_ref: &'a Interner = unsafe { &*(interner as *const Interner) };
         let class_analyzer = ClassAnalyzer::new(interner_ref);
 
@@ -97,12 +90,9 @@ impl<'a> HirLowerer<'a> {
     ) -> Result<TypedModule<'a>, Vec<HirLoweringError>> {
         self.errors.clear();
 
-
         let body = self.lower_statements(module.body);
         let imports = self.extract_imports(module.body);
         let exports = self.extract_exports(module.body);
-
-
 
         if let Err(_e) = self.class_analyzer.analyze() {
             self.errors.push(HirLoweringError::ClassAnalysisFailed {
@@ -172,7 +162,6 @@ impl<'a> HirLowerer<'a> {
             Stmt::AnnAssign(ann_assign) => {
                 let target = self.lower_expression(&ann_assign.target)?;
                 let annotation = self.lower_expression(&ann_assign.annotation)?;
-
 
                 let value = match ann_assign.value.as_ref() {
                     Some(v) => Some(self.lower_expression(v)?),
@@ -345,7 +334,6 @@ impl<'a> HirLowerer<'a> {
             Stmt::TypeAlias(type_alias) => {
                 let value = self.lower_expression(&type_alias.value)?;
                 let ty = self.infer_type(&value);
-
 
                 let type_params = self
                     .lower_type_parameters(type_alias.type_params)
@@ -693,9 +681,7 @@ impl<'a> HirLowerer<'a> {
     /// Note: Name validation is done by the name_resolution pass before HIR lowering.
     /// We assume all names are valid and just create the HIR node.
     fn lower_name_expression(&mut self, name: &NameExpr<'a>) -> Option<TypedExpr<'a>> {
-
         let symbol = self.intern(name.id);
-
 
         Some(TypedExpr::Name(TypedNameExpr {
             symbol,
@@ -706,7 +692,6 @@ impl<'a> HirLowerer<'a> {
 
     /// Infer type for a literal value
     fn infer_literal_type(&self, value: &str) -> Type {
-
         if value.parse::<i64>().is_ok() {
             Type::Int
         } else if value.parse::<f64>().is_ok() {
@@ -729,7 +714,6 @@ impl<'a> HirLowerer<'a> {
     ) -> Type {
         match op {
             "+" | "-" | "*" | "/" | "//" | "%" | "**" => {
-
                 if left.ty() == &Type::Int && right.ty() == &Type::Int {
                     Type::Int
                 } else if left.ty() == &Type::Float || right.ty() == &Type::Float {
@@ -760,12 +744,9 @@ impl<'a> HirLowerer<'a> {
         _args: &[TypedExpr<'a>],
         _keywords: &[TypedKeyword<'a>],
     ) -> Type {
-
         match func {
             TypedExpr::Name(name_expr) => {
-
                 if name_expr.ty.is_function() {
-
                     if let Type::Function { returns, .. } = &name_expr.ty {
                         returns.as_ref().clone()
                     } else {
@@ -776,7 +757,6 @@ impl<'a> HirLowerer<'a> {
                 }
             }
             TypedExpr::Attribute(attr_expr) => {
-
                 if attr_expr.ty.is_function() {
                     if let Type::Function { returns, .. } = &attr_expr.ty {
                         returns.as_ref().clone()
@@ -801,26 +781,14 @@ impl<'a> HirLowerer<'a> {
 
         let base_ty = value.ty();
 
-
         if let Some(attr_name) = self.interner.resolve(*attr) {
-
-
-
-
             match base_ty {
-                Type::Instance(_class_name) => {
-
-
-                    BUILTIN_ATTRIBUTE_REGISTRY
-                        .lookup_builtin_attribute(base_ty, attr_name)
-                        .unwrap_or(Type::Unknown)
-                }
-                _ => {
-
-                    BUILTIN_ATTRIBUTE_REGISTRY
-                        .lookup_builtin_attribute(base_ty, attr_name)
-                        .unwrap_or(Type::Unknown)
-                }
+                Type::Instance(_class_name) => BUILTIN_ATTRIBUTE_REGISTRY
+                    .lookup_builtin_attribute(base_ty, attr_name)
+                    .unwrap_or(Type::Unknown),
+                _ => BUILTIN_ATTRIBUTE_REGISTRY
+                    .lookup_builtin_attribute(base_ty, attr_name)
+                    .unwrap_or(Type::Unknown),
             }
         } else {
             Type::Unknown
@@ -829,7 +797,6 @@ impl<'a> HirLowerer<'a> {
 
     /// Infer type for subscript access
     fn infer_subscript_type(&self, value: &TypedExpr<'a>, _slice: &TypedExpr<'a>) -> Type {
-
         match value {
             TypedExpr::Name(name_expr) => {
                 match &name_expr.ty {
@@ -837,8 +804,6 @@ impl<'a> HirLowerer<'a> {
                     Type::Dict(_, value_type) => value_type.as_ref().clone(),
                     Type::Str => Type::Str, // String indexing returns string
                     Type::Tuple(element_types) => {
-
-
                         if element_types.is_empty() {
                             Type::Unknown
                         } else if element_types.len() == 1 {
@@ -897,9 +862,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Infer type for lambda
     fn infer_lambda_type(&self, args: &TypedArguments<'a>, body: &TypedExpr<'a>) -> Type {
-
         let mut param_types = Vec::new();
-
 
         for arg in args.posonlyargs {
             param_types.push(arg.ty.clone());
@@ -908,16 +871,13 @@ impl<'a> HirLowerer<'a> {
             param_types.push(arg.ty.clone());
         }
 
-
         for arg in args.kwonlyargs {
             param_types.push(arg.ty.clone());
         }
 
-
         if let Some(vararg) = args.vararg {
             param_types.push(vararg.ty.clone());
         }
-
 
         if let Some(kwarg) = args.kwarg {
             param_types.push(kwarg.ty.clone());
@@ -928,17 +888,13 @@ impl<'a> HirLowerer<'a> {
 
     /// Infer type for conditional expression
     fn infer_conditional_type(&self, body: &TypedExpr<'a>, orelse: &TypedExpr<'a>) -> Type {
-
         Type::Union(vec![body.ty().clone(), orelse.ty().clone()])
     }
 
     /// Infer type for await expression
     fn infer_await_type(&self, value: &TypedExpr<'a>) -> Type {
-
-
         match &value.ty() {
             Type::Union(types) => {
-
                 if types.is_empty() {
                     Type::Unknown
                 } else {
@@ -956,7 +912,6 @@ impl<'a> HirLowerer<'a> {
 
     /// Create iterator call for for loop
     fn create_iter_call(&mut self, iter: &'a TypedExpr<'a>) -> Option<TypedExpr<'a>> {
-
         let iter_method = TypedExpr::Attribute(TypedAttributeExpr {
             value: iter,
             attr: self.intern("__iter__"),
@@ -975,7 +930,6 @@ impl<'a> HirLowerer<'a> {
 
     /// Create next call for for loop
     fn create_next_call(&mut self, iter: &'a TypedExpr<'a>) -> Option<TypedExpr<'a>> {
-
         let next_method = TypedExpr::Attribute(TypedAttributeExpr {
             value: iter,
             attr: self.intern("__next__"),
@@ -1088,13 +1042,10 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower arguments
     fn lower_arguments(&mut self, args: &Arguments<'a>) -> Option<TypedArguments<'a>> {
-
         let posonlyargs = self.lower_typed_args(args.posonlyargs)?;
         let typed_args = self.lower_typed_args(args.args)?;
 
-
         let kwonlyargs = self.lower_typed_args(args.kwonlyargs)?;
-
 
         let defaults = self.lower_expressions(args.defaults)?;
         let mut kw_defaults = Vec::new();
@@ -1107,7 +1058,6 @@ impl<'a> HirLowerer<'a> {
             }
         }
         let kw_defaults = self.arena.alloc_slice_vec(kw_defaults);
-
 
         let vararg = if let Some(arg) = args.vararg.as_ref() {
             let annotation = arg
@@ -1127,7 +1077,6 @@ impl<'a> HirLowerer<'a> {
         } else {
             None
         };
-
 
         let kwarg = if let Some(arg) = args.kwarg.as_ref() {
             let annotation = arg
@@ -1174,9 +1123,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower function definition
     fn lower_function_definition(&mut self, func: &FuncDefStmt<'a>) -> Option<TypedStmt<'a>> {
-
         let args = self.lower_arguments(&func.args)?;
-
 
         let returns = func.returns.as_ref().map(|ret| self.lower_expression(ret));
         let returns = match returns {
@@ -1185,15 +1132,11 @@ impl<'a> HirLowerer<'a> {
             None => None,
         };
 
-
         let body = self.lower_statements(func.body);
-
 
         let decorators = self.lower_expressions(func.decorators)?;
 
-
         let name = self.intern(func.name);
-
 
         let type_params = self.lower_type_parameters(func.type_params).unwrap_or(&[]);
 
@@ -1213,30 +1156,21 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower class definition
     fn lower_class_definition(&mut self, class: &ClassDefStmt<'a>) -> Option<TypedStmt<'a>> {
-
         let bases = self.lower_expressions(class.bases)?;
-
 
         let keywords = self.lower_keywords(class.keywords)?;
 
-
         let body = self.lower_statements(class.body);
-
 
         let decorators = self.lower_expressions(class.decorators)?;
 
-
         let name = self.intern(class.name);
-
-
 
         let mro = &[];
         let attributes = &[];
         let methods = &[];
 
-
         let type_params = self.lower_type_parameters(class.type_params).unwrap_or(&[]);
-
 
         let typed_class = TypedClassDefStmt {
             name,
@@ -1254,7 +1188,6 @@ impl<'a> HirLowerer<'a> {
             docstring: class.docstring,
         };
 
-
         let analyzer_class = crate::semantic::hir::class_analysis::TypedClassDefStmt {
             name,
             type_params,
@@ -1268,8 +1201,6 @@ impl<'a> HirLowerer<'a> {
         };
         let analyzer_class_ref = self.arena.alloc(analyzer_class);
 
-
-
         self.class_analyzer.add_class(analyzer_class_ref);
 
         Some(TypedStmt::ClassDef(typed_class))
@@ -1277,7 +1208,6 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower import statement
     fn lower_import_statement(&mut self, import: &ImportStmt<'a>) -> Option<TypedStmt<'a>> {
-
         let mut names = Vec::new();
         for alias in import.names {
             let name_symbol = self.intern(alias.0);
@@ -1294,9 +1224,7 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower from statement
     fn lower_from_statement(&mut self, from: &FromStmt<'a>) -> Option<TypedStmt<'a>> {
-
         let module = from.module.map(|m| self.intern(m));
-
 
         let mut names = Vec::new();
         for alias in from.names {
@@ -1316,7 +1244,6 @@ impl<'a> HirLowerer<'a> {
 
     /// Lower export statement
     fn lower_export_statement(&mut self, export: &ExportStmt<'a>) -> Option<TypedStmt<'a>> {
-
         let mut names = Vec::new();
         for alias in export.names {
             let name_symbol = self.intern(alias.0);
@@ -1324,7 +1251,6 @@ impl<'a> HirLowerer<'a> {
             names.push((name_symbol, asname_symbol));
         }
         let names = self.arena.alloc_slice_vec(names);
-
 
         let module = export.module.map(|m| self.intern(m));
 
@@ -1384,7 +1310,6 @@ impl<'a> HirLowerer<'a> {
 
     /// Create enter call for with statement
     fn create_enter_call(&mut self, context: &'a TypedExpr<'a>) -> Option<TypedExpr<'a>> {
-
         let enter_method = TypedExpr::Attribute(TypedAttributeExpr {
             value: context,
             attr: self.intern("__enter__"),
@@ -1403,7 +1328,6 @@ impl<'a> HirLowerer<'a> {
 
     /// Create exit call for with statement
     fn create_exit_call(&mut self, context: &'a TypedExpr<'a>) -> Option<TypedExpr<'a>> {
-
         let exit_method = TypedExpr::Attribute(TypedAttributeExpr {
             value: context,
             attr: self.intern("__exit__"),
@@ -1616,7 +1540,6 @@ impl<'a> HirLowerer<'a> {
                     });
                 }
                 _ => {
-
                     self.collect_imports_from_nested_stmt(stmt, imports);
                 }
             }
@@ -1693,7 +1616,6 @@ impl<'a> HirLowerer<'a> {
                     });
                 }
                 _ => {
-
                     self.collect_exports_from_nested_stmt(stmt, exports);
                 }
             }
@@ -1743,13 +1665,6 @@ impl<'a> HirLowerer<'a> {
     /// Simplified: creates typed list expression without full desugaring
     /// Complete desugaring to loops happens in codegen phase
     fn lower_list_comprehension(&mut self, list_comp: &ListCompExpr<'a>) -> Option<TypedExpr<'a>> {
-
-
-
-
-
-
-
         let elt = self.lower_expression(list_comp.elt)?;
         let elt_ref = self.arena.alloc(elt);
         let elts = self.arena.alloc_slice_vec(vec![elt_ref.clone()]);
@@ -1764,13 +1679,6 @@ impl<'a> HirLowerer<'a> {
     /// Simplified: creates typed dict expression without full desugaring
     /// Complete desugaring to loops happens in codegen phase
     fn lower_dict_comprehension(&mut self, dict_comp: &DictCompExpr<'a>) -> Option<TypedExpr<'a>> {
-
-
-
-
-
-
-
         let key = self.lower_expression(dict_comp.key)?;
         let value = self.lower_expression(dict_comp.value)?;
         let key_ref = self.arena.alloc(key);
@@ -1792,13 +1700,6 @@ impl<'a> HirLowerer<'a> {
     /// Simplified: creates typed set expression without full desugaring
     /// Complete desugaring to loops happens in codegen phase
     fn lower_set_comprehension(&mut self, set_comp: &SetCompExpr<'a>) -> Option<TypedExpr<'a>> {
-
-
-
-
-
-
-
         let elt = self.lower_expression(set_comp.elt)?;
         let elt_ref = self.arena.alloc(elt);
         let elts = self.arena.alloc_slice_vec(vec![elt_ref.clone()]);
@@ -1814,13 +1715,6 @@ impl<'a> HirLowerer<'a> {
         &mut self,
         gen_exp: &GeneratorExpExpr<'a>,
     ) -> Option<TypedExpr<'a>> {
-
-
-
-
-
-
-
         let elt = self.lower_expression(gen_exp.elt)?;
         let elt_ref = self.arena.alloc(elt);
         Some(TypedExpr::Yield(TypedYieldExpr {

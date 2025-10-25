@@ -30,7 +30,6 @@ impl<'a> Parser<'a> {
     fn parse_named_expr(&mut self, allow_in: bool) -> ParseResult<Expr<'a>> {
         let expr = self.parse_ternary(allow_in)?;
 
-
         if self.peek().kind == TokenKind::ColonEqual {
             self.advance();
             let value = self.parse_named_expr(allow_in)?;
@@ -90,11 +89,9 @@ impl<'a> Parser<'a> {
         let mut seen_star = false;
 
         while self.peek().kind != TokenKind::Colon && !self.is_at_end() {
-
             if self.peek().kind == TokenKind::Slash {
                 self.advance();
                 _seen_slash = true;
-
 
                 if !args.is_empty() {
                     posonlyargs = args.clone();
@@ -103,18 +100,15 @@ impl<'a> Parser<'a> {
                     defaults.clear();
                 }
 
-
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
                 continue;
             }
 
-
             if self.peek().kind == TokenKind::Star {
                 self.advance();
                 seen_star = true;
-
 
                 if self.peek().kind == TokenKind::Ident {
                     let name = self.consume_ident()?;
@@ -125,13 +119,11 @@ impl<'a> Parser<'a> {
                     }));
                 }
 
-
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
                 continue;
             }
-
 
             if self.peek().kind == TokenKind::DoubleStar {
                 self.advance();
@@ -142,14 +134,11 @@ impl<'a> Parser<'a> {
                     annotation: None,
                 }));
 
-
                 if !self.match_token(TokenKind::Comma) {
                     break;
                 }
 
-
                 if self.peek().kind != TokenKind::Colon && !self.is_at_end() {
-
                     let invalid_token_span = self.peek().span;
                     return Err(error(
                         ErrorKind::InvalidSyntax {
@@ -163,7 +152,6 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-
             let name = self.consume_ident()?;
 
             let arg = Arg {
@@ -171,24 +159,19 @@ impl<'a> Parser<'a> {
                 annotation: None,
             };
 
-
             let has_default = self.peek().kind == TokenKind::Equal;
             if has_default {
                 self.advance(); // consume =
                 let default_expr = self.parse_expression()?;
 
                 if seen_star {
-
                     kw_defaults.push(Some(default_expr));
                 } else {
-
                     defaults.push(default_expr);
                 }
             } else if seen_star {
-
                 kw_defaults.push(None);
             }
-
 
             if seen_star {
                 kwonlyargs.push(arg);
@@ -200,8 +183,6 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-
-
 
         let mut all_defaults = posonly_defaults;
         all_defaults.extend(defaults);
@@ -224,7 +205,6 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_comprehensions(&mut self) -> ParseResult<&'a [Comprehension<'a>]> {
-
         let mut generators: SmallVec<[Comprehension<'a>; 2]> = SmallVec::new();
 
         while self.peek().kind == TokenKind::For || self.peek().kind == TokenKind::Async {
@@ -234,7 +214,6 @@ impl<'a> Parser<'a> {
             let target = self.parse_comprehension_target()?;
             self.consume(TokenKind::In)?;
             let iter = self.parse_or(true)?;
-
 
             let mut ifs: SmallVec<[Expr<'a>; 2]> = SmallVec::new();
             while self.match_token(TokenKind::If) {
@@ -257,12 +236,10 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         let first = self.parse_expression_with_context(false)?;
 
-
         if self.peek().kind == TokenKind::Comma {
             let mut elts = vec![first];
 
             while self.match_token(TokenKind::Comma) {
-
                 if self.peek().kind == TokenKind::In {
                     break;
                 }
@@ -373,7 +350,6 @@ impl<'a> Parser<'a> {
         loop {
             let token_kind = self.peek().kind;
 
-
             if token_kind == TokenKind::Not {
                 let next_pos = self.current + 1;
                 if next_pos < self.tokens.len() && self.tokens[next_pos].kind == TokenKind::In {
@@ -388,7 +364,6 @@ impl<'a> Parser<'a> {
                     comparators.push(right);
                     continue;
                 } else {
-
                     break;
                 }
             }
@@ -406,7 +381,6 @@ impl<'a> Parser<'a> {
                 TokenKind::NotEqual => OP_NE,
                 TokenKind::In => OP_IN,
                 TokenKind::Is => {
-
                     self.advance();
                     if self.peek().kind == TokenKind::Not {
                         self.advance();
@@ -603,7 +577,6 @@ impl<'a> Parser<'a> {
                 let await_token = self.peek().span;
                 self.advance();
 
-
                 if !self.context.in_async_function {
                     return Err(error(ErrorKind::AwaitOutsideAsync, await_token));
                 }
@@ -710,11 +683,9 @@ impl<'a> Parser<'a> {
                     self.push_delimiter('[', opening_span);
                     self.advance();
 
-
                     let first_elem = self.parse_slice_element()?;
 
                     if self.peek().kind == TokenKind::Comma {
-
                         let mut elts = vec![first_elem.clone()];
                         while self.match_token(TokenKind::Comma) {
                             if self.peek().kind == TokenKind::RightBracket {
@@ -741,7 +712,6 @@ impl<'a> Parser<'a> {
                             span,
                         });
                     } else {
-
                         let closing_span = self.peek().span;
                         self.consume(TokenKind::RightBracket)?;
                         self.pop_delimiter(']', closing_span)?;
@@ -797,14 +767,10 @@ impl<'a> Parser<'a> {
             TokenKind::String | TokenKind::RawString => {
                 let mut tokens = vec![self.advance()];
 
-
-
                 loop {
-
                     while self.peek().kind == TokenKind::Newline {
                         self.advance();
                     }
-
 
                     if matches!(self.peek().kind, TokenKind::String | TokenKind::RawString) {
                         tokens.push(self.advance());
@@ -813,15 +779,11 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-
                 let mut concatenated = String::new();
                 for token in &tokens {
                     let start = usize::from(token.span.start());
                     let end = usize::from(token.span.end());
                     let text = &self.source[start..end];
-
-
-
 
                     let content = if text.starts_with("r\"\"\"") || text.starts_with("R\"\"\"") {
                         &text[4..text.len() - 3]
@@ -832,10 +794,8 @@ impl<'a> Parser<'a> {
                     } else if text.starts_with("r'") || text.starts_with("R'") {
                         &text[2..text.len() - 1]
                     } else if text.starts_with("\"\"\"") || text.starts_with("'''") {
-
                         &text[3..text.len() - 3]
                     } else if text.starts_with('"') || text.starts_with('\'') {
-
                         &text[1..text.len() - 1]
                     } else {
                         text
@@ -843,7 +803,6 @@ impl<'a> Parser<'a> {
 
                     concatenated.push_str(content);
                 }
-
 
                 let start = tokens[0].span.start();
                 let end = tokens.last().unwrap().span.end();
@@ -872,20 +831,16 @@ impl<'a> Parser<'a> {
                 let span = self.peek().span;
                 let name = self.get_ident_text();
 
-
                 if name == "module" && self.current + 2 < self.tokens.len() {
                     let next = &self.tokens[self.current + 1];
                     let next_next = &self.tokens[self.current + 2];
-
 
                     if next.kind == TokenKind::Colon && next_next.kind == TokenKind::Colon {
                         self.advance(); // consume 'module'
                         self.advance(); // consume first ':'
                         self.advance(); // consume second ':'
 
-
                         let function_name = self.consume_ident()?;
-
 
                         self.consume(TokenKind::LeftParen)?;
                         self.consume(TokenKind::RightParen)?;
@@ -897,7 +852,6 @@ impl<'a> Parser<'a> {
                         }));
                     }
                 }
-
 
                 let name = self.consume_ident()?;
                 Ok(Expr::Name(NameExpr { id: name, span }))
@@ -1047,7 +1001,6 @@ impl<'a> Parser<'a> {
                 self.push_delimiter('{', opening_span);
                 self.advance();
 
-
                 if self.peek().kind == TokenKind::RightBrace {
                     let end = self.peek().span.end();
                     let closing_span = self.peek().span;
@@ -1060,9 +1013,7 @@ impl<'a> Parser<'a> {
                     }));
                 }
 
-
                 if self.peek().kind == TokenKind::DoubleStar {
-
                     let mut keys = ThinVec::new();
                     let mut values = ThinVec::new();
 
@@ -1098,7 +1049,6 @@ impl<'a> Parser<'a> {
 
                 let first_expr = self.parse_expression()?;
 
-
                 if self.peek().kind == TokenKind::Colon {
                     self.advance();
                     let first_value = self.parse_expression()?;
@@ -1117,7 +1067,6 @@ impl<'a> Parser<'a> {
                         }));
                     }
 
-
                     let mut keys = vec![Some(first_expr)];
                     let mut values = vec![first_value];
 
@@ -1125,7 +1074,6 @@ impl<'a> Parser<'a> {
                         if self.peek().kind == TokenKind::RightBrace {
                             break;
                         }
-
 
                         if self.peek().kind == TokenKind::DoubleStar {
                             self.advance(); // consume **
@@ -1152,7 +1100,6 @@ impl<'a> Parser<'a> {
                     }));
                 }
 
-
                 if self.peek().kind == TokenKind::For || self.peek().kind == TokenKind::Async {
                     let generators = self.parse_comprehensions()?;
                     let end = self.peek().span.end();
@@ -1165,7 +1112,6 @@ impl<'a> Parser<'a> {
                         span: TextRange::new(start, end),
                     }));
                 }
-
 
                 let mut elts = vec![first_expr];
                 while self.match_token(TokenKind::Comma) {
@@ -1201,7 +1147,6 @@ impl<'a> Parser<'a> {
         let mut seen_keyword_names = std::collections::HashSet::new();
 
         while self.peek().kind != TokenKind::RightParen && !self.is_at_end() {
-
             if self.peek().kind == TokenKind::DoubleStar {
                 self.advance(); // consume **
                 let value = self.parse_expression()?;
@@ -1210,9 +1155,7 @@ impl<'a> Parser<'a> {
                     arg: None, // **kwargs has no argument name
                     value,
                 });
-            }
-
-            else if self.peek().kind == TokenKind::Star {
+            } else if self.peek().kind == TokenKind::Star {
                 self.advance(); // consume *
                 let value = self.parse_expression()?;
                 let span = TextRange::new(self.prev().span.start(), value.span().end());
@@ -1220,19 +1163,13 @@ impl<'a> Parser<'a> {
                     value: self.arena.alloc(value),
                     span,
                 }));
-            }
-
-            else if self.peek().kind == TokenKind::Ident {
-
-
+            } else if self.peek().kind == TokenKind::Ident {
                 let checkpoint_pos = self.current;
                 let name = self.consume_ident()?;
 
                 if self.peek().kind == TokenKind::Equal {
-
                     seen_keyword = true;
                     self.advance(); // consume =
-
 
                     if !seen_keyword_names.insert(name) {
                         return Err(error(
@@ -1249,9 +1186,7 @@ impl<'a> Parser<'a> {
                         value,
                     });
                 } else {
-
                     self.current = checkpoint_pos;
-
 
                     if seen_keyword {
                         return Err(error(ErrorKind::PositionalAfterKeyword, self.peek().span));
@@ -1259,10 +1194,7 @@ impl<'a> Parser<'a> {
 
                     args.push(self.parse_expression()?);
                 }
-            }
-
-            else {
-
+            } else {
                 if seen_keyword {
                     return Err(error(ErrorKind::PositionalAfterKeyword, self.peek().span));
                 }
@@ -1283,19 +1215,15 @@ impl<'a> Parser<'a> {
     fn parse_slice_or_index(&mut self) -> ParseResult<Expr<'a>> {
         let start = self.peek().span.start();
 
-
         if self.peek().kind == TokenKind::Colon {
             return self.parse_slice_from_colon(start, None);
         }
 
-
         let first_expr = self.parse_expression()?;
-
 
         if self.peek().kind != TokenKind::Colon {
             return Ok(first_expr);
         }
-
 
         self.parse_slice_from_colon(start, Some(first_expr))
     }
@@ -1307,9 +1235,7 @@ impl<'a> Parser<'a> {
         start: text_size::TextSize,
         lower: Option<Expr<'a>>,
     ) -> ParseResult<Expr<'a>> {
-
         self.consume(TokenKind::Colon)?;
-
 
         let upper = if self.peek().kind != TokenKind::Colon
             && self.peek().kind != TokenKind::RightBracket
@@ -1318,7 +1244,6 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
-
 
         let step = if self.match_token(TokenKind::Colon) {
             if self.peek().kind != TokenKind::RightBracket {
@@ -1351,7 +1276,6 @@ impl<'a> Parser<'a> {
         let end = usize::from(span.end());
         let text = &self.source[start..end];
 
-
         let content = if text.starts_with("f\"\"\"") || text.starts_with("F\"\"\"") {
             &text[4..text.len() - 3] // Triple-quoted double
         } else if text.starts_with("f'''") || text.starts_with("F'''") {
@@ -1368,7 +1292,6 @@ impl<'a> Parser<'a> {
                 span,
             ));
         };
-
 
         let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
@@ -1387,7 +1310,6 @@ impl<'a> Parser<'a> {
         let start = usize::from(span.start());
         let end = usize::from(span.end());
         let text = &self.source[start..end];
-
 
         let content = if text.starts_with("rf\"\"\"")
             || text.starts_with("Rf\"\"\"")
@@ -1438,7 +1360,6 @@ impl<'a> Parser<'a> {
             ));
         };
 
-
         let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
 
@@ -1456,7 +1377,6 @@ impl<'a> Parser<'a> {
         full_span: TextRange,
         depth: u32,
     ) -> ParseResult<ThinVec<Expr<'a>>> {
-
         const MAX_NESTING_DEPTH: u32 = 10;
         if depth > MAX_NESTING_DEPTH {
             return Err(error(
@@ -1477,13 +1397,11 @@ impl<'a> Parser<'a> {
         while let Some(ch) = chars.next() {
             match ch {
                 '{' => {
-
                     if chars.peek() == Some(&'{') {
                         chars.next();
                         literal.push('{');
                         continue;
                     }
-
 
                     if !literal.is_empty() {
                         let lit_str = self.arena.alloc_str(&literal);
@@ -1494,10 +1412,8 @@ impl<'a> Parser<'a> {
                         literal.clear();
                     }
 
-
                     let (expr_str, conversion, format_spec) =
                         self.extract_fstring_expr(&mut chars, full_span)?;
-
 
                     if expr_str.trim().is_empty() {
                         return Err(error(
@@ -1508,11 +1424,9 @@ impl<'a> Parser<'a> {
                         ));
                     }
 
-
                     let value_expr = self
                         .arena
                         .alloc(self.parse_fstring_expression(&expr_str, full_span)?);
-
 
                     let format_spec_expr = if let Some(spec) = format_spec {
                         let spec_values =
@@ -1534,13 +1448,11 @@ impl<'a> Parser<'a> {
                     }));
                 }
                 '}' => {
-
                     if chars.peek() == Some(&'}') {
                         chars.next();
                         literal.push('}');
                         continue;
                     }
-
 
                     return Err(error(
                         ErrorKind::InvalidSyntax {
@@ -1554,7 +1466,6 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-
 
         if !literal.is_empty() {
             let lit_str = self.arena.alloc_str(&literal);
@@ -1578,7 +1489,6 @@ impl<'a> Parser<'a> {
         let mut depth = 0; // Track nesting of (), [], {}
         let mut in_string = false;
         let mut string_char = '\0';
-
 
         while let Some(&ch) = chars.peek() {
             if in_string {
@@ -1617,25 +1527,19 @@ impl<'a> Parser<'a> {
                         expr.push(ch);
                         chars.next();
                     } else {
-
                         chars.next();
                         return Ok((expr, None, None));
                     }
                 }
                 '!' if depth == 0 => {
-
-
                     let mut chars_clone = chars.clone();
                     chars_clone.next(); // skip '!'
                     if matches!(chars_clone.peek(), Some(&'s') | Some(&'r') | Some(&'a')) {
-
                         chars.next(); // consume '!'
                         let conversion = chars.next();
 
-
                         match conversion {
                             Some('s') | Some('r') | Some('a') => {
-
                                 if chars.peek() == Some(&':') {
                                     chars.next(); // consume ':'
                                     let format_spec = self.extract_format_spec(chars)?;
@@ -1665,13 +1569,11 @@ impl<'a> Parser<'a> {
                             }
                         }
                     } else {
-
                         expr.push(ch);
                         chars.next();
                     }
                 }
                 ':' if depth == 0 => {
-
                     chars.next(); // consume ':'
                     let format_spec = self.extract_format_spec(chars)?;
                     return Ok((expr, None, Some(format_spec)));
@@ -1682,7 +1584,6 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-
 
         Err(error(
             ErrorKind::InvalidSyntax {
@@ -1714,7 +1615,6 @@ impl<'a> Parser<'a> {
                         spec.push(ch);
                         chars.next();
                     } else {
-
                         chars.next();
 
                         if depth == 0 && !spec.contains('{') {
@@ -1730,7 +1630,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-
         if depth == 0 && !spec.contains('{') {
             self.validate_format_spec(&spec)?;
         }
@@ -1744,14 +1643,12 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
 
-
         if spec.contains('{') {
             return Ok(());
         }
 
         let chars: Vec<char> = spec.chars().collect();
         let mut pos = 0;
-
 
         let is_type_code = |c: char| -> bool {
             matches!(
@@ -1773,38 +1670,31 @@ impl<'a> Parser<'a> {
             )
         };
 
-
         if pos + 1 < chars.len() && matches!(chars[pos + 1], '<' | '>' | '^' | '=') {
             pos += 2;
         } else if pos < chars.len() && matches!(chars[pos], '<' | '>' | '^' | '=') {
             pos += 1;
         }
 
-
         if pos < chars.len() && matches!(chars[pos], '+' | '-' | ' ') {
             pos += 1;
         }
-
 
         if pos < chars.len() && chars[pos] == '#' {
             pos += 1;
         }
 
-
         if pos < chars.len() && chars[pos] == '0' {
             pos += 1;
         }
-
 
         while pos < chars.len() && (chars[pos].is_ascii_digit() || chars[pos] == '*') {
             pos += 1;
         }
 
-
         if pos < chars.len() && matches!(chars[pos], ',' | '_') {
             pos += 1;
         }
-
 
         if pos < chars.len() && chars[pos] == '.' {
             pos += 1;
@@ -1813,13 +1703,9 @@ impl<'a> Parser<'a> {
             }
         }
 
-
         if pos < chars.len() && is_type_code(chars[pos]) {
             pos += 1;
         }
-
-
-
 
         let _ = pos; // Suppress unused warning
         Ok(())
@@ -1832,10 +1718,8 @@ impl<'a> Parser<'a> {
         expr_str: &str,
         span: TextRange,
     ) -> ParseResult<Expr<'a>> {
-
         let mut lexer = crate::Lexer::new(expr_str);
         let (tokens, _lexical_errors, _lexical_warnings) = lexer.tokenize();
-
 
         if tokens.is_empty() || (tokens.len() == 1 && tokens[0].kind == TokenKind::Eof) {
             return Err(error(
@@ -1846,18 +1730,13 @@ impl<'a> Parser<'a> {
             ));
         }
 
-
         let expr_source = self.arena.alloc_str(expr_str);
-
-
 
         let saved_tokens = std::mem::replace(&mut self.tokens, tokens);
         let saved_current = std::mem::replace(&mut self.current, 0);
         let saved_source = std::mem::replace(&mut self.source, expr_source);
 
-
         let result = self.parse_expression();
-
 
         self.tokens = saved_tokens;
         self.current = saved_current;
@@ -1870,7 +1749,6 @@ impl<'a> Parser<'a> {
         let start = self.peek().span.start();
         self.consume(TokenKind::Yield)?;
 
-
         if self.match_token(TokenKind::From) {
             let value = self.parse_expression()?;
             let end = value.span().end();
@@ -1879,7 +1757,6 @@ impl<'a> Parser<'a> {
                 span: TextRange::new(start, end),
             }))
         } else {
-
             let value = if self.peek().kind != TokenKind::Newline && !self.is_at_end() {
                 Some(self.arena.alloc(self.parse_expression()?))
             } else {
@@ -1903,10 +1780,8 @@ impl<'a> Parser<'a> {
     fn parse_slice_element(&mut self) -> ParseResult<Expr<'a>> {
         let start = self.peek().span.start();
 
-
         if self.peek().kind == TokenKind::Colon {
             self.advance(); // consume ':'
-
 
             let upper = if self.peek().kind != TokenKind::Colon
                 && self.peek().kind != TokenKind::RightBracket
@@ -1916,7 +1791,6 @@ impl<'a> Parser<'a> {
             } else {
                 None
             };
-
 
             let step = if self.match_token(TokenKind::Colon) {
                 if self.peek().kind != TokenKind::RightBracket
@@ -1943,13 +1817,10 @@ impl<'a> Parser<'a> {
                 span: TextRange::new(start, end),
             }))
         } else {
-
             let first_expr = self.parse_expression()?;
-
 
             if self.peek().kind == TokenKind::Colon {
                 self.advance(); // consume ':'
-
 
                 let upper = if self.peek().kind != TokenKind::Colon
                     && self.peek().kind != TokenKind::RightBracket
@@ -1959,7 +1830,6 @@ impl<'a> Parser<'a> {
                 } else {
                     None
                 };
-
 
                 let step = if self.match_token(TokenKind::Colon) {
                     if self.peek().kind != TokenKind::RightBracket
@@ -1986,7 +1856,6 @@ impl<'a> Parser<'a> {
                     span: TextRange::new(start, end),
                 }))
             } else {
-
                 Ok(first_expr)
             }
         }
@@ -2002,8 +1871,6 @@ impl<'a> Parser<'a> {
         let end = usize::from(span.end());
         let text = &self.source[start..end];
 
-
-
         let content = if text.starts_with("t\"") || text.starts_with("T\"") {
             &text[2..text.len() - 1]
         } else if text.starts_with("t'") || text.starts_with("T'") {
@@ -2017,16 +1884,8 @@ impl<'a> Parser<'a> {
             ));
         };
 
-
-
-
         let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
-
-
-
-
-
 
         Ok(Expr::TString(TStringExpr {
             values: values_slice,
@@ -2043,8 +1902,6 @@ impl<'a> Parser<'a> {
         let start = usize::from(span.start());
         let end = usize::from(span.end());
         let text = &self.source[start..end];
-
-
 
         let content = if text.len() >= 4 {
             let prefix_end = if text.starts_with("rt\"")
@@ -2085,13 +1942,8 @@ impl<'a> Parser<'a> {
             ));
         };
 
-
-
-
         let values = self.parse_fstring_content(content, span, 0)?;
         let values_slice = self.arena.alloc_slice_iter(values);
-
-
 
         Ok(Expr::TString(TStringExpr {
             values: values_slice,

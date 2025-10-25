@@ -1,31 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #![allow(clippy::only_used_in_recursion)]
 
 use crate::ast::expr::Expr;
@@ -145,7 +117,6 @@ impl PatternMatrix {
     }
 
     fn add_row(&mut self, mut row: PatternRow, ctors: &ConstructorSet) {
-
         row.is_useful = self.is_row_useful_incremental(&row, ctors);
         self.rows.push(row);
     }
@@ -158,27 +129,20 @@ impl PatternMatrix {
 
     /// Compute missing patterns (witnesses) for non-exhaustive matches
     fn compute_missing_patterns(&self, ctors: &ConstructorSet) -> Option<Vec<SimplePattern>> {
-
         if self.rows.is_empty() {
-
             return Some(vec![SimplePattern::wildcard()]);
         }
 
-
         if self.rows.iter().all(|r| r.patterns.is_empty()) {
-
             return None;
         }
-
 
         let rows_without_guards: Vec<&PatternRow> =
             self.rows.iter().filter(|r| !r.has_guard).collect();
 
         if rows_without_guards.is_empty() && !self.rows.is_empty() {
-
             return Some(vec![SimplePattern::wildcard()]);
         }
-
 
         let first_column_ctors: HashSet<Constructor> = rows_without_guards
             .iter()
@@ -186,23 +150,18 @@ impl PatternMatrix {
             .map(|r| r.patterns[0].constructor.clone())
             .collect();
 
-
         if first_column_ctors.contains(&Constructor::Wildcard) {
-
             let specialized = self.specialize(&Constructor::Wildcard, 0);
             return specialized.compute_missing_patterns(ctors);
         }
 
-
         let complete_ctors = ctors.get_complete_set(&first_column_ctors);
-
 
         for ctor in &complete_ctors {
             let arity = get_constructor_arity(ctor);
             let specialized = self.specialize(ctor, arity);
 
             if let Some(mut witness) = specialized.compute_missing_patterns(ctors) {
-
                 let ctor_pattern = SimplePattern::from_constructor(
                     ctor.clone(),
                     witness.drain(..arity.min(witness.len())).collect(),
@@ -212,7 +171,6 @@ impl PatternMatrix {
                 return Some(result);
             }
         }
-
 
         None
     }
@@ -232,7 +190,6 @@ impl PatternMatrix {
 
             match &first_pat.constructor {
                 Constructor::Wildcard => {
-
                     let mut new_patterns = vec![SimplePattern::wildcard(); arity];
                     new_patterns.extend(rest_patterns.iter().cloned());
                     result.rows.push(PatternRow {
@@ -243,7 +200,6 @@ impl PatternMatrix {
                     });
                 }
                 c if c == ctor || c.subsumes(ctor) => {
-
                     let mut new_patterns = first_pat.sub_patterns.clone();
                     new_patterns.extend(rest_patterns.iter().cloned());
                     result.rows.push(PatternRow {
@@ -253,9 +209,7 @@ impl PatternMatrix {
                         is_useful: row.is_useful,
                     });
                 }
-                _ => {
-
-                }
+                _ => {}
             }
         }
 
@@ -265,17 +219,14 @@ impl PatternMatrix {
     /// Check if a pattern row is useful (not redundant) incrementally
     /// This is called during matrix construction for O(n²) complexity
     fn is_row_useful_incremental(&self, row: &PatternRow, ctors: &ConstructorSet) -> bool {
-
         if self.compute_missing_patterns(ctors).is_none() {
             return false;
         }
-
 
         let mut test_matrix = PatternMatrix {
             rows: self.rows.clone(),
         };
         test_matrix.rows.push(row.clone());
-
 
         let before_witness = self.compute_missing_patterns(ctors);
         let after_witness = test_matrix.compute_missing_patterns(ctors);
@@ -346,7 +297,6 @@ impl ConstructorSet {
                 vec![Constructor::None]
             }
             Type::Int => {
-
                 let mut int_ctors: Vec<Constructor> = used_ctors
                     .iter()
                     .filter_map(|c| {
@@ -358,25 +308,18 @@ impl ConstructorSet {
                     })
                     .collect();
 
-
                 if used_ctors.contains(&Constructor::Wildcard) {
                     return vec![Constructor::Wildcard];
                 }
 
-
-                if int_ctors.len() > MAX_INT_SAMPLES {
-                    vec![Constructor::Wildcard]
-                } else if int_ctors.is_empty() {
-
+                if int_ctors.len() > MAX_INT_SAMPLES || int_ctors.is_empty() {
                     vec![Constructor::Wildcard]
                 } else {
-
                     int_ctors.push(Constructor::Wildcard);
                     int_ctors
                 }
             }
             Type::Str => {
-
                 let mut str_ctors: Vec<Constructor> = used_ctors
                     .iter()
                     .filter_map(|c| {
@@ -388,11 +331,9 @@ impl ConstructorSet {
                     })
                     .collect();
 
-
                 if used_ctors.contains(&Constructor::Wildcard) {
                     return vec![Constructor::Wildcard];
                 }
-
 
                 if str_ctors.len() > MAX_STR_SAMPLES {
                     vec![Constructor::Wildcard]
@@ -405,14 +346,11 @@ impl ConstructorSet {
                 vec![Constructor::Tuple(types.len())]
             }
             Type::List(_) => {
-
                 let has_star = used_ctors
                     .iter()
                     .any(|c| matches!(c, Constructor::StarList(_)));
 
                 if has_star {
-
-
                     let mut min_required_length = 0;
                     let mut star_pattern_exists = false;
 
@@ -425,9 +363,7 @@ impl ConstructorSet {
                         }
                     }
 
-
                     if star_pattern_exists {
-
                         let specific_lengths: HashSet<usize> = used_ctors
                             .iter()
                             .filter_map(|c| {
@@ -438,7 +374,6 @@ impl ConstructorSet {
                                 }
                             })
                             .collect();
-
 
                         let mut has_gaps = false;
                         if let Some(&max_specific) = specific_lengths.iter().max() {
@@ -451,14 +386,12 @@ impl ConstructorSet {
                         }
 
                         if has_gaps {
-
                             let missing: Vec<Constructor> = (0..min_required_length)
                                 .filter(|i| !specific_lengths.contains(i))
                                 .map(Constructor::List)
                                 .collect();
                             missing
                         } else {
-
                             vec![]
                         }
                     } else {
@@ -467,7 +400,6 @@ impl ConstructorSet {
                 } else if used_ctors.contains(&Constructor::Wildcard) {
                     vec![Constructor::Wildcard]
                 } else {
-
                     let mut lengths: Vec<usize> = used_ctors
                         .iter()
                         .filter_map(|c| {
@@ -484,7 +416,6 @@ impl ConstructorSet {
                     if lengths.is_empty() {
                         vec![Constructor::Wildcard]
                     } else {
-
                         let mut result: Vec<Constructor> =
                             lengths.into_iter().map(Constructor::List).collect();
                         result.push(Constructor::Wildcard);
@@ -493,15 +424,12 @@ impl ConstructorSet {
                 }
             }
             Type::Dict(_, _) => {
-
                 let has_wildcard = used_ctors.contains(&Constructor::Wildcard);
                 let has_rest = used_ctors.contains(&Constructor::MappingRest);
 
                 if has_wildcard || has_rest {
-
                     vec![Constructor::Wildcard]
                 } else {
-
                     let key_sets: Vec<Vec<String>> = used_ctors
                         .iter()
                         .filter_map(|c| {
@@ -516,9 +444,6 @@ impl ConstructorSet {
                     if key_sets.is_empty() {
                         vec![Constructor::Wildcard]
                     } else {
-
-
-
                         let mut all_keys = HashSet::new();
                         for keys in &key_sets {
                             for key in keys {
@@ -526,11 +451,9 @@ impl ConstructorSet {
                             }
                         }
 
-
                         if all_keys.len() > 8 {
                             vec![Constructor::Wildcard]
                         } else {
-
                             let mut result: Vec<Constructor> =
                                 key_sets.into_iter().map(Constructor::MappingKeys).collect();
 
@@ -541,7 +464,6 @@ impl ConstructorSet {
                 }
             }
             _ => {
-
                 vec![Constructor::Wildcard]
             }
         }
@@ -634,17 +556,13 @@ impl<'a> ExhaustivenessChecker<'a> {
     }
 
     fn check_match(&mut self, match_stmt: &MatchStmt) {
-
         let subject_type = self.infer_expr_type(&match_stmt.subject);
-
 
         let mut matrix = PatternMatrix::new();
         let mut ctor_set = ConstructorSet::new(subject_type.clone());
 
         for (i, case) in match_stmt.cases.iter().enumerate() {
-
             self.check_pattern_type(&case.pattern, &subject_type);
-
 
             if let Some(ref guard) = case.guard {
                 let guard_type = self.infer_expr_type(guard);
@@ -659,18 +577,14 @@ impl<'a> ExhaustivenessChecker<'a> {
                 }
             }
 
-
             let simple_patterns = self.lower_pattern(&case.pattern);
-
 
             let expanded = self.expand_or_patterns(vec![simple_patterns]);
 
             for pattern_vec in expanded {
-
                 for pat in &pattern_vec {
                     self.collect_constructors(pat, &mut ctor_set);
                 }
-
 
                 matrix.add_row(
                     PatternRow {
@@ -684,9 +598,7 @@ impl<'a> ExhaustivenessChecker<'a> {
             }
         }
 
-
         for row_idx in matrix.get_redundant_rows() {
-
             let case_idx = matrix.rows[row_idx].case_index;
             if case_idx < match_stmt.cases.len() {
                 self.errors.push(*error(
@@ -697,7 +609,6 @@ impl<'a> ExhaustivenessChecker<'a> {
                 ));
             }
         }
-
 
         if let Some(witness) = matrix.is_exhaustive(&ctor_set) {
             let missing = self.format_witness(&witness);
@@ -724,7 +635,6 @@ impl<'a> ExhaustivenessChecker<'a> {
     fn lower_pattern(&mut self, pattern: &Pattern) -> SimplePattern {
         match pattern {
             Pattern::MatchValue(p) => {
-
                 if let Expr::Constant(c) = &p.value {
                     let ctor = if let Ok(n) = c.value.parse::<i64>() {
                         Constructor::Int(n)
@@ -745,17 +655,12 @@ impl<'a> ExhaustivenessChecker<'a> {
                 SimplePattern::from_constructor(ctor, vec![])
             }
             Pattern::MatchSequence(p) => {
-
-                let has_star = p.patterns.iter().any(|pat| {
-                    match pat {
-
-                        Pattern::MatchAs(as_pat) if as_pat.pattern.is_none() => true,
-                        _ => false,
-                    }
-                });
+                let has_star = p
+                    .patterns
+                    .iter()
+                    .any(|pat| matches!(pat, Pattern::MatchAs(as_pat) if as_pat.pattern.is_none()));
 
                 if has_star {
-
                     let min_length = p
                         .patterns
                         .iter()
@@ -770,13 +675,11 @@ impl<'a> ExhaustivenessChecker<'a> {
 
                     SimplePattern::from_constructor(Constructor::StarList(min_length), sub_patterns)
                 } else {
-
                     let sub_patterns: Vec<SimplePattern> = p
                         .patterns
                         .iter()
                         .map(|pat| self.lower_pattern(pat))
                         .collect();
-
 
                     let pattern_type = self.infer_pattern_type(pattern);
                     let ctor = match pattern_type {
@@ -787,7 +690,6 @@ impl<'a> ExhaustivenessChecker<'a> {
                 }
             }
             Pattern::MatchMapping(p) => {
-
                 let mut keys: Vec<String> = p
                     .keys
                     .iter()
@@ -816,7 +718,6 @@ impl<'a> ExhaustivenessChecker<'a> {
                 SimplePattern::from_constructor(ctor, sub_patterns)
             }
             Pattern::MatchOr(p) => {
-
                 let branches: Vec<SimplePattern> = p
                     .patterns
                     .iter()
@@ -826,10 +727,8 @@ impl<'a> ExhaustivenessChecker<'a> {
                 if branches.is_empty() {
                     SimplePattern::wildcard()
                 } else if branches.len() == 1 {
-
                     branches.into_iter().next().unwrap()
                 } else {
-
                     SimplePattern::from_constructor(Constructor::OrPattern(branches), vec![])
                 }
             }
@@ -872,36 +771,22 @@ impl<'a> ExhaustivenessChecker<'a> {
     /// - `case (2, 3):`
     /// - `case (2, 4):`
     fn expand_or_patterns(&mut self, patterns: Vec<SimplePattern>) -> Vec<Vec<SimplePattern>> {
-
         if patterns.is_empty() {
             return vec![vec![]];
         }
 
-
         let first = &patterns[0];
         let rest = &patterns[1..];
 
-
         let first_expansions = match &first.constructor {
-            Constructor::OrPattern(branches) => {
-
-                branches
-                    .iter()
-                    .flat_map(|branch| {
-
-                        self.expand_simple_pattern(branch)
-                    })
-                    .collect::<Vec<SimplePattern>>()
-            }
-            _ => {
-
-                self.expand_simple_pattern(first)
-            }
+            Constructor::OrPattern(branches) => branches
+                .iter()
+                .flat_map(|branch| self.expand_simple_pattern(branch))
+                .collect::<Vec<SimplePattern>>(),
+            _ => self.expand_simple_pattern(first),
         };
 
-
         let rest_expansions = self.expand_or_patterns(rest.to_vec());
-
 
         let mut result = Vec::new();
         for first_pat in &first_expansions {
@@ -918,18 +803,12 @@ impl<'a> ExhaustivenessChecker<'a> {
     /// Expand a single simple pattern that may contain or-patterns in its sub-patterns
     fn expand_simple_pattern(&mut self, pattern: &SimplePattern) -> Vec<SimplePattern> {
         match &pattern.constructor {
-            Constructor::OrPattern(branches) => {
-
-                branches.clone()
-            }
+            Constructor::OrPattern(branches) => branches.clone(),
             _ if pattern.sub_patterns.is_empty() => {
-
                 vec![pattern.clone()]
             }
             _ => {
-
                 let sub_expansions = self.expand_or_patterns(pattern.sub_patterns.clone());
-
 
                 sub_expansions
                     .into_iter()
@@ -967,7 +846,6 @@ impl<'a> ExhaustivenessChecker<'a> {
             Constructor::None => "None".to_string(),
             Constructor::Tuple(n) => {
                 if pat.sub_patterns.is_empty() {
-
                     let wildcards = vec!["_"; *n];
                     format!("({})", wildcards.join(", "))
                 } else {
@@ -985,7 +863,6 @@ impl<'a> ExhaustivenessChecker<'a> {
             }
             Constructor::List(n) => {
                 if pat.sub_patterns.is_empty() {
-
                     let wildcards = vec!["_"; *n];
                     format!("[{}]", wildcards.join(", "))
                 } else {
@@ -1074,7 +951,6 @@ impl<'a> ExhaustivenessChecker<'a> {
                 }
             }
             Pattern::MatchSequence(p) => {
-
                 if !self.is_sequence_type(subject_type) && !matches!(subject_type, Type::Unknown) {
                     self.errors.push(*error(
                         ErrorKind::PatternTypeMismatch {
@@ -1119,7 +995,6 @@ impl<'a> ExhaustivenessChecker<'a> {
                 }
             }
             Pattern::MatchClass(p) => {
-
                 let _class_type = self.infer_expr_type(&p.cls);
 
                 for nested in p.patterns {
@@ -1144,7 +1019,6 @@ impl<'a> ExhaustivenessChecker<'a> {
         match ty {
             Type::List(elem) => Some((**elem).clone()),
             Type::Tuple(elems) if !elems.is_empty() => {
-
                 if elems.iter().all(|t| t == &elems[0]) {
                     Some(elems[0].clone())
                 } else {
@@ -1187,7 +1061,6 @@ mod tests {
         assert!(Constructor::Int(42).subsumes(&Constructor::Int(42)));
         assert!(!Constructor::Int(42).subsumes(&Constructor::Int(43)));
         assert!(!Constructor::Int(42).subsumes(&Constructor::Wildcard));
-
 
         assert!(Constructor::StarList(2).subsumes(&Constructor::List(2)));
         assert!(Constructor::StarList(2).subsumes(&Constructor::List(3)));
@@ -1237,15 +1110,12 @@ mod tests {
 
     #[test]
     fn test_star_pattern_subsumption() {
-
         assert!(Constructor::StarList(0).subsumes(&Constructor::List(0)));
         assert!(Constructor::StarList(0).subsumes(&Constructor::List(5)));
-
 
         assert!(Constructor::StarList(1).subsumes(&Constructor::List(1)));
         assert!(Constructor::StarList(1).subsumes(&Constructor::List(2)));
         assert!(!Constructor::StarList(1).subsumes(&Constructor::List(0)));
-
 
         assert!(Constructor::StarList(0).subsumes(&Constructor::Tuple(3)));
         assert!(Constructor::StarList(2).subsumes(&Constructor::Tuple(2)));

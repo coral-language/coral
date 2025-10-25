@@ -196,20 +196,19 @@ impl<'a> AsyncValidator<'a> {
                     let func_span = call.func.span();
                     if let Some(func_ty) =
                         type_ctx.get_type_by_span(func_span.start().into(), func_span.end().into())
+                        && matches!(func_ty, Type::Coroutine(_))
                     {
-                        if matches!(func_ty, Type::Coroutine(_)) {
-                            return func_ty.clone();
-                        }
+                        return func_ty.clone();
                     }
                 }
                 Type::Unknown
             }
 
             Expr::Attribute(attr) => {
-                if let Expr::Name(name) = attr.value {
-                    if ["asyncio", "aiohttp", "aiofiles"].contains(&name.id) {
-                        return Type::Coroutine(Box::new(Type::Unknown));
-                    }
+                if let Expr::Name(name) = attr.value
+                    && ["asyncio", "aiohttp", "aiofiles"].contains(&name.id)
+                {
+                    return Type::Coroutine(Box::new(Type::Unknown));
                 }
                 Type::Unknown
             }

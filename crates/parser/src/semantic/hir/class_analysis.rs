@@ -46,8 +46,6 @@ pub struct ClassAnalyzer<'a> {
 
 impl<'a> Default for ClassAnalyzer<'a> {
     fn default() -> Self {
-
-
         static EMPTY_INTERNER: once_cell::sync::Lazy<Interner> =
             once_cell::sync::Lazy::new(Interner::new);
         Self {
@@ -114,7 +112,6 @@ impl<'a> ClassAnalyzer<'a> {
     pub fn add_class(&mut self, class: &'a TypedClassDefStmt<'a>) {
         self.classes.push(class);
 
-
         let mut bases = Vec::new();
         for base in class.bases {
             if let TypedExpr::Name(name_expr) = base {
@@ -127,9 +124,7 @@ impl<'a> ClassAnalyzer<'a> {
 
     /// Analyze all classes and compute MRO and comprehensive metadata
     pub fn analyze(&mut self) -> Result<(), ClassAnalysisError> {
-
         self.check_circular_inheritance()?;
-
 
         let class_names: Vec<Symbol> = self.classes.iter().map(|c| c.name).collect();
         let mut mro_cache: HashMap<Symbol, Vec<Symbol>> = HashMap::new();
@@ -137,7 +132,6 @@ impl<'a> ClassAnalyzer<'a> {
             let mro = self.compute_mro(class_name)?;
             mro_cache.insert(class_name, mro);
         }
-
 
         let class_refs: Vec<&TypedClassDefStmt<'a>> = self.classes.to_vec();
         for class in class_refs {
@@ -158,7 +152,6 @@ impl<'a> ClassAnalyzer<'a> {
         self.class_metadata
             .into_iter()
             .map(|(sym, meta)| {
-
                 let class_name = self
                     .interner
                     .resolve(sym)
@@ -181,7 +174,6 @@ impl<'a> ClassAnalyzer<'a> {
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("UnknownClass_{}", class.name.as_u32()));
 
-
         let mro = mro_cache
             .get(&class.name)
             .map(|mro_syms| {
@@ -198,7 +190,6 @@ impl<'a> ClassAnalyzer<'a> {
         let mut properties = HashMap::new();
         let mut constructor = None;
 
-
         self.collect_class_members(
             class.body,
             &mut instance_attributes,
@@ -209,11 +200,9 @@ impl<'a> ClassAnalyzer<'a> {
             class.name,
         );
 
-
         if let Some(mro_syms) = mro_cache.get(&class.name) {
             for &base_sym in mro_syms.iter().skip(1) {
                 if let Some(base_meta) = self.class_metadata.get(&base_sym) {
-
                     for (name, ty) in &base_meta.instance_attributes {
                         instance_attributes
                             .entry(name.clone())
@@ -238,7 +227,6 @@ impl<'a> ClassAnalyzer<'a> {
                 }
             }
         }
-
 
         let implements = class
             .bases
@@ -332,18 +320,14 @@ impl<'a> ClassAnalyzer<'a> {
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| format!("unknown_func_{}", func.name.as_u32()));
 
-
                     if let Err(err_msg) =
                         self.validate_decorator_combination_with_errors(func.decorators)
                     {
-
-
                         eprintln!(
                             "Decorator validation warning for {}: {}",
                             func_name, err_msg
                         );
                     }
-
 
                     if func_name == "constructor" {
                         *constructor = Some(func.ty.clone());
@@ -351,7 +335,6 @@ impl<'a> ClassAnalyzer<'a> {
                         methods.insert(func_name, func.ty.clone());
                         continue;
                     }
-
 
                     if self.has_property_decorator(func.decorators) {
                         if let Some(prop_desc) =
@@ -367,34 +350,26 @@ impl<'a> ClassAnalyzer<'a> {
                         continue;
                     }
 
-
                     let decorator_kind = self.detect_method_decorator(func.decorators);
                     match decorator_kind {
                         MethodDecorator::StaticMethod => {
-
                             class_attributes.insert(func_name, func.ty.clone());
                         }
                         MethodDecorator::ClassMethod => {
-
                             class_attributes.insert(func_name, func.ty.clone());
                         }
                         MethodDecorator::Operator => {
-
-                            if let Err(_err) = self.validate_operator_signature(func) {
-
-                            }
+                            if let Err(_err) = self.validate_operator_signature(func) {}
 
                             methods.insert(func_name, func.ty.clone());
                         }
                         MethodDecorator::InstanceMethod | MethodDecorator::None => {
-
                             methods.insert(func_name, func.ty.clone());
                         }
                     }
                 }
                 TypedStmt::Assign(assign) => {
                     if self.is_class_level_assignment(assign) {
-
                         for target in assign.targets {
                             if let TypedExpr::Name(name) = target
                                 && let Some(name_str) = self.interner.resolve(name.symbol)
@@ -404,7 +379,6 @@ impl<'a> ClassAnalyzer<'a> {
                             }
                         }
                     } else {
-
                         for target in assign.targets {
                             if let TypedExpr::Attribute(attr) = target
                                 && self.is_self_attribute(attr.value)
@@ -418,29 +392,23 @@ impl<'a> ClassAnalyzer<'a> {
                 }
                 TypedStmt::AnnAssign(ann_assign) => {
                     if self.is_class_level_annotation(ann_assign) {
-
                         if let TypedExpr::Name(name) = &ann_assign.target {
                             let name_str = self.interner.resolve(name.symbol);
 
                             if let Some(name_str) = name_str {
-
                                 let ty = self.extract_type_from_annotation(&ann_assign.annotation);
                                 class_attributes.insert(name_str.to_string(), ty);
                             }
                         }
-                    } else {
-
-                        if let TypedExpr::Attribute(attr) = &ann_assign.target
-                            && self.is_self_attribute(attr.value)
-                            && let Some(attr_name) = self.interner.resolve(attr.attr)
-                        {
-                            let ty = self.extract_type_from_annotation(&ann_assign.annotation);
-                            instance_attributes.insert(attr_name.to_string(), ty);
-                        }
+                    } else if let TypedExpr::Attribute(attr) = &ann_assign.target
+                        && self.is_self_attribute(attr.value)
+                        && let Some(attr_name) = self.interner.resolve(attr.attr)
+                    {
+                        let ty = self.extract_type_from_annotation(&ann_assign.annotation);
+                        instance_attributes.insert(attr_name.to_string(), ty);
                     }
                 }
                 _ => {
-
                     self.collect_class_members_from_nested_stmt(
                         stmt,
                         instance_attributes,
@@ -469,7 +437,6 @@ impl<'a> ClassAnalyzer<'a> {
     fn extract_type_from_annotation(&self, annotation: &TypedExpr<'a>) -> Type {
         match annotation {
             TypedExpr::Name(name) => {
-
                 if let Some(type_name) = self.interner.resolve(name.symbol) {
                     match type_name {
                         "int" => Type::Int,
@@ -500,13 +467,10 @@ impl<'a> ClassAnalyzer<'a> {
             .unwrap_or_default();
 
         if bases.is_empty() {
-
             return Ok(vec![class_name]);
         }
 
-
         let mut mro = vec![class_name];
-
 
         let mut base_mros = Vec::new();
         for base in &bases {
@@ -514,18 +478,14 @@ impl<'a> ClassAnalyzer<'a> {
             base_mros.push(base_mro);
         }
 
-
         while !base_mros.is_empty() {
-
             let mut candidate = None;
 
             for (i, mro) in base_mros.iter().enumerate() {
                 if let Some(&first) = mro.first() {
-
                     let mut is_valid = true;
                     for (j, other_mro) in base_mros.iter().enumerate() {
                         if i != j && other_mro.len() > 1 {
-
                             for &item in other_mro.iter().skip(1) {
                                 if item == first {
                                     is_valid = false;
@@ -546,13 +506,11 @@ impl<'a> ClassAnalyzer<'a> {
                 Some((_i, candidate_class)) => {
                     mro.push(candidate_class);
 
-
                     for mro in &mut base_mros {
                         if let Some(pos) = mro.iter().position(|&x| x == candidate_class) {
                             mro.remove(pos);
                         }
                     }
-
 
                     base_mros.retain(|mro| !mro.is_empty());
                 }
@@ -716,7 +674,6 @@ impl<'a> ClassAnalyzer<'a> {
     ) -> Result<(), String> {
         let func_name = self.interner.resolve(func.name).unwrap_or("unknown");
 
-
         let param_count = func.args.args.len();
         if param_count == 0 {
             return Err(format!(
@@ -724,7 +681,6 @@ impl<'a> ClassAnalyzer<'a> {
                 func_name
             ));
         }
-
 
         let binary_ops = [
             "add", "sub", "mul", "div", "mod", "pow", "floordiv", "and", "or", "xor", "lshift",
@@ -737,7 +693,6 @@ impl<'a> ClassAnalyzer<'a> {
                 func_name, param_count
             ));
         }
-
 
         let unary_ops = ["neg", "pos", "invert", "abs"];
         if unary_ops.contains(&func_name) && param_count != 1 {
@@ -776,7 +731,6 @@ impl<'a> ClassAnalyzer<'a> {
             }
         }
 
-
         if has_property && has_staticmethod {
             Err("@property cannot be combined with @staticmethod".to_string())
         } else if has_property && has_classmethod {
@@ -796,13 +750,10 @@ impl<'a> ClassAnalyzer<'a> {
         body: &[TypedStmt<'a>],
     ) -> Option<PropertyDescriptor> {
         if self.has_property_decorator(func.decorators) {
-
             let attr_name = func.name;
             let getter_type = func.ty.clone();
 
-
             let setter_type = self.find_property_setter(attr_name, body);
-
 
             let deleter_type = self.find_property_deleter(attr_name, body);
 
@@ -835,24 +786,17 @@ impl<'a> ClassAnalyzer<'a> {
         body: &[TypedStmt<'a>],
         accessor_type: &str,
     ) -> Option<Type> {
-
         for stmt in body {
             if let TypedStmt::FuncDef(func) = stmt {
-
                 for decorator in func.decorators {
-                    if let TypedExpr::Attribute(attr) = decorator {
-
-                        if let Some(attr_name) = self.interner.resolve(attr.attr)
-                            && attr_name == accessor_type
-                            && let TypedExpr::Name(base) = &attr.value
-                            && base.symbol == property_name
-                        {
-
-
-                            if self.validate_accessor_signature(func, accessor_type) {
-                                return Some(func.ty.clone());
-                            }
-                        }
+                    if let TypedExpr::Attribute(attr) = decorator
+                        && let Some(attr_name) = self.interner.resolve(attr.attr)
+                        && attr_name == accessor_type
+                        && let TypedExpr::Name(base) = &attr.value
+                        && base.symbol == property_name
+                        && self.validate_accessor_signature(func, accessor_type)
+                    {
+                        return Some(func.ty.clone());
                     }
                 }
             }
@@ -866,18 +810,11 @@ impl<'a> ClassAnalyzer<'a> {
         func: &super::typed_stmt::TypedFuncDefStmt<'a>,
         accessor_type: &str,
     ) -> bool {
-
         let param_count = func.args.args.len().saturating_sub(1);
 
         match accessor_type {
-            "setter" => {
-
-                param_count == 1
-            }
-            "deleter" => {
-
-                param_count == 0
-            }
+            "setter" => param_count == 1,
+            "deleter" => param_count == 0,
             _ => false,
         }
     }
@@ -893,7 +830,6 @@ impl<'a> ClassAnalyzer<'a> {
                 && let TypedExpr::Name(base) = attr.value
                 && let Some("property") = self.interner.resolve(base.symbol)
             {
-
                 return true;
             }
         }
@@ -917,11 +853,8 @@ impl<'a> ClassAnalyzer<'a> {
 
     /// Check if assignment is at class level (not in a method)
     fn is_class_level_assignment(&self, assign: &super::typed_stmt::TypedAssignStmt<'a>) -> bool {
-
         for target in assign.targets {
             if let TypedExpr::Attribute(_attr) = target {
-
-
                 return false;
             }
         }
@@ -934,7 +867,6 @@ impl<'a> ClassAnalyzer<'a> {
         &self,
         ann_assign: &super::typed_stmt::TypedAnnAssignStmt<'a>,
     ) -> bool {
-
         if let TypedExpr::Attribute(_attr) = &ann_assign.target {
             return false;
         }
@@ -977,12 +909,9 @@ mod tests {
         let interner = Interner::new();
         let mut analyzer = ClassAnalyzer::new(&interner);
 
-
-
         let class_a = Symbol::new(0);
         let class_b = Symbol::new(1);
         let class_c = Symbol::new(2);
-
 
         analyzer.inheritance_graph.insert(class_a, vec![class_b]);
         analyzer.inheritance_graph.insert(class_b, vec![class_c]);
@@ -1001,7 +930,6 @@ mod tests {
         let class_b = Symbol::new(1);
         let class_c = Symbol::new(2);
         let class_d = Symbol::new(3);
-
 
         analyzer
             .inheritance_graph

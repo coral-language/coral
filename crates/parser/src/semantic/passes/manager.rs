@@ -1829,10 +1829,10 @@ impl PassManager {
                 Ok(()) => {
                     if let Some(graph) = self.module_graph_mut() {
                         graph.set_module_state(
-                            &module_name,
+                            module_name,
                             crate::semantic::module::ModuleState::Analyzed,
                         );
-                        graph.set_module_result(&module_name, Ok(()));
+                        graph.set_module_result(module_name, Ok(()));
                     }
                 }
                 Err(diagnostics) => {

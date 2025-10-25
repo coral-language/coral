@@ -98,7 +98,7 @@ impl NameResolver {
 
     fn visit_func_def(&mut self, func: &FuncDefStmt) {
         let symbol = Symbol::new(func.name.to_string(), BindingKind::Function, func.span);
-        if self.symbol_table.define(symbol).is_err() {}
+        let _ = self.symbol_table.define(symbol);
 
         for default in func.args.defaults {
             self.visit_expr_val(default);
@@ -121,7 +121,7 @@ impl NameResolver {
 
     fn visit_class_def(&mut self, class: &ClassDefStmt) {
         let symbol = Symbol::new(class.name.to_string(), BindingKind::Class, class.span);
-        if self.symbol_table.define(symbol).is_err() {}
+        let _ = self.symbol_table.define(symbol);
 
         for base in class.bases {
             self.visit_expr(base);
@@ -269,15 +269,15 @@ impl NameResolver {
     fn visit_expr_val(&mut self, expr: &Expr) {
         match expr {
             Expr::Name(name) => {
-                if self.symbol_table.record_usage(name.id, name.span).is_err() {
-                    if !is_builtin(name.id) {
-                        self.errors.push(*error(
-                            ErrorKind::UndefinedName {
-                                name: name.id.to_string(),
-                            },
-                            name.span,
-                        ));
-                    }
+                if self.symbol_table.record_usage(name.id, name.span).is_err()
+                    && !is_builtin(name.id)
+                {
+                    self.errors.push(*error(
+                        ErrorKind::UndefinedName {
+                            name: name.id.to_string(),
+                        },
+                        name.span,
+                    ));
                 }
             }
             Expr::BinOp(binop) => {
@@ -406,15 +406,15 @@ impl NameResolver {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Name(name) => {
-                if self.symbol_table.record_usage(name.id, name.span).is_err() {
-                    if !is_builtin(name.id) {
-                        self.errors.push(*error(
-                            ErrorKind::UndefinedName {
-                                name: name.id.to_string(),
-                            },
-                            name.span,
-                        ));
-                    }
+                if self.symbol_table.record_usage(name.id, name.span).is_err()
+                    && !is_builtin(name.id)
+                {
+                    self.errors.push(*error(
+                        ErrorKind::UndefinedName {
+                            name: name.id.to_string(),
+                        },
+                        name.span,
+                    ));
                 }
             }
             Expr::BinOp(binop) => {

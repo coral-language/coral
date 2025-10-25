@@ -183,18 +183,15 @@ impl<V: Visitor<'static>> ParallelVisitor<V> {
     /// between sequential and parallel traversal.
     pub fn visit_stmts_adaptive(&self, stmts: &[&Stmt<'static>]) {
         if stmts.len() < self.config.min_parallel_items {
-
             for stmt in stmts {
                 self.visitor.visit_stmt(stmt);
             }
         } else if self.config.enable_work_stealing {
-
             stmts
                 .par_iter()
                 .with_min_len(self.config.min_parallel_items / 4)
                 .for_each(|stmt| self.visitor.visit_stmt(stmt));
         } else {
-
             stmts
                 .par_iter()
                 .for_each(|stmt| self.visitor.visit_stmt(stmt));
@@ -204,18 +201,15 @@ impl<V: Visitor<'static>> ParallelVisitor<V> {
     /// Adaptively visit expressions (parallel if count >= threshold).
     pub fn visit_exprs_adaptive(&self, exprs: &[&Expr<'static>]) {
         if exprs.len() < self.config.min_parallel_items {
-
             for expr in exprs {
                 self.visitor.visit_expr(expr);
             }
         } else if self.config.enable_work_stealing {
-
             exprs
                 .par_iter()
                 .with_min_len(self.config.min_parallel_items / 4)
                 .for_each(|expr| self.visitor.visit_expr(expr));
         } else {
-
             exprs
                 .par_iter()
                 .for_each(|expr| self.visitor.visit_expr(expr));
@@ -283,9 +277,6 @@ impl<V: Visitor<'static>> ParallelVisitor<V> {
 
         let cancellable_visitor = CancellableVisitor::new((*self.visitor).clone(), tracker);
         let parallel = ParallelVisitor::with_config(cancellable_visitor, self.config.clone());
-
-
-
 
         parallel.visit_module(module);
         Ok(())
@@ -398,7 +389,6 @@ impl<V> DiagnosticVisitor<V> {
     }
 }
 
-
 impl<'a, V: Visitor<'a>> Visitor<'a> for DiagnosticVisitor<V> {
     fn visit_module(&self, module: &Module<'a>) {
         self.visitor.visit_module(module);
@@ -477,14 +467,12 @@ impl<V> CancellableVisitor<V> {
     }
 }
 
-
 impl<'a, V: Visitor<'a>> Visitor<'a> for CancellableVisitor<V> {
     fn visit_module(&self, module: &Module<'a>) {
         self.visitor.visit_module(module);
     }
 
     fn visit_stmt(&self, stmt: &Stmt<'a>) {
-
         if self.check_cancelled().is_err() {
             return;
         }
@@ -493,7 +481,6 @@ impl<'a, V: Visitor<'a>> Visitor<'a> for CancellableVisitor<V> {
     }
 
     fn visit_expr(&self, expr: &Expr<'a>) {
-
         if self.check_cancelled().is_err() {
             return;
         }
@@ -557,12 +544,10 @@ where
     V: Visitor<'a> + Sync,
 {
     if stmts.len() < min_chunk_size {
-
         for stmt in stmts {
             visitor.visit_stmt(stmt);
         }
     } else {
-
         stmts
             .par_iter()
             .with_min_len(min_chunk_size / 4)
@@ -576,12 +561,10 @@ where
     V: Visitor<'a> + Sync,
 {
     if exprs.len() < min_chunk_size {
-
         for expr in exprs {
             visitor.visit_expr(expr);
         }
     } else {
-
         exprs
             .par_iter()
             .with_min_len(min_chunk_size / 4)
@@ -601,7 +584,6 @@ mod tests {
             enable_work_stealing: false,
             enable_progress: true,
         };
-
 
         struct DummyVisitor;
         impl<'a> Visitor<'a> for DummyVisitor {}
@@ -636,18 +618,15 @@ mod tests {
 
     #[test]
     fn test_diagnostic_visitor() {
-
         struct DummyVisitor;
         impl<'a> Visitor<'a> for DummyVisitor {}
 
         let visitor = DummyVisitor;
         let diagnostic_visitor = DiagnosticVisitor::new(visitor);
 
-
         assert!(diagnostic_visitor.diagnostics().is_empty());
         assert!(!diagnostic_visitor.has_errors());
         assert_eq!(diagnostic_visitor.error_count(), 0);
-
 
         let diagnostic = Diagnostic::error("Test error".to_string());
         diagnostic_visitor.collect_diagnostic(diagnostic);
@@ -660,7 +639,6 @@ mod tests {
 
     #[test]
     fn test_cancellable_visitor() {
-
         struct DummyVisitor;
         impl<'a> Visitor<'a> for DummyVisitor {}
 
@@ -668,9 +646,7 @@ mod tests {
         let tracker = ProgressTracker::new();
         let cancellable = CancellableVisitor::new(visitor, tracker);
 
-
         assert!(cancellable.check_cancelled().is_ok());
-
 
         cancellable.tracker().cancel();
         assert!(cancellable.check_cancelled().is_err());
