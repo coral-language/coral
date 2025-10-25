@@ -290,7 +290,6 @@ class Shape implements Drawable, Resizable, Colorable:
     DiagnosticTestBuilder::errors(source).assert_none();
 }
 
-// Corner cases
 #[test]
 fn test_protocol_method_with_no_parameters() {
     let source = r#"
@@ -329,7 +328,6 @@ protocol Extended(Base):
     def extended_method(self) -> None
 "#;
 
-    // Protocol inheritance through parentheses - parses but doesn't inherit Base methods
     DiagnosticTestBuilder::errors(source).assert_none();
 }
 
@@ -344,7 +342,6 @@ protocol Inner:
     def inner_method(self) -> None
 "#;
 
-    // Protocols defined at module level, not nested
     DiagnosticTestBuilder::errors(source).assert_none();
 }
 
@@ -500,7 +497,6 @@ class Simple:
         pass
 "#;
 
-    // pass is valid for any return type - it's a placeholder for unimplemented functions
     DiagnosticTestBuilder::errors(source).assert_none();
 }
 
@@ -512,7 +508,6 @@ class Simple:
         pass
 "#;
 
-    // pass is valid for any return type - it's a placeholder for unimplemented functions
     DiagnosticTestBuilder::errors(source).assert_none();
 }
 
@@ -546,7 +541,6 @@ def create_response() -> Response:
     pass
 "#;
 
-    // pass is valid for any return type
     DiagnosticTestBuilder::errors(source).assert_none();
 }
 

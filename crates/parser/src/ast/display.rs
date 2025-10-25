@@ -130,7 +130,6 @@ pub fn expr_to_string(expr: &Expr) -> String {
 
 /// Format a constant value
 fn format_constant(value: &str) -> String {
-    // Truncate very long string constants
     if value.len() > 50 {
         format!("{}...", &value[..47])
     } else {
@@ -154,7 +153,6 @@ fn format_sequence(open: &str, close: &str, elts: &[Expr]) -> String {
 fn format_args(args: &crate::ast::Arguments) -> String {
     let mut params = Vec::new();
 
-    // Positional-only args
     for arg in args.posonlyargs {
         params.push(arg.arg.to_string());
     }
@@ -163,22 +161,18 @@ fn format_args(args: &crate::ast::Arguments) -> String {
         params.push("/".to_string());
     }
 
-    // Regular args
     for arg in args.args {
         params.push(arg.arg.to_string());
     }
 
-    // *args
     if let Some(vararg) = &args.vararg {
         params.push(format!("*{}", vararg.arg));
     }
 
-    // Keyword-only args
     for arg in args.kwonlyargs {
         params.push(arg.arg.to_string());
     }
 
-    // **kwargs
     if let Some(kwarg) = &args.kwarg {
         params.push(format!("**{}", kwarg.arg));
     }

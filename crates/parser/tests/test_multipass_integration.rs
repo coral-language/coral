@@ -154,7 +154,6 @@ class User:
 export User
 "#;
 
-    // Test that local exports work correctly
     DiagnosticTestBuilder::errors(source).assert_none();
 }
 
@@ -181,8 +180,6 @@ use_drawable(Circle())
 use_drawable(BadShape())
 "#;
 
-    // BadShape doesn't implement Drawable (has render, not draw)
-    // Should error when passed to use_drawable
     DiagnosticTestBuilder::errors(source)
         .expect("protocol")
         .assert_some();

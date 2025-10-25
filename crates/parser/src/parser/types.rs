@@ -150,9 +150,6 @@ impl<'a> Parser<'a> {
             self.record_error(*error);
         }
 
-        // Don't return error for empty body - continue to return the empty module
-        // Errors are collected in self.errors and will be returned through the diagnostics pipeline
-
         let span = if !body.is_empty() {
             let first = body[0].span();
             let last = body[body.len() - 1].span();

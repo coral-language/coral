@@ -436,11 +436,9 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Protocol methods don't have colons or bodies
         let (body_slice, span) = if self.context.in_protocol {
-            // For protocol methods, don't require colon, just consume newline
             self.consume_newline();
-            // Protocol methods have empty body
+
             let empty_body = self.arena.alloc_slice_vec(Vec::new());
             let span = TextRange::new(
                 start,
@@ -451,7 +449,6 @@ impl<'a> Parser<'a> {
             );
             (empty_body, span)
         } else {
-            // Regular function methods require colon and body
             if self.peek().kind != TokenKind::Colon {
                 self.recover_missing_colon("function definition")?;
             } else {
@@ -631,11 +628,9 @@ impl<'a> Parser<'a> {
             self.arena.alloc_slice_vec(Vec::new())
         };
 
-        // Parse "implements Protocol1, Protocol2" syntax
         let (bases, keywords) = if self.match_token(TokenKind::Implements) {
             let mut base_list = Vec::new();
 
-            // Parse comma-separated list of protocols
             loop {
                 let protocol = self.parse_expression()?;
                 base_list.push(protocol);
@@ -703,7 +698,6 @@ impl<'a> Parser<'a> {
             self.consume_newline();
         }
 
-        // Set protocol context if we're parsing a protocol
         let saved_context = self.context;
         if is_protocol {
             self.context = self.context.enter_protocol();
@@ -712,7 +706,6 @@ impl<'a> Parser<'a> {
         let body = self.parse_block()?;
         let body_slice = self.arena.alloc_slice_vec(body);
 
-        // Restore context
         self.context = saved_context;
 
         let docstring = Parser::extract_docstring_from_body(body_slice, self.source, self.arena);

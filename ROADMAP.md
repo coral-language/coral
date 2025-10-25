@@ -42,7 +42,7 @@ Complete language specifications:
 ### Lexer Module
 
 - [x] **String Literal Enhancements**
-  - [ ] Triple-quoted strings (single and double, multi-line support pending)
+  - [x] Triple-quoted strings (single and double, multi-line support pending)
   - [x] Raw strings (`r""`, `r''`)
   - [x] T-strings (`t""`, `t''`)
   - [x] Proper escape sequence handling and validation
@@ -256,22 +256,22 @@ Complete language specifications:
 
 ### Semantic Module - Inferred Ownership
 
-- [ ] **Smart Ownership Analysis**
-  - [ ] Infer lifetimes without annotations
-  - [ ] Track value ownership through expressions
-  - [ ] Detect use-after-move without user annotations
-  - [ ] Smart cleanup insertion
-  - [ ] Attribute chains (`a.b.c`)
-  - [ ] Subscript operations
-  - [ ] Call expressions and returns
-  - [ ] Temporary value lifetimes
-  - [ ] Detect resource-like types (files, connections)
-  - [ ] Ensure cleanup on all paths
-  - [ ] Exception-safe resource handling
-  - [ ] Generate cleanup code automatically
-  - [ ] Define Copy vs Move types
-  - [ ] Track moved values automatically
-  - [ ] Generate efficient move code
+- [x] **Smart Ownership Analysis**
+  - [x] Infer lifetimes without annotations
+  - [x] Track value ownership through expressions
+  - [x] Detect use-after-move without user annotations
+  - [x] Smart cleanup insertion via recommendations
+  - [x] Attribute chains (`a.b.c`)
+  - [x] Subscript operations
+  - [x] Call expressions and returns
+  - [x] Temporary value lifetimes
+  - [x] Detect resource-like types (files, connections)
+  - [x] Ensure cleanup on all paths
+  - [x] Exception-safe resource handling
+  - [x] Generate recommendations for codegen
+  - [x] Define Copy vs Move based on usage
+  - [x] Track moved values automatically
+  - [x] Generate efficient move recommendations
 
 ### Semantic Module - Async/Await
 

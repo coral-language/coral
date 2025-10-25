@@ -54,14 +54,12 @@ impl Lexer {
 
     /// Check if a token text contains triple quotes and toggle state if needed
     fn process_triple_quotes(&mut self, token_text: &str) {
-        // Check for triple-quoted strings (detect the quote character)
         let has_triple_double = token_text.contains(r#"""""#);
         let has_triple_single = token_text.contains("'''");
 
         if has_triple_double {
             let count = Self::count_triple_quotes(token_text, '"');
             if count % 2 == 1 {
-                // Odd number of triple quotes = toggle state
                 if let Some(char) = self.triple_quote_depth {
                     if char == '"' {
                         self.triple_quote_depth = None;
@@ -77,7 +75,6 @@ impl Lexer {
         if has_triple_single {
             let count = Self::count_triple_quotes(token_text, '\'');
             if count % 2 == 1 {
-                // Odd number of triple quotes = toggle state
                 if let Some(char) = self.triple_quote_depth {
                     if char == '\'' {
                         self.triple_quote_depth = None;
@@ -100,24 +97,19 @@ impl Lexer {
         while i < lines.len() {
             let line = &lines[i];
 
-            // Check if this line contains the start of a triple-quoted string
             let has_triple_double = line.contains(r#"""""#);
             let has_triple_single = line.contains("'''");
 
             if has_triple_double || has_triple_single {
-                // Count triple quotes in this line
                 let double_count = Self::count_triple_quotes(line, '"');
                 let single_count = Self::count_triple_quotes(line, '\'');
 
-                // If odd number, this line starts a multiline string
                 let mut accumulated = line.clone();
                 i += 1;
 
                 let mut in_double_triple = double_count % 2 == 1;
                 let mut in_single_triple = single_count % 2 == 1;
 
-                // Accumulate lines until we find the closing triple quotes
-                // We use a space separator to maintain tokenization integrity
                 while i < lines.len() && (in_double_triple || in_single_triple) {
                     accumulated.push(' ');
                     accumulated.push_str(&lines[i]);
@@ -151,9 +143,9 @@ impl Lexer {
         let mut tokens = Vec::new();
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
-        // Create owned strings to avoid borrow conflicts with mutable operations
+
         let lines_raw: Vec<String> = self.input.lines().map(|s| s.to_string()).collect();
-        // Preprocess to merge multiline strings
+
         let lines = Self::preprocess_multiline_strings(&lines_raw);
         let mut line_start_pos = 0;
         let mut line_idx = 0;
@@ -182,14 +174,10 @@ impl Lexer {
                 }
             }
 
-            // Check if this line starts or is inside a triple-quoted string
-            // If inside, we just emit a placeholder token and process later
             if self.is_in_triple_quotes() {
-                // We're inside a triple-quoted string; just process the line
                 let token_text = line.clone();
                 self.process_triple_quotes(&token_text);
 
-                // Skip emitting tokens for lines inside multiline strings
                 for idx in continuation_lines {
                     line_start_pos += lines.get(idx).map(|l| l.len() + 1).unwrap_or(0);
                 }
@@ -240,7 +228,6 @@ impl Lexer {
             let (line_tokens, line_errors) = cursor.tokenize_line(&line);
             errors.extend(line_errors);
 
-            // Track bracket depth and collect string tokens for triple-quote processing
             let mut string_tokens_to_process = Vec::new();
             let mut bracket_changes = 0i32;
             for token in &line_tokens {
@@ -257,17 +244,14 @@ impl Lexer {
                     | TokenKind::RawFString
                     | TokenKind::TString
                     | TokenKind::RawTString => {
-                        // Store token info for later processing
                         string_tokens_to_process.push(token.span);
                     }
                     _ => {}
                 }
             }
 
-            // Apply bracket depth changes
             self.bracket_depth = ((self.bracket_depth as i32) + bracket_changes).max(0) as usize;
 
-            // Process triple quotes from string tokens
             let mut token_texts_to_process = Vec::new();
             for span in string_tokens_to_process {
                 let token_start: usize = span.start().into();
@@ -283,7 +267,6 @@ impl Lexer {
                 }
             }
 
-            // Now process the collected texts
             for token_text in token_texts_to_process {
                 self.process_triple_quotes(&token_text);
             }

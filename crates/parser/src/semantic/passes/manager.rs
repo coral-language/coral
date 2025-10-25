@@ -47,6 +47,10 @@ pub struct AnalysisContext {
     /// Module exports for cross-module type resolution
     /// Maps module_name -> (exported_name -> type)
     pub module_exports: Arc<RwLock<HashMap<String, HashMap<String, Type>>>>,
+
+    /// Ownership analysis recommendations for code generation
+    pub ownership_recommendations:
+        Arc<RwLock<crate::semantic::passes::ownership_check::OwnershipRecommendations>>,
 }
 
 impl AnalysisContext {
@@ -59,6 +63,7 @@ impl AnalysisContext {
             class_attributes: Arc::new(RwLock::new(HashMap::new())),
             class_mro: Arc::new(RwLock::new(HashMap::new())),
             module_exports: Arc::new(RwLock::new(HashMap::new())),
+            ownership_recommendations: Arc::new(RwLock::new(Default::default())),
         }
     }
 
@@ -68,6 +73,11 @@ impl AnalysisContext {
         self.class_attributes.write().unwrap().clear();
         self.class_mro.write().unwrap().clear();
         self.module_exports.write().unwrap().clear();
+        self.ownership_recommendations
+            .write()
+            .unwrap()
+            .function_analyses
+            .clear();
     }
 
     /// Store class attribute information from HIR analysis
@@ -1299,7 +1309,17 @@ impl PassManager {
         use crate::semantic::passes::ownership_check::OwnershipChecker;
 
         let mut checker = OwnershipChecker::new();
-        let errors = checker.check_module(module);
+        let (errors, recommendations) = checker.check_module(module);
+
+        // Store recommendations in context for codegen
+        {
+            let mut recs = self
+                .analysis_context
+                .ownership_recommendations
+                .write()
+                .unwrap();
+            *recs = recommendations;
+        }
 
         if errors.is_empty() {
             Ok(())

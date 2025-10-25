@@ -99,7 +99,6 @@ fn test_all_string_types() {
             r#"while name != "":
     pass"#,
         ),
-        // Multiline string tests
         TestCase::new(
             "triple_double_quotes_simple",
             r#"x = """

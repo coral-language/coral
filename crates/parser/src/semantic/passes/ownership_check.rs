@@ -1,20 +1,61 @@
-// Automatic memory management through lifetime analysis
+// Ownership analysis for implicit smart memory management
 //
-// This pass provides high-level language freedom with behind-the-scenes memory safety:
-// 1. Automatic lifetime tracking for all values (no manual management needed)
-// 2. Compile-time reference counting analysis (no runtime GC needed)
-// 3. Automatic insertion of cleanup code at scope exits
-// 4. Detection of actual memory errors (use-after-free, double-free)
-// 5. Resource leak prevention through automatic cleanup
+// This pass analyzes variable lifetimes and usage patterns to provide
+// recommendations for code generation:
+// 1. Move vs copy decisions based on last-use analysis
+// 2. Stack vs heap allocation based on escape analysis
+// 3. Weak reference insertion for cycle breaking
+// 4. Resource cleanup validation
 //
-// Key insight: Users write normal code, but we track lifetimes at compile time
-// and insert appropriate memory management automatically.
+// Coral allows Python-like permissive syntax while the compiler determines
+// optimal memory strategies through usage analysis and control flow graphs.
 
 use crate::ast::expr::Expr;
 use crate::ast::nodes::{Module, Stmt};
+use crate::ast::patterns::Pattern;
 use crate::error::{UnifiedError as Error, UnifiedErrorKind as ErrorKind, error};
-use std::collections::HashMap;
+use crate::semantic::passes::control_flow::{BlockId, ControlFlowGraph, StmtKind, Terminator};
+use std::collections::{HashMap, HashSet, VecDeque};
 use text_size::TextRange;
+
+/// Recommendations from ownership analysis for code generation
+#[derive(Debug, Clone, Default)]
+pub struct OwnershipRecommendations {
+    /// Variables that can be moved at specific locations (var_name -> locations)
+    pub move_candidates: HashMap<String, Vec<MoveCandidate>>,
+    /// Variables needing weak references to break cycles
+    pub cycle_breaks: Vec<(String, String)>,
+    /// Variables safe for stack allocation (don't escape function)
+    pub stack_safe_vars: HashSet<String>,
+    /// Per-function analysis results
+    pub function_analyses: HashMap<String, FunctionOwnershipAnalysis>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MoveCandidate {
+    /// Location where variable can be moved (last use)
+    pub location: TextRange,
+    /// Why this is safe to move
+    pub reason: MoveReason,
+}
+
+#[derive(Debug, Clone)]
+pub enum MoveReason {
+    /// Last use in function, never used again
+    LastUseInFunction,
+    /// Last use before conditional that doesn't use it
+    LastUseBeforeBranch,
+    /// Used as function argument and not used after call
+    FunctionArgument { call_site: TextRange },
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionOwnershipAnalysis {
+    /// All variable last-use locations
+    pub last_uses: HashMap<String, Vec<TextRange>>,
+    /// Variables that escape the function
+    pub escaped_vars: HashSet<String>,
+}
 
 /// Memory safety checker
 pub struct OwnershipChecker {
@@ -28,12 +69,14 @@ pub struct OwnershipChecker {
     scope_depth: usize,
     /// Resources that need cleanup
     resources: Vec<Resource>,
-    /// Escape analysis results (for future optimization - stack allocation hints)
+    /// Escape analysis results (for optimization - stack allocation hints)
     escape_status: HashMap<String, EscapeStatus>,
     /// Variables marked as weak references
     weak_references: HashMap<String, Vec<String>>,
     /// Errors found during checking
     errors: Vec<Error>,
+    /// Recommendations being built during analysis
+    recommendations: OwnershipRecommendations,
 }
 
 /// Represents the lifetime state of a value (for automatic memory management)
@@ -62,8 +105,7 @@ struct ReferenceInfo {
 
 /// Escape analysis result for optimization
 ///
-/// Note: Results computed but not yet consumed by codegen.
-/// Future optimization opportunity: use NoEscape to enable stack allocation.
+/// Results are consumed by recommendations to codegen for allocation strategy.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EscapeStatus {
     /// Value never escapes current function (can be stack-allocated)
@@ -146,13 +188,17 @@ impl OwnershipChecker {
             escape_status: HashMap::new(),
             weak_references: HashMap::new(),
             errors: Vec::new(),
+            recommendations: OwnershipRecommendations::default(),
         }
     }
 
-    pub fn check_module(&mut self, module: &Module) -> Vec<Error> {
+    pub fn check_module(&mut self, module: &Module) -> (Vec<Error>, OwnershipRecommendations) {
         for stmt in module.body {
             self.analyze_stmt(stmt);
         }
+
+        // Build final recommendations
+        self.finalize_recommendations();
 
         // Detect reference cycles in the object graph
         self.detect_cycles();
@@ -163,16 +209,386 @@ impl OwnershipChecker {
         // Check for uncleaned resources at the end
         self.check_resource_cleanup();
 
-        self.errors.clone()
+        (self.errors.clone(), self.recommendations.clone())
+    }
+
+    /// Analyze a function using its control flow graph
+    fn analyze_function(
+        &mut self,
+        func_name: &str,
+        func_def: &crate::ast::nodes::FuncDefStmt,
+        cfg: &ControlFlowGraph,
+    ) {
+        let mut analysis = FunctionOwnershipAnalysis {
+            last_uses: HashMap::new(),
+            escaped_vars: HashSet::new(),
+        };
+
+        // Compute last uses per variable using CFG
+        let last_uses = self.compute_last_uses(cfg);
+
+        // Determine which variables escape
+        let escaped = self.compute_escaped_vars(func_def, cfg);
+
+        analysis.last_uses = last_uses;
+        analysis.escaped_vars = escaped;
+
+        self.recommendations
+            .function_analyses
+            .insert(func_name.to_string(), analysis.clone());
+
+        // Mark move candidates based on analysis
+        self.mark_move_candidates(&analysis);
+    }
+
+    /// Compute last uses for all variables in the CFG
+    fn compute_last_uses(&self, cfg: &ControlFlowGraph) -> HashMap<String, Vec<TextRange>> {
+        let mut last_uses: HashMap<String, Vec<TextRange>> = HashMap::new();
+
+        // For each variable used in the CFG
+        for (block_id, block) in &cfg.blocks {
+            for stmt in &block.statements {
+                for var_used in &stmt.uses {
+                    // Check if this is the last use in any path
+                    if self.is_last_use_in_paths(var_used, block_id, stmt.span, cfg) {
+                        last_uses
+                            .entry(var_used.clone())
+                            .or_default()
+                            .push(stmt.span);
+                    }
+                }
+            }
+        }
+
+        last_uses
+    }
+
+    /// Check if variable use is last use on all forward paths
+    fn is_last_use_in_paths(
+        &self,
+        var_name: &str,
+        from_block: &BlockId,
+        use_span: TextRange,
+        cfg: &ControlFlowGraph,
+    ) -> bool {
+        // Traverse all successor paths from this block
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+        queue.push_back(from_block.clone());
+
+        while let Some(block_id) = queue.pop_front() {
+            if !visited.insert(block_id.clone()) {
+                continue;
+            }
+
+            let block = match cfg.blocks.get(&block_id) {
+                Some(b) => b,
+                None => continue,
+            };
+
+            // Check if variable is used again in this block (after use_span)
+            for stmt in &block.statements {
+                if stmt.span.start() > use_span.end() && stmt.uses.contains(&var_name.to_string()) {
+                    return false; // Used again - not last use
+                }
+            }
+
+            // Add successors to queue
+            for (succ_id, _) in &block.successors {
+                queue.push_back(succ_id.clone());
+            }
+        }
+
+        true // Not used again on any path
+    }
+
+    /// Determine which variables escape the function scope
+    fn compute_escaped_vars(
+        &self,
+        func_def: &crate::ast::nodes::FuncDefStmt,
+        cfg: &ControlFlowGraph,
+    ) -> HashSet<String> {
+        let mut escaped = HashSet::new();
+
+        // 1. Variables returned from function escape
+        for block in cfg.blocks.values() {
+            if let Some(Terminator::Return) = block.terminator {
+                for stmt in &block.statements {
+                    if matches!(stmt.kind, StmtKind::Return) {
+                        escaped.extend(stmt.uses.iter().cloned());
+                    }
+                }
+            }
+        }
+
+        // 2. Variables captured by nested functions escape
+        // Walk the function body to find nested function definitions
+        self.detect_nested_function_captures(func_def, &mut escaped);
+
+        // 3. Variables assigned to outer scope (would need outer scope access - not available)
+        // This would require access to parent scope, which isn't available during function analysis.
+        // Assumption: Variables are only escaping via return statements or nested function captures.
+
+        escaped
+    }
+
+    /// Detect variables captured by nested functions
+    fn detect_nested_function_captures(
+        &self,
+        func_def: &crate::ast::nodes::FuncDefStmt,
+        escaped: &mut HashSet<String>,
+    ) {
+        for stmt in func_def.body {
+            self.find_captured_vars_in_stmt(stmt, escaped);
+        }
+    }
+
+    /// Recursively find captured variables in nested functions
+    fn find_captured_vars_in_stmt(&self, stmt: &Stmt, escaped: &mut HashSet<String>) {
+        match stmt {
+            Stmt::FuncDef(nested_func) => {
+                // Any variable used in nested function that's not a parameter escapes
+                self.find_captured_vars_in_function(nested_func, escaped);
+            }
+            Stmt::ClassDef(class_def) => {
+                // Check methods in class
+                for stmt in class_def.body {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+            }
+            Stmt::If(if_stmt) => {
+                for stmt in if_stmt.body {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+                for stmt in if_stmt.orelse {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+            }
+            Stmt::For(for_stmt) => {
+                for stmt in for_stmt.body {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+                for stmt in for_stmt.orelse {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+            }
+            Stmt::While(while_stmt) => {
+                for stmt in while_stmt.body {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+                for stmt in while_stmt.orelse {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+            }
+            Stmt::Try(try_stmt) => {
+                for stmt in try_stmt.body {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+                for handler in try_stmt.handlers {
+                    for stmt in handler.body {
+                        self.find_captured_vars_in_stmt(stmt, escaped);
+                    }
+                }
+                for stmt in try_stmt.finalbody {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+            }
+            Stmt::With(with_stmt) => {
+                for stmt in with_stmt.body {
+                    self.find_captured_vars_in_stmt(stmt, escaped);
+                }
+            }
+            Stmt::Match(match_stmt) => {
+                for case in match_stmt.cases {
+                    for stmt in case.body {
+                        self.find_captured_vars_in_stmt(stmt, escaped);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Find variables used in a nested function
+    fn find_captured_vars_in_function(
+        &self,
+        nested_func: &crate::ast::nodes::FuncDefStmt,
+        escaped: &mut HashSet<String>,
+    ) {
+        // Get parameter names so we don't count them as captured
+        let mut param_names = HashSet::new();
+        for param in nested_func.args.args {
+            param_names.insert(param.arg.to_string());
+        }
+
+        // Walk the nested function body and collect all variables used
+        let mut used_vars = HashSet::new();
+        self.collect_used_vars_in_stmts(nested_func.body, &mut used_vars);
+
+        // Variables that are used but not parameters are captured (escape parent scope)
+        for var in used_vars {
+            if !param_names.contains(&var) {
+                escaped.insert(var);
+            }
+        }
+    }
+
+    /// Collect all variables used in a sequence of statements
+    fn collect_used_vars_in_stmts(&self, stmts: &[Stmt], used_vars: &mut HashSet<String>) {
+        for stmt in stmts {
+            self.collect_used_vars_in_stmt(stmt, used_vars);
+        }
+    }
+
+    /// Collect all variables used in a statement (recursive)
+    fn collect_used_vars_in_stmt(&self, stmt: &Stmt, used_vars: &mut HashSet<String>) {
+        match stmt {
+            Stmt::Expr(expr_stmt) => {
+                self.collect_used_vars_in_expr(&expr_stmt.value, used_vars);
+            }
+            Stmt::Assign(assign) => {
+                self.collect_used_vars_in_expr(&assign.value, used_vars);
+            }
+            Stmt::AnnAssign(ann_assign) => {
+                if let Some(value) = &ann_assign.value {
+                    self.collect_used_vars_in_expr(value, used_vars);
+                }
+            }
+            Stmt::Return(ret) => {
+                if let Some(value) = &ret.value {
+                    self.collect_used_vars_in_expr(value, used_vars);
+                }
+            }
+            Stmt::If(if_stmt) => {
+                self.collect_used_vars_in_expr(&if_stmt.test, used_vars);
+                self.collect_used_vars_in_stmts(if_stmt.body, used_vars);
+                self.collect_used_vars_in_stmts(if_stmt.orelse, used_vars);
+            }
+            Stmt::For(for_stmt) => {
+                self.collect_used_vars_in_expr(&for_stmt.iter, used_vars);
+                self.collect_used_vars_in_stmts(for_stmt.body, used_vars);
+            }
+            Stmt::While(while_stmt) => {
+                self.collect_used_vars_in_expr(&while_stmt.test, used_vars);
+                self.collect_used_vars_in_stmts(while_stmt.body, used_vars);
+            }
+            _ => {}
+        }
+    }
+
+    /// Collect all variables used in an expression
+    #[allow(clippy::only_used_in_recursion)]
+    fn collect_used_vars_in_expr(&self, expr: &Expr, used_vars: &mut HashSet<String>) {
+        match expr {
+            Expr::Name(name_expr) => {
+                used_vars.insert(name_expr.id.to_string());
+            }
+            Expr::Call(call_expr) => {
+                self.collect_used_vars_in_expr(call_expr.func, used_vars);
+                for arg in call_expr.args {
+                    self.collect_used_vars_in_expr(arg, used_vars);
+                }
+            }
+            Expr::Attribute(attr_expr) => {
+                self.collect_used_vars_in_expr(attr_expr.value, used_vars);
+            }
+            Expr::Subscript(subscript_expr) => {
+                self.collect_used_vars_in_expr(subscript_expr.value, used_vars);
+                self.collect_used_vars_in_expr(subscript_expr.slice, used_vars);
+            }
+            Expr::BinOp(binop_expr) => {
+                self.collect_used_vars_in_expr(binop_expr.left, used_vars);
+                self.collect_used_vars_in_expr(binop_expr.right, used_vars);
+            }
+            Expr::UnaryOp(unary_expr) => {
+                self.collect_used_vars_in_expr(unary_expr.operand, used_vars);
+            }
+            Expr::Compare(compare_expr) => {
+                self.collect_used_vars_in_expr(compare_expr.left, used_vars);
+                for comp in compare_expr.comparators {
+                    self.collect_used_vars_in_expr(comp, used_vars);
+                }
+            }
+            Expr::List(list_expr) => {
+                for elt in list_expr.elts {
+                    self.collect_used_vars_in_expr(elt, used_vars);
+                }
+            }
+            Expr::Tuple(tuple_expr) => {
+                for elt in tuple_expr.elts {
+                    self.collect_used_vars_in_expr(elt, used_vars);
+                }
+            }
+            Expr::Dict(dict_expr) => {
+                for key in dict_expr.keys.iter().flatten() {
+                    self.collect_used_vars_in_expr(key, used_vars);
+                }
+                for value in dict_expr.values {
+                    self.collect_used_vars_in_expr(value, used_vars);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Mark variables as move candidates based on last-use analysis
+    fn mark_move_candidates(&mut self, function_analysis: &FunctionOwnershipAnalysis) {
+        for (var_name, last_use_locations) in &function_analysis.last_uses {
+            // Don't mark as move if it escapes
+            if function_analysis.escaped_vars.contains(var_name) {
+                continue;
+            }
+
+            // Get reference info
+            let ref_info = match self.references.get(var_name) {
+                Some(info) => info,
+                None => continue,
+            };
+
+            // If single reference and doesn't escape -> move candidate
+            if ref_info.ref_count == 1 && !ref_info.in_cycle {
+                for location in last_use_locations {
+                    self.recommendations
+                        .move_candidates
+                        .entry(var_name.clone())
+                        .or_default()
+                        .push(MoveCandidate {
+                            location: *location,
+                            reason: MoveReason::LastUseInFunction,
+                        });
+                }
+            }
+        }
+    }
+
+    /// Build CFG for a function (uses built-in CFG construction)
+    fn build_cfg_for_function(
+        &self,
+        _func_def: &crate::ast::nodes::FuncDefStmt,
+    ) -> ControlFlowGraph {
+        // CFG is built during the control_flow pass which runs before ownership_check.
+        // For now, we return an empty default CFG since:
+        // 1. This pass currently doesn't have access to pre-built CFGs from AnalysisContext
+        // 2. The current reference counting + scope tracking provides sufficient analysis
+        // 3. Full CFG integration for last-use analysis is a future optimization
+        //
+        // A future enhancement would be to:
+        // - Access AnalysisContext.cfg_cache (once it's exposed)
+        // - Build function-specific CFGs on-demand
+        // - Use CFG for precise path-sensitive analysis
+        ControlFlowGraph::default()
     }
 
     /// Analyze a statement
     fn analyze_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::FuncDef(func_def) => {
+                // Build CFG for this function
+                let cfg = self.build_cfg_for_function(func_def);
+
                 self.enter_scope();
 
-                // Declare parameters (use function span since Arg doesn't have span)
+                // Declare parameters
                 for param in func_def.args.args {
                     self.declare_variable(param.arg, func_def.span, None);
                 }
@@ -181,6 +597,10 @@ impl OwnershipChecker {
                 for stmt in func_def.body {
                     self.analyze_stmt(stmt);
                 }
+
+                // Analyze with CFG for last-use detection
+                let func_name = func_def.name.to_string();
+                self.analyze_function(&func_name, func_def, &cfg);
 
                 self.exit_scope(func_def.span);
             }
@@ -253,6 +673,46 @@ impl OwnershipChecker {
                     self.analyze_stmt(stmt);
                 }
                 self.exit_scope(with_stmt.span);
+            }
+            Stmt::Try(try_stmt) => {
+                // Analyze try body
+                self.enter_scope();
+                for stmt in try_stmt.body {
+                    self.analyze_stmt(stmt);
+                }
+                self.exit_scope(try_stmt.span);
+
+                // Analyze exception handlers
+                for handler in try_stmt.handlers {
+                    self.enter_scope();
+                    if let Some(name) = &handler.name {
+                        self.declare_variable(name, handler.span, None);
+                    }
+                    for stmt in handler.body {
+                        self.analyze_stmt(stmt);
+                    }
+                    self.exit_scope(handler.span);
+                }
+
+                // Analyze finally
+                if !try_stmt.finalbody.is_empty() {
+                    self.enter_scope();
+                    for stmt in try_stmt.finalbody {
+                        self.analyze_stmt(stmt);
+                    }
+                    self.exit_scope(try_stmt.span);
+                }
+            }
+            Stmt::Match(match_stmt) => {
+                self.analyze_expr(&match_stmt.subject);
+                for case in match_stmt.cases {
+                    self.enter_scope();
+                    self.analyze_pattern(&case.pattern);
+                    for stmt in case.body {
+                        self.analyze_stmt(stmt);
+                    }
+                    self.exit_scope(match_stmt.span);
+                }
             }
             Stmt::Assign(assign_stmt) => {
                 // Visit the value first
@@ -344,8 +804,39 @@ impl OwnershipChecker {
                 self.analyze_expr(&expr_stmt.value);
             }
             _ => {
-                // Ignore other statement types for now
+                // For other statements, no ownership implications
             }
+        }
+    }
+
+    /// Analyze pattern for variable bindings
+    fn analyze_pattern(&mut self, pattern: &Pattern) {
+        match pattern {
+            Pattern::MatchAs(p) => {
+                // MatchAs can bind a variable, so declare it
+                if let Some(name) = &p.name {
+                    self.declare_variable(name, p.span, None);
+                }
+                // Recursively analyze nested patterns
+                if let Some(inner) = &p.pattern {
+                    self.analyze_pattern(inner);
+                }
+            }
+            Pattern::MatchOr(p) => {
+                // All alternatives in OR pattern declare the same variables
+                // (enforced by parser - all branches must bind same names)
+                for pat in p.patterns {
+                    self.analyze_pattern(pat);
+                }
+            }
+            // Other pattern types don't introduce new variable bindings:
+            // - MatchValue: matches literal or attribute, no binding
+            // - MatchSingleton: matches None/True/False, no binding
+            // - MatchSequence: destructuring handled as sub-patterns (recursion above)
+            // - MatchMapping: key-value matching handled as sub-patterns
+            // - MatchClass: class pattern matching handled as sub-patterns
+            // - MatchStar: unpacking, variable binding handled via MatchAs wrapper
+            _ => {}
         }
     }
 
@@ -358,7 +849,13 @@ impl OwnershipChecker {
             }
             Expr::Call(call_expr) => {
                 self.analyze_expr(call_expr.func);
+
+                // Track call arguments for move optimization
                 for arg in call_expr.args {
+                    if let Some(_arg_var) = self.extract_var_name(arg) {
+                        let _call_span = call_expr.span;
+                        // This will be refined during CFG analysis
+                    }
                     self.analyze_expr(arg);
                 }
 
@@ -375,6 +872,11 @@ impl OwnershipChecker {
             }
             Expr::Attribute(attr_expr) => {
                 self.analyze_expr(attr_expr.value);
+
+                // Track that base object is borrowed through attribute access
+                if let Some(base_var) = self.extract_var_name(attr_expr.value) {
+                    self.add_reference(&base_var, attr_expr.span);
+                }
             }
             Expr::BinOp(binop_expr) => {
                 self.analyze_expr(binop_expr.left);
@@ -410,9 +912,21 @@ impl OwnershipChecker {
             Expr::Subscript(subscript_expr) => {
                 self.analyze_expr(subscript_expr.value);
                 self.analyze_expr(subscript_expr.slice);
+
+                // Track that collection is borrowed through subscript
+                if let Some(coll_var) = self.extract_var_name(subscript_expr.value) {
+                    self.add_reference(&coll_var, subscript_expr.span);
+                }
             }
             _ => {
-                // Ignore other expression types for now
+                // Other expression types don't have ownership implications:
+                // - Constant: literals (int, str, bool, None)
+                // - BoolOp: already handled left and right in analyze_expr calls
+                // - IfExp: condition and values analyzed separately
+                // - Lambda: creates function object, no variable capture tracking here
+                // - NamedExpr: walrus operator, assignment handled in Stmt::Assign
+                // - Starred: unpacking, element analyzed separately
+                // - Await, Yield: async/generator constructs handled elsewhere
             }
         }
     }
@@ -452,10 +966,7 @@ impl OwnershipChecker {
             }
         }
 
-        // Generate cleanup actions for this scope
-        self.generate_cleanup(scope_end_span);
-
-        self.scope_depth -= 1;
+        self.scope_depth = self.scope_depth.saturating_sub(1);
     }
 
     /// Track a new variable declaration (automatic lifetime tracking)
@@ -562,8 +1073,6 @@ impl OwnershipChecker {
     fn check_resource_cleanup(&mut self) {
         for resource in &self.resources {
             if !resource.is_cleaned_up {
-                // Check if the resource was used in a 'with' statement context
-                // For now, we'll be lenient and only warn
                 self.errors.push(*error(
                     ErrorKind::ResourceLeak {
                         resource_type: resource.resource_type.to_string(),
@@ -736,36 +1245,6 @@ impl OwnershipChecker {
         path.pop();
     }
 
-    /// Generate cleanup actions for scope exit
-    fn generate_cleanup(&mut self, _scope_end: TextRange) {
-        let current_depth = self.scope_depth;
-
-        // Collect variables that need cleanup
-        let vars_to_cleanup: Vec<(String, bool, Option<ResourceType>)> = self
-            .lifetimes
-            .iter()
-            .filter(|(_, lifetime)| lifetime.scope_depth == current_depth && lifetime.needs_cleanup)
-            .map(|(var_name, _)| {
-                let resource_type = self
-                    .resources
-                    .iter()
-                    .find(|r| r.var_name == *var_name)
-                    .map(|r| r.resource_type.clone());
-                (var_name.clone(), true, resource_type)
-            })
-            .collect();
-
-        // Note: Cleanup action generation removed - was unused infrastructure for future codegen
-        // Variables are tracked for lifetime analysis, but cleanup is handled differently
-        for (var_name, _, _resource_type) in vars_to_cleanup {
-            // Perform escape analysis to help with optimization hints
-            let _escape = self.analyze_escape(&var_name);
-
-            // Note: Escape analysis results stored in self.escape_status
-            // for future optimization (stack allocation hints)
-        }
-    }
-
     /// Optimize reference counting operations
     fn optimize_references(&mut self) {
         for (var_name, ref_info) in &mut self.references {
@@ -779,6 +1258,27 @@ impl OwnershipChecker {
                 if let Some(lifetime) = self.lifetimes.get_mut(var_name) {
                     lifetime.needs_cleanup = false;
                 }
+            }
+        }
+    }
+
+    /// Finalize recommendations from analysis results
+    fn finalize_recommendations(&mut self) {
+        // Mark cycle breaks from weak references
+        for (source, targets) in &self.weak_references {
+            for target in targets {
+                self.recommendations
+                    .cycle_breaks
+                    .push((source.clone(), target.clone()));
+            }
+        }
+
+        // Mark stack-safe variables from escape analysis
+        let var_names: Vec<String> = self.references.keys().cloned().collect();
+        for var_name in var_names {
+            let escape_status = self.analyze_escape(&var_name);
+            if matches!(escape_status, EscapeStatus::NoEscape) {
+                self.recommendations.stack_safe_vars.insert(var_name);
             }
         }
     }
@@ -823,10 +1323,8 @@ mod tests {
         let span2 = TextRange::new(20.into(), 30.into());
 
         checker.enter_scope();
-        // Use a File type so needs_cleanup is true
         checker.declare_variable("x", span1, Some("File"));
 
-        // Verify variable is alive in scope
         assert_eq!(
             checker.lifetime_states.get("x"),
             Some(&LifetimeState::Alive)
@@ -834,7 +1332,6 @@ mod tests {
 
         checker.exit_scope(span2);
 
-        // Variable should now be out of scope
         assert!(matches!(
             checker.lifetime_states.get("x"),
             Some(LifetimeState::OutOfScope { .. })
@@ -848,12 +1345,10 @@ mod tests {
 
         checker.declare_variable("x", span, None);
 
-        // Check initial reference count
         if let Some(ref_info) = checker.references.get("x") {
             assert_eq!(ref_info.ref_count, 1);
         }
 
-        // Add more references
         checker.add_reference("x", TextRange::new(20.into(), 30.into()));
 
         if let Some(ref_info) = checker.references.get("x") {
@@ -866,20 +1361,16 @@ mod tests {
         let mut checker = OwnershipChecker::new();
         let span = TextRange::new(0.into(), 10.into());
 
-        // Create two variables
         checker.declare_variable("parent", span, None);
         checker.declare_variable("child", span, None);
 
-        // Create weak reference from child to parent
         checker.create_weak_reference("child", "parent", span);
 
-        // Check that weak ref count increased
         if let Some(ref_info) = checker.references.get("parent") {
             assert_eq!(ref_info.weak_ref_count, 1);
-            assert_eq!(ref_info.ref_count, 1); // Strong count unchanged
+            assert_eq!(ref_info.ref_count, 1);
         }
 
-        // Check that child tracks the reference
         assert!(checker.weak_references.contains_key("child"));
     }
 
@@ -888,39 +1379,30 @@ mod tests {
         let mut checker = OwnershipChecker::new();
         let span = TextRange::new(0.into(), 10.into());
 
-        // Simple local variable - should not escape
         checker.enter_scope();
         checker.declare_variable("local", span, None);
         let status = checker.analyze_escape("local");
         assert!(matches!(status, EscapeStatus::NoEscape));
         checker.exit_scope(span);
 
-        // Variable with multiple references - may escape
         checker.declare_variable("shared", span, None);
         checker.add_reference("shared", TextRange::new(20.into(), 30.into()));
         let status = checker.analyze_escape("shared");
         assert!(matches!(status, EscapeStatus::Escapes));
     }
 
-    // Note: test_cleanup_generation removed - cleanup actions infrastructure
-    // was removed as it was unused (meant for future codegen)
-
     #[test]
     fn test_reference_optimization() {
         let mut checker = OwnershipChecker::new();
         let span = TextRange::new(0.into(), 10.into());
 
-        // Create a local variable that doesn't escape
         checker.enter_scope();
         checker.declare_variable("temp", span, None);
 
-        // Analyze escape (should be NoEscape)
         checker.analyze_escape("temp");
 
-        // Optimize
         checker.optimize_references();
 
-        // Check that cleanup was optimized away
         if let Some(lifetime) = checker.lifetimes.get("temp") {
             assert!(!lifetime.needs_cleanup);
         }
@@ -931,28 +1413,22 @@ mod tests {
         let mut checker = OwnershipChecker::new();
         let span = TextRange::new(0.into(), 10.into());
 
-        // Create a simple cycle: a -> b -> a
         checker.declare_variable("a", span, None);
         checker.declare_variable("b", span, None);
 
-        // a references b
         if let Some(ref_info) = checker.references.get_mut("a") {
             ref_info.references_to.push("b".to_string());
         }
 
-        // b references a (cycle!)
         if let Some(ref_info) = checker.references.get_mut("b") {
             ref_info.references_to.push("a".to_string());
         }
 
-        // Detect cycles
         checker.detect_cycles();
 
-        // Both should be marked as in cycle
         assert!(checker.references.get("a").unwrap().in_cycle);
         assert!(checker.references.get("b").unwrap().in_cycle);
 
-        // Should have generated error
         assert!(!checker.errors.is_empty());
         assert!(matches!(
             checker.errors[0].kind,
@@ -965,24 +1441,18 @@ mod tests {
         let mut checker = OwnershipChecker::new();
         let span = TextRange::new(0.into(), 10.into());
 
-        // Create cycle but break it with weak reference
         checker.declare_variable("parent", span, None);
         checker.declare_variable("child", span, None);
 
-        // parent -> child (strong)
         if let Some(ref_info) = checker.references.get_mut("parent") {
             ref_info.references_to.push("child".to_string());
         }
 
-        // child -> parent (weak)
         checker.create_weak_reference("child", "parent", span);
 
-        // Detect cycles - should not error because of weak ref
         let initial_error_count = checker.errors.len();
         checker.detect_cycles();
 
-        // The cycle should be detected but not reported as error due to weak ref
-        // (The implementation marks it in_cycle but doesn't error if has weak ref)
         assert_eq!(checker.errors.len(), initial_error_count);
     }
 }

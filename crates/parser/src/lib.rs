@@ -310,7 +310,6 @@ fn parse_with_config(
         }
     };
 
-    // Collect parser/lexer errors before running semantic passes
     let mut parser_errors: Vec<Diagnostic> = parser
         .errors()
         .iter()
@@ -346,8 +345,6 @@ fn parse_with_config(
         Err(diagnostics) => diagnostics,
     };
 
-    // Add parser/lexer errors first, then semantic errors
-    // This ensures parser errors appear before semantic errors in the list
     parser_errors.append(&mut parser_warnings);
     parser_errors.append(&mut diagnostics);
     let diagnostics = parser_errors;
