@@ -656,6 +656,7 @@ impl ControlFlowAnalyzer {
                 .collect(),
 
             Expr::ModuleIntrospection(_) => Vec::new(),
+            Expr::Error(_) => Vec::new(),
         }
     }
 

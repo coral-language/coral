@@ -64,6 +64,21 @@ impl ErrorContext {
         (line, col)
     }
 
+    /// Get the start and end line numbers for the span.
+    pub fn span_line_range(&self) -> (usize, usize) {
+        let start: usize = self.span.start().into();
+        let end: usize = self.span.end().into();
+        let start_line = self.source[..start].chars().filter(|&c| c == '\n').count() + 1;
+        let end_line = self.source[..end].chars().filter(|&c| c == '\n').count() + 1;
+        (start_line, end_line)
+    }
+
+    /// Check if this span spans multiple lines.
+    pub fn is_multiline(&self) -> bool {
+        let (start_line, end_line) = self.span_line_range();
+        start_line != end_line
+    }
+
     /// Get the line containing the error.
     pub fn error_line(&self) -> &str {
         let start: usize = self.span.start().into();

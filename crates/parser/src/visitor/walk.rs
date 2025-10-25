@@ -308,6 +308,7 @@ pub fn walk_expr<'a, V: Visitor<'a> + ?Sized>(visitor: &V, expr: &Expr<'a>) {
             }
         }
         Expr::ModuleIntrospection(_) => {}
+        Expr::Error(_) => {}
     }
 }
 

@@ -394,6 +394,7 @@ impl NameResolver {
             | Expr::Complex(_)
             | Expr::Bytes(_)
             | Expr::TString(_)
+            | Expr::Error(_)
             | Expr::ModuleIntrospection(_) => {}
             Expr::NamedExpr(named) => {
                 self.visit_expr(named.target);

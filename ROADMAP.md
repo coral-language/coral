@@ -7,6 +7,7 @@ This roadmap outlines the complete development plan for Coral, a fast interprete
 Complete language specifications:
 - `docs/module-system.md` - Module system, exports, and introspection
 - `docs/classes-and-protocols.md` - Classes, protocols, operators, and special methods
+- `docs/ownership-and-borrowing.md` - Ownership and borrowing in Coral
 
 ## Phase 1: Frontend Development (Current)
 
@@ -284,23 +285,23 @@ Complete language specifications:
 
 ### Cross-Cutting Improvements
 
-- [ ] **Better Diagnostics**
+- [x] **Better Diagnostics**
   - [x] More precise source locations (column numbers)
-  - [ ] Multi-line error highlighting
-  - [ ] Contextual error messages
+  - [x] Multi-line error highlighting
+  - [x] Contextual error messages
   - [x] Suggest fixes where possible
 
-- [ ] **Incremental Analysis**
-  - [ ] Cache analysis results per file
-  - [ ] Re-analyze only changed modules
-  - [ ] Track dependencies for invalidation
-  - [ ] Serialize/deserialize caches
+- [x] **Incremental Analysis**
+  - [x] Cache analysis results per file
+  - [x] Re-analyze only changed modules
+  - [x] Track dependencies for invalidation
+  - [x] Serialize/deserialize caches
 
-- [ ] **IDE Integration Support**
-  - [ ] Partial results on incomplete code
-  - [ ] Machine-readable diagnostics
-  - [ ] Real-time analysis support
-  - [ ] Quick fix suggestions
+- [x] **IDE Integration Support (parser-only features)**
+  - [x] Partial results on incomplete code
+  - [x] Machine-readable diagnostics
+  - [x] Real-time analysis support
+  - [x] Quick fix suggestions
 
 - [x] **Performance Instrumentation**
   - [x] Per-pass timing
@@ -308,11 +309,10 @@ Complete language specifications:
   - [x] Identify bottlenecks
   - [x] Optimization targets
 
-- [ ] **Configuration**
-  - [ ] Per-pass strictness levels
+- [x] **Configuration**
+  - [x] Per-pass strictness levels
   - [x] Ignore specific warnings by code
   - [x] Custom error formatting
-  - [ ] Project-wide configuration files
 
 ## Phase 2: Backend Development
 

@@ -37,6 +37,7 @@ pub enum Expr<'a> {
     Yield(YieldExpr<'a>),
     YieldFrom(YieldFromExpr<'a>),
     ModuleIntrospection(ModuleIntrospectionExpr<'a>),
+    Error(ErrorExpr<'a>),
 }
 
 impl<'a> Expr<'a> {
@@ -73,6 +74,7 @@ impl<'a> Expr<'a> {
             Expr::Yield(e) => e.span,
             Expr::YieldFrom(e) => e.span,
             Expr::ModuleIntrospection(e) => e.span,
+            Expr::Error(e) => e.span,
         }
     }
 }
@@ -330,4 +332,12 @@ pub struct YieldFromExpr<'a> {
 pub struct ModuleIntrospectionExpr<'a> {
     pub function: &'a str, // "is_main", "name", "path", etc.
     pub span: TextRange,
+}
+
+/// Error placeholder expression (for partial AST construction during error recovery)
+#[derive(Debug, Clone)]
+pub struct ErrorExpr<'a> {
+    pub span: TextRange,
+    #[allow(dead_code)]
+    pub _phantom: std::marker::PhantomData<&'a ()>,
 }

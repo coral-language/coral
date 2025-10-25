@@ -76,29 +76,42 @@ impl DiagnosticFormatter {
                 let context_lines = context.context_lines(self.config.context_lines);
                 let start: usize = context.span.start().into();
                 let end: usize = context.span.end().into();
-                let line_start = context.source[..start]
-                    .rfind('\n')
-                    .map(|i| i + 1)
-                    .unwrap_or(0);
-                let col_offset = start - line_start;
-                let length = (end - start).max(1);
+                let (start_line, end_line) = context.span_line_range();
 
                 for (line_num, line_text) in context_lines {
-                    let is_error_line = line_num == line;
-                    if is_error_line {
-                        let before_error = if col_offset < line_text.len() {
-                            &line_text[..col_offset]
+                    if line_num >= start_line && line_num <= end_line {
+                        let line_start = context.source[..]
+                            .lines()
+                            .take(line_num - 1)
+                            .map(|l| l.len() + 1)
+                            .sum::<usize>();
+
+                        let error_start = if line_num == start_line {
+                            start - line_start
+                        } else {
+                            0
+                        };
+
+                        let error_end = if line_num == end_line {
+                            (end - line_start).min(line_text.len())
+                        } else {
+                            line_text.len()
+                        };
+
+                        let before_error = if error_start < line_text.len() {
+                            &line_text[..error_start]
                         } else {
                             &line_text[..]
                         };
-                        let error_part = if col_offset < line_text.len() {
-                            let end_offset = (col_offset + length).min(line_text.len());
-                            &line_text[col_offset..end_offset]
+
+                        let error_part = if error_start < line_text.len() {
+                            &line_text[error_start..error_end]
                         } else {
                             ""
                         };
-                        let after_error = if col_offset + length < line_text.len() {
-                            &line_text[(col_offset + length)..]
+
+                        let after_error = if error_end < line_text.len() {
+                            &line_text[error_end..]
                         } else {
                             ""
                         };
@@ -116,8 +129,8 @@ impl DiagnosticFormatter {
                         output.push_str(&format!(
                             "    {} {}{}\n",
                             "|".cyan(),
-                            " ".repeat(col_offset),
-                            "-".repeat(length).red()
+                            " ".repeat(error_start),
+                            "^".repeat((error_end - error_start).max(1)).red()
                         ));
                     } else {
                         output.push_str(&format!(

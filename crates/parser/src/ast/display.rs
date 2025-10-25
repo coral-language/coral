@@ -125,6 +125,7 @@ pub fn expr_to_string(expr: &Expr) -> String {
         }
         Expr::YieldFrom(y) => format!("yield from {}", expr_to_string(y.value)),
         Expr::ModuleIntrospection(m) => format!("__{}", m.function),
+        Expr::Error(_) => "<error>".to_string(),
     }
 }
 

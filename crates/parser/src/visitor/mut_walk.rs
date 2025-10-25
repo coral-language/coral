@@ -311,6 +311,7 @@ pub fn walk_expr<'a, V: MutVisitor<'a> + ?Sized>(visitor: &mut V, expr: &Expr<'a
             }
         }
         Expr::ModuleIntrospection(_) => {}
+        Expr::Error(_) => {}
     }
 }
 

@@ -231,6 +231,15 @@ pub struct ParseResultWithMetadata<'a> {
 
     /// Pass execution statistics (if enabled)
     pub statistics: Option<std::collections::HashMap<String, PassStatistics>>,
+
+    /// Recovery actions taken during parsing (for IDE quick fixes)
+    pub recovery_actions: Vec<error::RecoveryAction>,
+
+    /// Comment map for documentation and hover information
+    pub comment_map: lexer::CommentMap,
+
+    /// Symbol location index for IDE navigation (symbol_name -> definition_span)
+    pub symbol_locations: std::collections::HashMap<String, text_size::TextRange>,
 }
 
 impl<'a> ParseResultWithMetadata<'a> {
@@ -322,6 +331,9 @@ fn parse_with_config(
         .map(|e| e.to_diagnostic(source))
         .collect();
 
+    let recovery_actions = parser.recovery_manager().actions().to_vec();
+    let comment_map = parser.comment_map.clone();
+
     let mut manager = PassManager::with_config(
         config.project_root.clone(),
         PassManagerConfig {
@@ -357,12 +369,17 @@ fn parse_with_config(
         None
     };
 
+    let symbol_locations = symbol_table.build_location_index();
+
     Ok(ParseResultWithMetadata {
         module,
         diagnostics,
         symbol_table,
         exports,
         statistics,
+        recovery_actions,
+        comment_map,
+        symbol_locations,
     })
 }
 

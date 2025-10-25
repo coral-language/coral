@@ -673,6 +673,14 @@ impl<'a> HirLowerer<'a> {
             Expr::DictComp(dict_comp) => self.lower_dict_comprehension(dict_comp),
             Expr::SetComp(set_comp) => self.lower_set_comprehension(set_comp),
             Expr::GeneratorExp(gen_exp) => self.lower_generator_expression(gen_exp),
+            Expr::Error(error_expr) => {
+                let ty = Type::Unknown;
+                Some(TypedExpr::Constant(TypedConstantExpr {
+                    value: "<error>",
+                    ty,
+                    span: error_expr.span,
+                }))
+            }
         }
     }
 

@@ -286,6 +286,9 @@ pub struct PassManagerConfig {
     /// Enable strict attribute checking (reject dynamic/unknown attributes)
     /// When false, allows Python-style dynamic attributes (default: true)
     pub strict_attribute_checking: bool,
+    /// Per-pass severity overrides (pass_id -> minimum severity)
+    /// When set, diagnostics from that pass are filtered to the specified severity
+    pub pass_severity_overrides: HashMap<String, Severity>,
 }
 
 impl Default for PassManagerConfig {
@@ -304,6 +307,41 @@ impl Default for PassManagerConfig {
             pass_timeout_seconds: None,
             max_reexport_depth: 10,
             strict_attribute_checking: true,
+            pass_severity_overrides: HashMap::new(),
+        }
+    }
+}
+
+impl PassManagerConfig {
+    /// Set severity override for a specific pass
+    pub fn set_pass_severity(&mut self, pass_id: impl Into<String>, severity: Severity) {
+        self.pass_severity_overrides
+            .insert(pass_id.into(), severity);
+    }
+
+    /// Get severity override for a specific pass
+    pub fn get_pass_severity(&self, pass_id: &str) -> Option<Severity> {
+        self.pass_severity_overrides.get(pass_id).copied()
+    }
+
+    /// Check if a pass has a severity override
+    pub fn has_pass_severity_override(&self, pass_id: &str) -> bool {
+        self.pass_severity_overrides.contains_key(pass_id)
+    }
+
+    /// Filter diagnostics for a specific pass based on configured severity overrides
+    pub fn filter_diagnostics_for_pass(
+        &self,
+        diagnostics: Vec<Diagnostic>,
+        pass_id: &str,
+    ) -> Vec<Diagnostic> {
+        if let Some(min_severity) = self.get_pass_severity(pass_id) {
+            diagnostics
+                .into_iter()
+                .filter(|d| d.severity >= min_severity)
+                .collect()
+        } else {
+            diagnostics
         }
     }
 }
@@ -770,11 +808,13 @@ impl PassManager {
                     );
                 }
 
-                self.diagnostics.extend(cached_result.diagnostics.clone());
+                let filtered_diagnostics = self
+                    .config
+                    .filter_diagnostics_for_pass(cached_result.diagnostics.clone(), pass_id);
+                self.diagnostics.extend(filtered_diagnostics.clone());
 
                 if !cached_result.success {
-                    let error_count = cached_result
-                        .diagnostics
+                    let error_count = filtered_diagnostics
                         .iter()
                         .filter(|d| d.severity == Severity::Error || d.severity == Severity::Fatal)
                         .count();
@@ -836,11 +876,14 @@ impl PassManager {
                     }
                 }
                 Err(diagnostics) => {
-                    let error_count = diagnostics
+                    let filtered_diagnostics = self
+                        .config
+                        .filter_diagnostics_for_pass(diagnostics, pass_id);
+                    let error_count = filtered_diagnostics
                         .iter()
                         .filter(|d| d.severity == Severity::Error || d.severity == Severity::Fatal)
                         .count();
-                    let warning_count = diagnostics
+                    let warning_count = filtered_diagnostics
                         .iter()
                         .filter(|d| d.severity == Severity::Warning)
                         .count();
@@ -853,7 +896,7 @@ impl PassManager {
                         stats.record_run(duration, error_count, warning_count);
                     }
 
-                    self.diagnostics.extend(diagnostics);
+                    self.diagnostics.extend(filtered_diagnostics);
 
                     if !self.config.continue_on_error && error_count > 0 {
                         if self.config.verbose {
@@ -1955,6 +1998,7 @@ mod tests {
             enabled_passes: HashSet::new(),
             verbose: true,
             strict_attribute_checking: false,
+            pass_severity_overrides: HashMap::new(),
         };
 
         let manager = PassManager::with_config(PathBuf::from("/test"), config);

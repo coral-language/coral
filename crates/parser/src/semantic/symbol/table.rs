@@ -484,6 +484,20 @@ impl SymbolTable {
 
         output
     }
+
+    /// Build a location index for IDE navigation (symbol_name -> definition_span)
+    pub fn build_location_index(&self) -> std::collections::HashMap<String, TextRange> {
+        let mut index = std::collections::HashMap::new();
+
+        for scope in &self.scopes {
+            let symbols = scope.symbols.read().unwrap();
+            for (name, symbol) in symbols.iter() {
+                index.insert(name.clone(), symbol.definition_span);
+            }
+        }
+
+        index
+    }
 }
 
 impl Default for SymbolTable {

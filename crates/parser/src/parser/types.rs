@@ -178,7 +178,17 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        let expr = self.parse_expression()?;
+        let expr = match self.parse_expression() {
+            Ok(e) => e,
+            Err(error) => {
+                self.record_error(*error);
+                self.synchronize();
+                Expr::Error(ErrorExpr {
+                    span: self.peek().span,
+                    _phantom: std::marker::PhantomData,
+                })
+            }
+        };
 
         while matches!(
             self.peek().kind,
@@ -188,17 +198,18 @@ impl<'a> Parser<'a> {
         }
 
         if let Some(error) = self.check_unclosed_delimiters() {
-            return Err(error);
+            self.record_error(*error);
         }
 
         if !self.is_at_end() && self.peek().kind != TokenKind::Eof {
-            return Err(error(
+            let err = error(
                 ErrorKind::UnexpectedToken {
                     expected: None,
                     found: format!("{:?}", self.peek().kind),
                 },
                 self.peek().span,
-            ));
+            );
+            self.record_error(*err);
         }
 
         Ok(expr)
@@ -213,7 +224,20 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        let stmt = self.parse_stmt()?;
+        let stmt = match self.parse_stmt() {
+            Ok(s) => s,
+            Err(error) => {
+                self.record_error(*error);
+                self.synchronize();
+                Stmt::Expr(ExprStmt {
+                    value: Expr::Error(ErrorExpr {
+                        span: self.peek().span,
+                        _phantom: std::marker::PhantomData,
+                    }),
+                    span: self.peek().span,
+                })
+            }
+        };
 
         while matches!(
             self.peek().kind,
@@ -223,17 +247,18 @@ impl<'a> Parser<'a> {
         }
 
         if let Some(error) = self.check_unclosed_delimiters() {
-            return Err(error);
+            self.record_error(*error);
         }
 
         if !self.is_at_end() && self.peek().kind != TokenKind::Eof {
-            return Err(error(
+            let err = error(
                 ErrorKind::UnexpectedToken {
                     expected: None,
                     found: format!("{:?}", self.peek().kind),
                 },
                 self.peek().span,
-            ));
+            );
+            self.record_error(*err);
         }
 
         Ok(stmt)
