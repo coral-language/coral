@@ -67,6 +67,11 @@ pub fn parse_annotation(annotation: &Expr) -> Type {
                 "complex" => Type::Complex,
                 "None" => Type::None,
                 "Any" => Type::Any,
+                // Bare container types without parameters
+                "list" | "List" => Type::list(Type::Unknown),
+                "tuple" | "Tuple" => Type::tuple(vec![]), // Empty tuple type represents any tuple
+                "dict" | "Dict" => Type::dict(Type::Unknown, Type::Unknown),
+                "set" | "Set" => Type::set(Type::Unknown),
                 // For custom class names, assume they refer to class instances
                 // The name resolution pass should have validated that the class exists
                 _ => Type::Instance(name.id.to_string()),

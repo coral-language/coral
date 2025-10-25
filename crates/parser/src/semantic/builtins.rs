@@ -70,6 +70,7 @@ static BUILTIN_EXCEPTIONS: Set<&'static str> = phf_set! {
 /// # Examples
 ///
 /// ```
+/// use coral_parser::semantic::builtins::is_builtin_type;
 /// assert!(is_builtin_type("int"));
 /// assert!(is_builtin_type("list"));
 /// assert!(!is_builtin_type("MyClass"));
@@ -93,6 +94,7 @@ pub fn is_builtin_function(name: &str) -> bool {
 /// # Examples
 ///
 /// ```
+/// use coral_parser::semantic::builtins::is_builtin_constant;
 /// assert!(is_builtin_constant("True"));
 /// assert!(is_builtin_constant("None"));
 /// assert!(!is_builtin_constant("true")); // lowercase not a builtin
@@ -121,6 +123,7 @@ pub fn is_builtin_exception(name: &str) -> bool {
 /// # Examples
 ///
 /// ```
+/// use coral_parser::semantic::builtins::is_builtin;
 /// assert!(is_builtin("int"));      // type
 /// assert!(is_builtin("print"));    // function
 /// assert!(is_builtin("True"));     // constant
@@ -142,7 +145,9 @@ pub fn is_builtin(name: &str) -> bool {
 /// # Example
 ///
 /// ```rust
+/// use coral_parser::semantic::builtins::BuiltinRegistry;
 /// let registry = BuiltinRegistry::new();
+/// let names = ["int", "print", "True"];
 /// for name in names {
 ///     if registry.contains(name) {
 ///         // handle builtin

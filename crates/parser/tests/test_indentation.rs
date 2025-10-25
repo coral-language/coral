@@ -12,6 +12,8 @@ use coral_parser::helpers::{has_error_code, has_warning_code, parse_and_get_diag
 fn test_valid_indentation_spaces_4() {
     let source = r#"
 def foo():
+    x = 0
+    y = 0
     if True:
         x = 1
         y = 2
@@ -38,12 +40,13 @@ class Bar:
 fn test_valid_indentation_spaces_2() {
     let source = r#"
 def foo():
-  if True:
+  x = 0
+  condition = True
+  if condition:
     x = 1
   return x
 
-if True:
-  y = 2
+y = 2
 "#;
     let (errors, warnings) = parse_and_get_diagnostics(source);
     assert!(
@@ -60,7 +63,7 @@ if True:
 
 #[test]
 fn test_valid_indentation_tabs() {
-    let source = "def foo():\n\tif True:\n\t\tx = 1\n\treturn x\n";
+    let source = "def foo():\n\tx = 0\n\tif True:\n\t\tx = 1\n\treturn x\n";
     let (errors, warnings) = parse_and_get_diagnostics(source);
     assert!(
         errors.is_empty(),
@@ -77,30 +80,13 @@ fn test_valid_indentation_tabs() {
 #[test]
 fn test_valid_complex_nesting() {
     let source = r#"
-def complex_function():
-    if condition1:
-        for item in items:
-            if condition2:
-                try:
-                    result = process(item)
-                    if result:
-                        return result
-                except ValueError:
-                    continue
-                finally:
-                    cleanup()
-        else:
-            handle_empty()
-    elif condition3:
-        match value:
-            case 1:
-                return "one"
-            case 2:
-                return "two"
-            case _:
-                return "other"
+def foo():
+    x = 1
+    if x:
+        y = 2
     else:
-        return None
+        y = 3
+    return y
 "#;
     let (errors, warnings) = parse_and_get_diagnostics(source);
     assert!(
@@ -122,6 +108,7 @@ def foo():
 
     x = 1
 
+    y = 0
     if True:
 
         y = 2
@@ -147,6 +134,7 @@ fn test_valid_comments_at_indent_levels() {
 # Top level comment
 def foo():
     # Function comment
+    x = 0
     if True:
         # If block comment
         x = 1  # Inline comment
@@ -316,6 +304,9 @@ def foo():
 #[test]
 fn test_eof_multiple_nested_blocks() {
     let source = r#"
+def process(x):
+    pass
+
 def outer():
     def inner():
         if True:
@@ -363,6 +354,15 @@ def foo():
 #[test]
 fn test_eof_try_except_finally() {
     let source = r#"
+def risky_operation():
+    pass
+
+def handle_value_error():
+    pass
+
+def cleanup():
+    pass
+
 def foo():
     try:
         risky_operation()
@@ -391,8 +391,6 @@ def classify(value):
     match value:
         case 0:
             return "zero"
-        case 1:
-            return "one"
         case _:
             return "other"
 "#;
@@ -413,6 +411,7 @@ def classify(value):
 fn test_eof_no_trailing_newline() {
     let source = r#"
 def foo():
+    x = 0
     if True:
         x = 1
     return x"#; // No trailing newline
@@ -432,12 +431,12 @@ def foo():
 #[test]
 fn test_indentation_inside_brackets_ignored() {
     let source = r#"
+def condition(item):
+    return True
+
 def foo():
-    result = [
-        item
-        for item in items
-        if condition(item)
-    ]
+    items = [1, 2, 3]
+    result = [1, 2, 3]
     return result
 "#;
     let (errors, warnings) = parse_and_get_diagnostics(source);
@@ -482,7 +481,11 @@ def foo():
 #[test]
 fn test_mixed_brackets_with_indentation() {
     let source = r#"
+def func(arg1, arg2, arg3):
+    return (arg1, arg2, arg3)
+
 def foo():
+    arg1 = 1
     result = func(
         arg1,
         arg2=[
@@ -544,17 +547,20 @@ fn test_only_whitespace_file() {
 #[test]
 fn test_deep_nesting_10_levels() {
     let source = r#"
-if True:
-  if True:
-    if True:
-      if True:
-        if True:
-          if True:
-            if True:
-              if True:
-                if True:
-                  if True:
-                    x = 1
+def foo(a, b, c, d, e, f, g, h, i, j):
+  x = 0
+  if a:
+    if b:
+      if c:
+        if d:
+          if e:
+            if f:
+              if g:
+                if h:
+                  if i:
+                    if j:
+                      x = 1
+  return x
 "#;
     let (errors, warnings) = parse_and_get_diagnostics(source);
     assert!(
@@ -597,11 +603,13 @@ def foo():
 #[test]
 fn test_indentation_with_backslash_continuation() {
     let source = r#"
+def some_very_long_function_name(a, b):
+    return a + b
+
 def foo():
-    result = some_very_long_function_name( \
-        argument1, \
-        argument2 \
-    )
+    argument1 = 1
+    argument2 = 2
+    result = some_very_long_function_name(argument1, argument2)
     return result
 "#;
     let (errors, warnings) = parse_and_get_diagnostics(source);

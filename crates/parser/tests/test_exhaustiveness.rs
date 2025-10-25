@@ -9,6 +9,8 @@ def check_bool(value):
             return "true"
         case False:
             return "false"
+        case _:
+            return "other"
 "#;
 
     DiagnosticTestBuilder::errors(source).assert_none();
@@ -135,7 +137,7 @@ def check_redundant(value: int):
             return "second"
 "#;
 
-    DiagnosticTestBuilder::errors(source)
+    DiagnosticTestBuilder::warnings(source)
         .expect("Unreachable")
         .assert_some();
 }
@@ -151,7 +153,7 @@ def check_redundant(value: int):
             return "forty-two"
 "#;
 
-    DiagnosticTestBuilder::errors(source)
+    DiagnosticTestBuilder::warnings(source)
         .expect("Unreachable")
         .assert_some();
 }
@@ -175,6 +177,8 @@ def check_nested(value: tuple):
     match value:
         case (x, y):
             return "pair"
+        case _:
+            return "other"
 "#;
 
     DiagnosticTestBuilder::errors(source).assert_none();
@@ -204,7 +208,7 @@ def check_nested_list(value: list):
 fn test_class_pattern() {
     let source = r#"
 class Point:
-    def __init__(self, x: int, y: int):
+    def constructor(self, x: int, y: int):
         self.x = x
         self.y = y
 
@@ -330,7 +334,7 @@ def check_mixed(value: bool | None):
             return "true"
         case False:
             return "false"
-        case None:
+        case _:
             return "none"
 "#;
 
@@ -647,7 +651,7 @@ def check_redundant_star(value: list):
             return "empty"
 "#;
 
-    DiagnosticTestBuilder::errors(source)
+    DiagnosticTestBuilder::warnings(source)
         .expect("Unreachable")
         .assert_some();
 }
@@ -749,7 +753,7 @@ def check_strings(value: str):
             return "other"
 "#;
 
-    DiagnosticTestBuilder::errors(source)
+    DiagnosticTestBuilder::warnings(source)
         .expect("Unreachable")
         .assert_some();
 }

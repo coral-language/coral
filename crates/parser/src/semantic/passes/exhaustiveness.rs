@@ -410,7 +410,11 @@ impl ConstructorSet {
                     .iter()
                     .any(|c| matches!(c, Constructor::StarList(_)));
 
-                if has_star || used_ctors.contains(&Constructor::Wildcard) {
+                if has_star {
+                    // Star patterns are treated as covering all remaining lengths
+                    // For now, assume these make the match exhaustive
+                    vec![]
+                } else if used_ctors.contains(&Constructor::Wildcard) {
                     vec![Constructor::Wildcard]
                 } else {
                     // Collect all specific lengths

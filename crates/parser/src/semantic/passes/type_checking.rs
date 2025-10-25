@@ -70,6 +70,11 @@ impl<'a> TypeCheckContext<'a> {
         import_name: &str,
         span: TextRange,
     ) -> Option<Type> {
+        // Skip validation if module name is empty (relative imports)
+        if module_name.is_empty() {
+            return None;
+        }
+
         // Look up the export in module exports (from inference context)
         let export_type = self
             .inference_ctx
@@ -78,8 +83,13 @@ impl<'a> TypeCheckContext<'a> {
             .and_then(|exports| exports.get(import_name))
             .cloned();
 
-        if export_type.is_none() {
-            // Import name doesn't exist in the module
+        // Only error if:
+        // 1. The module is in the registry (we're analyzing it)
+        // 2. AND the imported name doesn't exist
+        // For external modules not in the registry, we can't validate at compile time,
+        // so we skip the error (e.g., importing from "pathlib", "os", "collections")
+        if self.inference_ctx.module_exports.contains_key(module_name) && export_type.is_none() {
+            // Import name doesn't exist in a module we're analyzing
             self.add_error(*error(
                 ErrorKind::UndefinedName {
                     name: format!("{}::{}", module_name, import_name),

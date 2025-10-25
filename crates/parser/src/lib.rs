@@ -310,6 +310,19 @@ fn parse_with_config(
         }
     };
 
+    // Collect parser/lexer errors before running semantic passes
+    let mut parser_errors: Vec<Diagnostic> = parser
+        .errors()
+        .iter()
+        .map(|e| e.to_diagnostic(source))
+        .collect();
+
+    let mut parser_warnings: Vec<Diagnostic> = parser
+        .warnings()
+        .iter()
+        .map(|e| e.to_diagnostic(source))
+        .collect();
+
     let mut manager = PassManager::with_config(
         config.project_root.clone(),
         PassManagerConfig {
@@ -328,10 +341,16 @@ fn parse_with_config(
         manager.enable_pass("protocol_checking");
     }
 
-    let diagnostics = match manager.run_all_passes(module, source, config.file_path.clone()) {
+    let mut diagnostics = match manager.run_all_passes(module, source, config.file_path.clone()) {
         Ok(_) => Vec::new(),
         Err(diagnostics) => diagnostics,
     };
+
+    // Add parser/lexer errors first, then semantic errors
+    // This ensures parser errors appear before semantic errors in the list
+    parser_errors.append(&mut parser_warnings);
+    parser_errors.append(&mut diagnostics);
+    let diagnostics = parser_errors;
 
     let symbol_table = manager.take_symbol_table();
     let exports = manager.take_export_registry();
