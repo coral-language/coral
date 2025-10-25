@@ -5,6 +5,7 @@ members = [
   "crates/codegen",
   "crates/cli",
   "crates/interpreter",
+  "crates/stdlib",
   "crates/lsp",
 ]
 

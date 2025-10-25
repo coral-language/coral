@@ -1,0 +1,34 @@
+[package]
+name = "coral_stdlib"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Standard library for the Coral programming language"
+keywords.workspace = true
+categories.workspace = true
+publish = true
+
+[dependencies]
+thiserror.workspace = true
+rustc-hash.workspace = true
+once_cell.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+proptest.workspace = true
+
+[[bench]]
+name = "builtins_bench"
+harness = false
+
+[[bench]]
+name = "types_bench"
+harness = false
+
+[[bench]]
+name = "stdlib_bench"
+harness = false

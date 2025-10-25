@@ -89,3 +89,7 @@ ai-cache/
 ai-cache/*
 ai-temp/
 ai-temp/*
+
+# Coral files
+.coral/
+.coral/*
