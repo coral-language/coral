@@ -10,12 +10,15 @@ use text_size::{TextRange, TextSize};
 ///
 /// This lexer implements implicit line joining rules:
 /// - When inside (), [], or {}, newlines are ignored and INDENT/DEDENT are not generated
-/// - This allows multiline expressions like function calls, list literals, etc.
-/// - The bracket_depth field tracks nesting depth to implement this behavior
+/// - When inside triple-quoted strings (""" or '''), newlines are also ignored
+/// - This allows multiline expressions like function calls, list literals, and multiline strings
+/// - The bracket_depth and triple_quote_depth fields track nesting to implement this behavior
 pub struct Lexer {
     input: String,
     indentation: IndentationTracker,
     bracket_depth: usize,
+    /// Track if we're inside a triple-quoted string: Some(quote_char) if inside, None otherwise
+    triple_quote_depth: Option<char>,
 }
 
 impl Lexer {
@@ -25,6 +28,7 @@ impl Lexer {
             input: input.to_string(),
             indentation: IndentationTracker::new(),
             bracket_depth: 0,
+            triple_quote_depth: None,
         }
     }
 
@@ -33,13 +37,124 @@ impl Lexer {
         &self.input
     }
 
+    /// Check if we're currently inside a triple-quoted string
+    fn is_in_triple_quotes(&self) -> bool {
+        self.triple_quote_depth.is_some()
+    }
+
+    /// Count triple-quote occurrences in a string (""" or ''')
+    fn count_triple_quotes(text: &str, quote_char: char) -> usize {
+        let triple = match quote_char {
+            '"' => r#"""""#,
+            '\'' => "'''",
+            _ => return 0,
+        };
+        text.matches(triple).count()
+    }
+
+    /// Check if a token text contains triple quotes and toggle state if needed
+    fn process_triple_quotes(&mut self, token_text: &str) {
+        // Check for triple-quoted strings (detect the quote character)
+        let has_triple_double = token_text.contains(r#"""""#);
+        let has_triple_single = token_text.contains("'''");
+
+        if has_triple_double {
+            let count = Self::count_triple_quotes(token_text, '"');
+            if count % 2 == 1 {
+                // Odd number of triple quotes = toggle state
+                if let Some(char) = self.triple_quote_depth {
+                    if char == '"' {
+                        self.triple_quote_depth = None;
+                    } else {
+                        self.triple_quote_depth = Some('"');
+                    }
+                } else {
+                    self.triple_quote_depth = Some('"');
+                }
+            }
+        }
+
+        if has_triple_single {
+            let count = Self::count_triple_quotes(token_text, '\'');
+            if count % 2 == 1 {
+                // Odd number of triple quotes = toggle state
+                if let Some(char) = self.triple_quote_depth {
+                    if char == '\'' {
+                        self.triple_quote_depth = None;
+                    } else {
+                        self.triple_quote_depth = Some('\'');
+                    }
+                } else {
+                    self.triple_quote_depth = Some('\'');
+                }
+            }
+        }
+    }
+
+    /// Preprocess lines to merge multiline strings into single logical lines
+    /// This allows the line-by-line tokenizer to handle multiline strings correctly
+    fn preprocess_multiline_strings(lines: &[String]) -> Vec<String> {
+        let mut result = Vec::new();
+        let mut i = 0;
+
+        while i < lines.len() {
+            let line = &lines[i];
+
+            // Check if this line contains the start of a triple-quoted string
+            let has_triple_double = line.contains(r#"""""#);
+            let has_triple_single = line.contains("'''");
+
+            if has_triple_double || has_triple_single {
+                // Count triple quotes in this line
+                let double_count = Self::count_triple_quotes(line, '"');
+                let single_count = Self::count_triple_quotes(line, '\'');
+
+                // If odd number, this line starts a multiline string
+                let mut accumulated = line.clone();
+                i += 1;
+
+                let mut in_double_triple = double_count % 2 == 1;
+                let mut in_single_triple = single_count % 2 == 1;
+
+                // Accumulate lines until we find the closing triple quotes
+                // We use a space separator to maintain tokenization integrity
+                while i < lines.len() && (in_double_triple || in_single_triple) {
+                    accumulated.push(' ');
+                    accumulated.push_str(&lines[i]);
+
+                    let line_double = Self::count_triple_quotes(&lines[i], '"');
+                    let line_single = Self::count_triple_quotes(&lines[i], '\'');
+
+                    if in_double_triple && line_double % 2 == 1 {
+                        in_double_triple = false;
+                    }
+                    if in_single_triple && line_single % 2 == 1 {
+                        in_single_triple = false;
+                    }
+
+                    i += 1;
+                }
+
+                result.push(accumulated);
+            } else {
+                result.push(line.clone());
+                i += 1;
+            }
+        }
+
+        result
+    }
+
     /// Tokenize the entire input with indentation handling.
     /// Returns tokens, lexical errors, and warnings encountered.
     pub fn tokenize(&mut self) -> (Vec<Token>, Vec<Error>, Vec<Warning>) {
         let mut tokens = Vec::new();
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
-        let lines = self.input.lines().collect::<Vec<_>>();
+        // Create owned strings to avoid borrow conflicts with mutable operations
+        let lines_raw: Vec<String> = self.input.lines().map(|s| s.to_string()).collect();
+        // Preprocess to merge multiline strings
+        let lines = Self::preprocess_multiline_strings(&lines_raw);
         let mut line_start_pos = 0;
         let mut line_idx = 0;
 
@@ -62,13 +177,31 @@ impl Lexer {
 
                 if line_idx < lines.len() {
                     line.push(' ');
-                    line.push_str(lines[line_idx]);
+                    line.push_str(&lines[line_idx]);
                     line_len = line.len();
                 }
             }
 
+            // Check if this line starts or is inside a triple-quoted string
+            // If inside, we just emit a placeholder token and process later
+            if self.is_in_triple_quotes() {
+                // We're inside a triple-quoted string; just process the line
+                let token_text = line.clone();
+                self.process_triple_quotes(&token_text);
+
+                // Skip emitting tokens for lines inside multiline strings
+                for idx in continuation_lines {
+                    line_start_pos += lines.get(idx).map(|l| l.len() + 1).unwrap_or(0);
+                }
+                line_idx += 1;
+                continue;
+            }
+
             if line.trim().is_empty() {
-                if line_idx < lines.len() - 1 && self.bracket_depth == 0 {
+                if line_idx < lines.len() - 1
+                    && self.bracket_depth == 0
+                    && !self.is_in_triple_quotes()
+                {
                     let newline_pos = TextSize::from((line_start_pos + line_len) as u32);
                     tokens.push(Token::new(
                         TokenKind::Newline,
@@ -83,7 +216,7 @@ impl Lexer {
             let line_content = line.trim_start();
             let is_comment_only_line = line_content.starts_with('#') || line_content.is_empty();
 
-            if self.bracket_depth == 0 && !is_comment_only_line {
+            if self.bracket_depth == 0 && !is_comment_only_line && !self.is_in_triple_quotes() {
                 let indent_analysis = IndentationTracker::analyze_indent_level(&line);
                 let indent_pos = TextSize::from(line_start_pos as u32);
 
@@ -107,23 +240,58 @@ impl Lexer {
             let (line_tokens, line_errors) = cursor.tokenize_line(&line);
             errors.extend(line_errors);
 
+            // Track bracket depth and collect string tokens for triple-quote processing
+            let mut string_tokens_to_process = Vec::new();
+            let mut bracket_changes = 0i32;
             for token in &line_tokens {
                 match token.kind {
                     TokenKind::LeftParen | TokenKind::LeftBracket | TokenKind::LeftBrace => {
-                        self.bracket_depth += 1;
+                        bracket_changes += 1;
                     }
                     TokenKind::RightParen | TokenKind::RightBracket | TokenKind::RightBrace => {
-                        if self.bracket_depth > 0 {
-                            self.bracket_depth -= 1;
-                        }
+                        bracket_changes -= 1;
+                    }
+                    TokenKind::String
+                    | TokenKind::RawString
+                    | TokenKind::FString
+                    | TokenKind::RawFString
+                    | TokenKind::TString
+                    | TokenKind::RawTString => {
+                        // Store token info for later processing
+                        string_tokens_to_process.push(token.span);
                     }
                     _ => {}
                 }
             }
 
+            // Apply bracket depth changes
+            self.bracket_depth = ((self.bracket_depth as i32) + bracket_changes).max(0) as usize;
+
+            // Process triple quotes from string tokens
+            let mut token_texts_to_process = Vec::new();
+            for span in string_tokens_to_process {
+                let token_start: usize = span.start().into();
+                let token_end: usize = span.end().into();
+                let line_end = line_start_pos + line.len();
+                if token_start >= line_start_pos && token_end <= line_end {
+                    let relative_start = token_start - line_start_pos;
+                    let relative_end = token_end - line_start_pos;
+                    if relative_end <= line.len() {
+                        let token_text = line[relative_start..relative_end].to_string();
+                        token_texts_to_process.push(token_text);
+                    }
+                }
+            }
+
+            // Now process the collected texts
+            for token_text in token_texts_to_process {
+                self.process_triple_quotes(&token_text);
+            }
+
             tokens.extend(line_tokens);
 
-            if line_idx < lines.len() - 1 && self.bracket_depth == 0 {
+            if line_idx < lines.len() - 1 && self.bracket_depth == 0 && !self.is_in_triple_quotes()
+            {
                 let newline_pos = TextSize::from((line_start_pos + line_len) as u32);
                 tokens.push(Token::new(
                     TokenKind::Newline,

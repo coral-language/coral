@@ -12,8 +12,47 @@ double = "Hello, World!"
 double_with_single = "It's a beautiful day"
 
 # ===== Triple-Quoted Strings =====
-# Note: Triple-quoted strings (multi-line) are not yet fully supported
-# They will be added in a future update with custom lexer logic
+# Triple-quoted strings support multiline content with proper newline preservation
+# Both """ and ''' delimiters are supported
+
+# Basic multiline strings
+multiline_double = """
+This is a multiline string
+that spans multiple lines
+with preserved newlines
+"""
+
+multiline_single = '''
+This is a multiline string
+using single quotes
+also fully supported
+'''
+
+# Multiline docstring example
+description = """
+This is a detailed description
+that can span multiple paragraphs.
+
+It preserves formatting and
+makes the code more readable.
+"""
+
+# Multiline raw strings
+raw_multiline = r"""
+Path: C:\Users\name
+Windows paths are preserved literally
+No escape sequences are interpreted
+"""
+
+# Multiline f-strings
+user_name = "Alice"
+user_id = 12345
+formatted_multiline = f"""
+User Information:
+  Name: {user_name}
+  ID: {user_id}
+  Status: Active
+"""
 
 # ===== Escape Sequences =====
 

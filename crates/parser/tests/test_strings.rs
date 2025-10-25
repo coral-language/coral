@@ -99,6 +99,103 @@ fn test_all_string_types() {
             r#"while name != "":
     pass"#,
         ),
+        // Multiline string tests
+        TestCase::new(
+            "triple_double_quotes_simple",
+            r#"x = """
+Hello
+World
+"""#,
+        ),
+        TestCase::new(
+            "triple_single_quotes_simple",
+            r#"x = '''
+Hello
+World
+'''#,
+        ),
+        TestCase::new(
+            "triple_double_quotes_with_text_before",
+            r#"text = "prefix" + """
+Hello
+World
+"""#,
+        ),
+        TestCase::new(
+            "multiline_raw_string",
+            r#"x = r"""
+C:\Users\name
+D:\Path\to\file
+"""#,
+        ),
+        TestCase::new(
+            "multiline_fstring",
+            r#"x = f"""
+Name: {name}
+Value: {value}
+"""#,
+        ),
+        TestCase::new(
+            "multiline_tstring",
+            r#"x = t"""
+Template line 1: {var1}
+Template line 2: {var2}
+"""#,
+        ),
+        TestCase::new(
+            "multiline_string_with_empty_lines",
+            r#"doc = """
+First paragraph.
+
+Second paragraph.
+
+Third paragraph.
+"""#,
+        ),
+        TestCase::new(
+            "multiline_string_in_function_call",
+            r#"print("""
+This is a
+multiline message
+""")"#,
+        ),
+        TestCase::new(
+            "multiline_strings_in_list",
+            r#"items = [
+    """
+First
+item
+""",
+    """
+Second
+item
+"""
+]"#,
+        ),
+        TestCase::new(
+            "nested_quotes_in_multiline",
+            r#"text = """
+He said "Hello"
+and she replied 'Hi'
+"""#,
+        ),
+        TestCase::new(
+            "multiline_with_escapes",
+            r#"x = """
+Line 1
+\tIndented
+\nNew line
+"""#,
+        ),
+        TestCase::new("empty_multiline_string", "x = \"\"\"\"\"\""),
+        TestCase::new(
+            "multiline_string_assignment_chain",
+            r#"a = b = """
+Shared
+multiline
+string
+"""#,
+        ),
     ];
 
     for case in cases {
