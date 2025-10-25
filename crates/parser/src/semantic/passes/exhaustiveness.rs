@@ -411,9 +411,59 @@ impl ConstructorSet {
                     .any(|c| matches!(c, Constructor::StarList(_)));
 
                 if has_star {
-                    // Star patterns are treated as covering all remaining lengths
-                    // For now, assume these make the match exhaustive
-                    vec![]
+                    // Star patterns cover remaining lengths based on fixed prefix/suffix
+                    // Analyze all list patterns to find minimum length requirements
+                    let mut min_required_length = 0;
+                    let mut star_pattern_exists = false;
+
+                    for ctor in used_ctors {
+                        if let Constructor::StarList(fixed_count) = ctor {
+                            star_pattern_exists = true;
+                            min_required_length = min_required_length.max(*fixed_count);
+                        } else if let Constructor::List(len) = ctor {
+                            min_required_length = min_required_length.max(*len);
+                        }
+                    }
+
+                    // If star pattern exists with fixed prefix/suffix, it covers all lengths >= min
+                    if star_pattern_exists {
+                        // Also check if all specific lengths below the minimum are covered
+                        let specific_lengths: HashSet<usize> = used_ctors
+                            .iter()
+                            .filter_map(|c| {
+                                if let Constructor::List(len) = c {
+                                    Some(*len)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+
+                        // Check if we have gaps (e.g., patterns for [1] and [3] but not [2])
+                        let mut has_gaps = false;
+                        if let Some(&max_specific) = specific_lengths.iter().max() {
+                            for i in 0..=max_specific {
+                                if !specific_lengths.contains(&i) && i < min_required_length {
+                                    has_gaps = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if has_gaps {
+                            // Return missing lengths for better error reporting
+                            let missing: Vec<Constructor> = (0..min_required_length)
+                                .filter(|i| !specific_lengths.contains(i))
+                                .map(Constructor::List)
+                                .collect();
+                            missing
+                        } else {
+                            // All cases covered by star pattern and specific patterns
+                            vec![]
+                        }
+                    } else {
+                        vec![]
+                    }
                 } else if used_ctors.contains(&Constructor::Wildcard) {
                     vec![Constructor::Wildcard]
                 } else {

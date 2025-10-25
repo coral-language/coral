@@ -182,6 +182,7 @@ impl ModulePathResolver for RelativeResolver {
 /// For relative imports, use RelativeResolver directly with level information
 pub struct CompositeResolver {
     standard_resolver: StandardResolver,
+    #[allow(dead_code)]
     relative_resolver: RelativeResolver,
 }
 
@@ -207,32 +208,73 @@ impl CompositeResolver {
         from_file: &Path,
         search_paths: &[PathBuf],
     ) -> ResolutionResult<PathBuf> {
-        // Calculate the base directory based on level
-        let mut base_dir = from_file.parent().unwrap_or(from_file);
+        if level == 0 {
+            return Err(ResolutionError::InvalidPath {
+                path: "Relative import level must be >= 1".to_string(),
+            });
+        }
 
-        // Go up 'level - 1' directories (level 1 = current, level 2 = parent, etc.)
-        for _ in 0..(level.saturating_sub(1)) {
+        // Calculate the base directory based on level
+        let mut base_dir = from_file
+            .parent()
+            .ok_or(ResolutionError::RelativeImportInRoot)?;
+
+        // Go up 'level - 1' directories
+        // level 1 = current dir, level 2 = parent, level 3 = grandparent, etc.
+        for _ in 1..level {
             base_dir = base_dir.parent().ok_or(ResolutionError::InvalidPath {
                 path: format!(
-                    "relative import level {} from {}",
+                    "Relative import level {} would go above package root: {}",
                     level,
                     from_file.display()
                 ),
             })?;
         }
 
-        // Use the relative resolver with the calculated base directory
-        // We need to temporarily modify the resolver to use our base_dir
-        // For now, we'll implement this by creating a temporary search path
-
-        let search_paths_with_base = {
-            let mut paths = vec![base_dir.to_path_buf()];
-            paths.extend_from_slice(search_paths);
-            paths
+        // Convert module name to path (foo.bar.baz -> foo/bar/baz)
+        let relative_path = if module_name.is_empty() {
+            PathBuf::new()
+        } else {
+            let parts: Vec<&str> = module_name.split('.').collect();
+            let mut path = PathBuf::new();
+            for part in parts {
+                path = path.join(part);
+            }
+            path
         };
 
-        self.relative_resolver
-            .resolve_module(module_name, Some(from_file), &search_paths_with_base)
+        // Try module as .coral file
+        let module_file = base_dir.join(&relative_path).with_extension("coral");
+        if self.module_exists(&module_file) {
+            return Ok(module_file);
+        }
+
+        // Try module as package directory with __init__.coral
+        let init_file = base_dir.join(&relative_path).join("__init__.coral");
+        if self.module_exists(&init_file) {
+            return Ok(init_file);
+        }
+
+        // Try search paths as fallback
+        for search_path in search_paths {
+            let search_file = search_path.join(&relative_path).with_extension("coral");
+            if self.module_exists(&search_file) {
+                return Ok(search_file);
+            }
+
+            let search_init = search_path.join(&relative_path).join("__init__.coral");
+            if self.module_exists(&search_init) {
+                return Ok(search_init);
+            }
+        }
+
+        Err(ResolutionError::ModuleNotFound {
+            module_name: if module_name.is_empty() {
+                format!("(level {})", level)
+            } else {
+                format!("{} (level {})", module_name, level)
+            },
+        })
     }
 }
 

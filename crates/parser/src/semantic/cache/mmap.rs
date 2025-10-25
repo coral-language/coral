@@ -9,6 +9,7 @@ use memmap2::{Mmap, MmapOptions};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::io::Write;
 
 /// Memory-mapped persistent cache for very large projects
 ///
@@ -22,6 +23,8 @@ pub struct MmapPersistentCache {
     mmap: Option<Mmap>,
     // In-memory index for quick lookups (maps cache keys to file offsets)
     index: HashMap<ModuleCacheKey, u64>,
+    // Fallback in-memory cache for entries added after startup
+    fallback_cache: HashMap<ModuleCacheKey, ModuleCacheResult>,
     // Whether the cache has been modified since last sync
     dirty: bool,
 }
@@ -46,6 +49,7 @@ impl MmapPersistentCache {
             cache_file,
             mmap,
             index,
+            fallback_cache: HashMap::new(),
             dirty: false,
         })
     }
@@ -109,6 +113,11 @@ impl MmapPersistentCache {
 
     /// Get a cached result by key
     pub fn get(&self, key: &ModuleCacheKey) -> Option<ModuleCacheResult> {
+        // Check fallback cache first for recent entries
+        if let Some(result) = self.fallback_cache.get(key) {
+            return Some(result.clone());
+        }
+
         if let Some(&offset) = self.index.get(key)
             && let Some(mmap) = &self.mmap
         {
@@ -135,8 +144,6 @@ impl MmapPersistentCache {
                 )
             {
                 return Some(result);
-            } else {
-                return None;
             }
         }
         None
@@ -146,20 +153,15 @@ impl MmapPersistentCache {
     pub fn insert(
         &mut self,
         key: ModuleCacheKey,
-        _result: ModuleCacheResult,
+        result: ModuleCacheResult,
     ) -> Result<(), CacheError> {
-        // Remove old entry if it exists
-        self.index.remove(&key);
-
-        // For simplicity, fall back to regular persistent cache for insertions
-        // In a full implementation, we'd need to handle appending to the memory-mapped file
-        // or rebuilding the entire file, which is complex.
+        // Store in fallback cache for new/updated entries
+        // The persist method will rebuild the mmap file with all entries
+        self.fallback_cache.insert(key, result);
 
         // Mark as dirty to indicate we need to rebuild the memory map
         self.dirty = true;
 
-        // For now, just store in a fallback in-memory cache
-        // In production, this would rebuild the memory-mapped file
         Ok(())
     }
 
@@ -178,6 +180,7 @@ impl MmapPersistentCache {
         self.index.clear();
         self.mmap = None;
         self.dirty = true;
+        self.fallback_cache.clear();
 
         // Remove the cache file
         let _ = fs::remove_file(&self.cache_file);
@@ -189,13 +192,82 @@ impl MmapPersistentCache {
             return Ok(());
         }
 
-        // For a full implementation, we would:
-        // 1. Serialize all entries to a temporary file
-        // 2. Memory map the new file
-        // 3. Atomically replace the old file
-        // 4. Rebuild the index
+        // Collect all entries: from both index (mmap) and fallback cache
+        let mut all_entries = Vec::new();
 
-        // For now, this is a placeholder
+        // Add entries from existing mmap
+        if let Some(mmap) = &self.mmap {
+            for &offset in self.index.values() {
+                let offset = offset as usize;
+                if offset + 8 <= mmap.len() {
+                    let entry_size =
+                        u64::from_le_bytes(mmap[offset..offset + 8].try_into().unwrap())
+                            as usize;
+                    let data_offset = offset + 8;
+
+                    if data_offset + entry_size <= mmap.len() {
+                        let entry_data = &mmap[data_offset..data_offset + entry_size];
+                        if let Ok(((key, result), _)) = bincode::serde::decode_from_slice::<
+                            (ModuleCacheKey, ModuleCacheResult),
+                            _,
+                        >(entry_data, bincode::config::standard())
+                        {
+                            all_entries.push((key, result));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add entries from fallback cache
+        for (key, result) in &self.fallback_cache {
+            all_entries.push((key.clone(), result.clone()));
+        }
+
+        // Remove duplicates: keep fallback cache versions (more recent)
+        let mut unique_entries: HashMap<ModuleCacheKey, ModuleCacheResult> = HashMap::new();
+        for (key, result) in all_entries {
+            unique_entries.insert(key, result);
+        }
+
+        // Write to a temporary file first
+        let temp_file = self.cache_file.with_extension("tmp");
+        let mut file = fs::File::create(&temp_file)?;
+
+        // Write header: number of entries
+        let num_entries = unique_entries.len() as u64;
+        file.write_all(&num_entries.to_le_bytes())?;
+
+        // Write each entry
+        for (key, result) in unique_entries.iter() {
+            let entry_data = bincode::serde::encode_to_vec((key, result), bincode::config::standard())?;
+            let entry_size = entry_data.len() as u64;
+
+            file.write_all(&entry_size.to_le_bytes())?;
+            file.write_all(&entry_data)?;
+        }
+
+        // Atomically replace the old file
+        std::fs::rename(&temp_file, &self.cache_file)?;
+
+        // Reload the memory-mapped file
+        self.mmap = if self.cache_file.exists() {
+            let f = fs::File::open(&self.cache_file)?;
+            Some(unsafe { MmapOptions::new().map(&f)? })
+        } else {
+            None
+        };
+
+        // Rebuild index
+        if let Some(mmap) = &self.mmap {
+            self.index = Self::build_index_from_mmap(mmap)?;
+        } else {
+            self.index.clear();
+        }
+
+        // Clear fallback cache since everything is now in mmap
+        self.fallback_cache.clear();
+
         self.dirty = false;
         Ok(())
     }

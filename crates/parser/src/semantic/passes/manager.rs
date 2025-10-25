@@ -295,19 +295,19 @@ pub struct PassManagerConfig {
 impl Default for PassManagerConfig {
     fn default() -> Self {
         PassManagerConfig {
-            parallel_execution: false, // Default to sequential for now
+            parallel_execution: true,
             continue_on_error: true,
             max_errors: None,
-            collect_statistics: false,
+            collect_statistics: true,
             disabled_passes: HashSet::new(),
             enabled_passes: HashSet::new(),
             verbose: false,
-            enable_persistent_cache: false, // Disabled by default for compatibility
+            enable_persistent_cache: true,
             cache_config: Some(CacheConfig::default()),
             metrics_config: MetricsConfig::default(),
-            pass_timeout_seconds: None,      // No timeout by default
-            max_reexport_depth: 10,          // Default to 10 levels
-            strict_attribute_checking: true, // Enable strict checking for type safety
+            pass_timeout_seconds: None,
+            max_reexport_depth: 10,
+            strict_attribute_checking: true,
         }
     }
 }
@@ -1634,11 +1634,38 @@ impl PassManager {
             module_graph.add_module(name.clone(), text_size::TextRange::default());
         }
 
-        // Register dependencies in the graph (filter out builtins)
+        // Register dependencies in the graph
         for (module_name, imports) in module_imports {
             for import_name in imports {
-                // Skip builtin imports and relative imports for now
-                if !import_name.starts_with('.') && !Self::is_builtin_module_static(&import_name) {
+                // Handle different import types
+                if import_name.starts_with('.') {
+                    // Relative import: resolve to absolute module path
+                    // For now, treat as module_name.parent based on depth
+                    // This is conservative - proper resolution happens in import_resolution pass
+                    let level = import_name.chars().take_while(|&c| c == '.').count();
+                    let name_part = import_name.trim_start_matches('.');
+
+                    if !name_part.is_empty() {
+                        // For simple relative imports, construct canonical path
+                        // In production, use CompositeResolver for accurate paths
+                        let parts: Vec<&str> = module_name.split('.').collect();
+                        if level <= parts.len() {
+                            let base_parts = &parts[..parts.len().saturating_sub(level - 1)];
+                            let resolved_name = if base_parts.is_empty() {
+                                name_part.to_string()
+                            } else {
+                                format!("{}.{}", base_parts.join("."), name_part)
+                            };
+                            module_graph.add_dependency(&module_name, &resolved_name);
+                        }
+                    }
+                } else if Self::is_builtin_module_static(&import_name) {
+                    // Register builtin module in graph with predefined interface
+                    module_graph.add_module(import_name.clone(), text_size::TextRange::default());
+                    module_graph.add_dependency(&module_name, &import_name);
+                } else {
+                    // Absolute import: add to dependency graph
+                    module_graph.add_module(import_name.clone(), text_size::TextRange::default());
                     module_graph.add_dependency(&module_name, &import_name);
                 }
             }

@@ -8,10 +8,10 @@ use std::path::PathBuf;
 #[test]
 fn test_parallel_execution_config() {
     let mut config = PassManagerConfig::default();
-    assert!(!config.parallel_execution); // Should be disabled by default
+    assert!(config.parallel_execution); // Should be enabled by default for production
 
-    config.parallel_execution = true;
-    assert!(config.parallel_execution);
+    config.parallel_execution = false;
+    assert!(!config.parallel_execution);
 
     let _manager = PassManager::with_config(PathBuf::from("/tmp"), config);
 }

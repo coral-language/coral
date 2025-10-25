@@ -138,7 +138,6 @@ impl<'a> ModuleLoader<'a> {
         self.module_cache.get(module_path).map(|(_, cache)| cache)
     }
 
-    /// Extract exports from a module and register them
     /// Extract exports from module as a HashMap for caching
     fn extract_exports_map(
         &self,
@@ -146,20 +145,52 @@ impl<'a> ModuleLoader<'a> {
         _module_name: &str,
     ) -> HashMap<String, Type> {
         use crate::ast::Stmt;
+        use crate::semantic::passes::type_inference::TypeInferenceContext;
+        use crate::semantic::passes::name_resolution::NameResolver;
+
         let mut exports = HashMap::new();
 
+        let mut name_resolver = NameResolver::new();
+        name_resolver.resolve_module(module);
+        let (symbol_table, _) = name_resolver.into_symbol_table();
+
+        let mut type_context = TypeInferenceContext::new(symbol_table.clone());
+
         for stmt in module.body {
-            if let Stmt::Export(export) = stmt {
-                // Handle regular exports
-                if export.module.is_none() {
-                    for (name, alias) in export.names {
-                        let exported_name = alias.unwrap_or(name);
-                        // Type inference would provide actual type, for now use Unknown
-                        exports.insert(exported_name.to_string(), Type::Unknown);
+            match stmt {
+                Stmt::Export(export) => {
+                    if export.module.is_none() {
+                        for (name, alias) in export.names {
+                            let exported_name = alias.unwrap_or(name);
+
+                            let inferred_type = type_context
+                                .symbol_table()
+                                .get_symbol_type(name)
+                                .unwrap_or(Type::Unknown);
+
+                            exports.insert(exported_name.to_string(), inferred_type);
+                        }
+                    } else {
+                        for (name, alias) in export.names {
+                            let exported_name = alias.unwrap_or(name);
+                            exports.insert(exported_name.to_string(), Type::Unknown);
+                        }
                     }
                 }
+                Stmt::ClassDef(class) => {
+                    type_context
+                        .symbol_table_mut()
+                        .set_symbol_type(class.name, Type::Class(class.name.to_string()));
+                }
+                Stmt::FuncDef(func) => {
+                    type_context
+                        .symbol_table_mut()
+                        .set_symbol_type(func.name, Type::function(Vec::new(), Type::Unknown));
+                }
+                _ => {}
             }
         }
+
         exports
     }
 

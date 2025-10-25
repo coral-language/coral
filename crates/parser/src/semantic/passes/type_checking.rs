@@ -120,6 +120,11 @@ impl<'a> TypeCheckContext<'a> {
             .cloned()
             .unwrap_or(Type::Unknown)
     }
+
+    /// Get a class attribute by name
+    pub fn get_class_attribute(&self, class_name: &str, attr_name: &str) -> Option<Type> {
+        self.class_attributes.get(&(class_name.to_string(), attr_name.to_string())).cloned()
+    }
 }
 
 /// Type checker visitor
@@ -803,24 +808,43 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
     /// In Coral, context managers need @operator enter and @operator exit methods
     fn check_context_manager_protocol(&mut self, ctx_type: &Type, span: TextRange) {
         match ctx_type {
-            // Accept Unknown and Any without validation
-            Type::Unknown | Type::Any => {}
-
-            // For class instances, we would check for @operator enter and exit methods
-            // This requires integration with ClassAnalyzer to look up methods
-            Type::Instance(_class_name) => {
-                // In a full implementation, we would:
-                // 1. Use ClassAnalyzer to get class methods
-                // 2. Check for methods named "enter" and "exit" with @operator decorator
-                // 3. Validate signatures: enter(self) and exit(self, exc_type, exc_val, exc_tb)
-                // For now, accept all class instances as potentially valid
+            Type::Unknown | Type::Any => {
+                // Accept Unknown and Any without validation
             }
 
-            // Modules could potentially be context managers
-            Type::Module(_) => {}
+            Type::Instance(class_name) => {
+                // Check if class has @operator enter and @operator exit methods
+                let has_enter = self
+                    .context
+                    .get_class_attribute(class_name, "enter")
+                    .is_some();
+                let has_exit = self
+                    .context
+                    .get_class_attribute(class_name, "exit")
+                    .is_some();
 
-            // Primitive types are not context managers
-            Type::Int | Type::Float | Type::Bool | Type::Str | Type::Bytes | Type::None => {
+                if !has_enter || !has_exit {
+                    let missing = match (has_enter, has_exit) {
+                        (false, true) => "@operator enter",
+                        (true, false) => "@operator exit",
+                        _ => "@operator enter and @operator exit",
+                    };
+
+                    self.context.add_error(*error(
+                        ErrorKind::TypeMismatch {
+                            expected: format!(
+                                "ContextManager protocol (requires {} method)",
+                                missing
+                            ),
+                            found: format!("class '{}'", class_name),
+                        },
+                        span,
+                    ));
+                }
+            }
+
+            Type::Module(_) => {
+                // Modules are not valid context managers
                 self.context.add_error(*error(
                     ErrorKind::TypeMismatch {
                         expected: "ContextManager (requires @operator enter and @operator exit)"
@@ -831,8 +855,30 @@ impl<'a, 'b> TypeChecker<'a, 'b> {
                 ));
             }
 
-            // Other types: accept for now, would need protocol checking
-            _ => {}
+            Type::Int | Type::Float | Type::Bool | Type::Str | Type::Bytes | Type::None => {
+                // Primitive types are not context managers
+                self.context.add_error(*error(
+                    ErrorKind::TypeMismatch {
+                        expected: "ContextManager (requires @operator enter and @operator exit)"
+                            .to_string(),
+                        found: ctx_type.display_name(),
+                    },
+                    span,
+                ));
+            }
+
+            _ => {
+                // For other types, require explicit protocol checking
+                // This includes Generic, Union, Function, List, Dict, etc.
+                self.context.add_error(*error(
+                    ErrorKind::TypeMismatch {
+                        expected: "ContextManager (requires @operator enter and @operator exit)"
+                            .to_string(),
+                        found: ctx_type.display_name(),
+                    },
+                    span,
+                ));
+            }
         }
     }
 

@@ -143,18 +143,33 @@ impl<'a> AsyncValidator<'a> {
         }
     }
 
-    /// Check if a type is awaitable (Future, Coroutine, etc.)
-    fn is_awaitable_type(&self, ty: &Type) -> bool {
-        ty.is_awaitable()
-    }
-
     /// Validate that the awaited expression has an awaitable type
     fn validate_await_type(&mut self, expr: &Expr, span: TextRange) {
-        // Try to infer/get the type of the expression
-        // For now, we do a best-effort check based on expression structure
         let expr_type = self.infer_expr_type(expr);
 
-        if !self.is_awaitable_type(&expr_type) && !matches!(expr_type, Type::Unknown) {
+        if matches!(expr_type, Type::Unknown) {
+            return;
+        }
+
+        let is_awaitable = match &expr_type {
+            Type::Coroutine(_) => true,
+            Type::Generator(_) => true,
+            Type::Instance(class_name) => {
+                if let Some(type_ctx) = self.type_context {
+                    type_ctx
+                        .get_type_by_span(expr.span().start().into(), expr.span().end().into())
+                        .map(|_| true)
+                        .unwrap_or_else(|| {
+                            ["Future", "Task", "Coroutine"].contains(&class_name.as_str())
+                        })
+                } else {
+                    ["Future", "Task", "Coroutine"].contains(&class_name.as_str())
+                }
+            }
+            _ => false,
+        };
+
+        if !is_awaitable {
             self.errors.push(*error(
                 ErrorKind::InvalidFutureType {
                     expr: crate::ast::expr_to_string(expr),
@@ -238,24 +253,29 @@ impl<'a> AsyncValidator<'a> {
                 if let Some(lifetime) = self.variable_lifetimes.get(var_name)
                     && lifetime.in_scope
                     && self.is_potentially_unsafe_across_await(var_name)
+                    && lifetime.declaration_span.end() < await_span.start()
+                    && let Some(var_type) = self.type_context.and_then(|ctx| {
+                        ctx.get_type_by_span(
+                            lifetime.declaration_span.start().into(),
+                            lifetime.declaration_span.end().into(),
+                        )
+                        .cloned()
+                    })
                 {
-                    // Check if the variable was defined before the await
-                    if lifetime.declaration_span.end() < await_span.start() {
-                        // Variable defined before await and used after - check if it's safe
-                        if let Some(type_ctx) = self.type_context {
-                            // Try to get the variable's type from the type context
-                            // by looking up its definition span
-                            let span = lifetime.declaration_span;
-                            if let Some(var_ty) =
-                                type_ctx.get_type_by_span(span.start().into(), span.end().into())
-                                && self.is_type_unsafe_across_await(var_ty)
-                            {
-                                // This would be a warning about potential issues
-                                // For now, we're conservative and don't emit this
-                                // as it requires more sophisticated lifetime analysis
-                            }
-                        }
-                    }
+                    let type_name = var_type.display_name();
+                    let var_display = format!("'{}' of type '{}'", var_name, type_name);
+
+                    self.errors.push(*error(
+                        ErrorKind::InvalidFutureType {
+                            expr: var_display,
+                            actual_type: format!(
+                                "Variable may become invalid across await. \
+                                 {} resources cannot safely be held across await points.",
+                                type_name
+                            ),
+                        },
+                        await_span,
+                    ));
                 }
             }
         }
@@ -298,14 +318,20 @@ impl<'a> AsyncValidator<'a> {
 
     /// Check if a variable is potentially unsafe to use across await points
     /// (e.g., holds locks, file handles, or local references)
-    fn is_potentially_unsafe_across_await(&self, _var_name: &str) -> bool {
-        // This would check the variable's type to see if it holds resources
-        // For now, we return false to avoid false positives
-        // A full implementation would check:
-        // - File handles
-        // - Lock guards
-        // - Local references with limited lifetimes
-        false
+    fn is_potentially_unsafe_across_await(&self, var_name: &str) -> bool {
+        if let Some(lifetime) = self.variable_lifetimes.get(var_name)
+            && let Some(var_type) = self.type_context.and_then(|ctx| {
+                ctx.get_type_by_span(
+                    lifetime.declaration_span.start().into(),
+                    lifetime.declaration_span.end().into(),
+                )
+                .cloned()
+            })
+        {
+            self.is_type_unsafe_across_await(&var_type)
+        } else {
+            false
+        }
     }
 
     /// Validate a module
