@@ -1,13 +1,14 @@
 //! # Coral Code Generation
 //!
 //! This crate provides code generation for the Coral programming language.
-//! It transforms the AST into bytecode suitable for interpretation or further compilation.
+//! It transforms the HIR (High-Level Intermediate Representation) from semantic analysis
+//! into bytecode suitable for interpretation or further compilation.
 //!
 //! ## Architecture
 //!
 //! The code generation pipeline:
-//! 1. **Input**: AST from semantic analysis (PassManager output)
-//! 2. **Lowering**: AST → intermediate representation with control flow analysis
+//! 1. **Input**: ParseResult from semantic analysis with HIR, type context, and symbol table
+//! 2. **Lowering**: HIR → intermediate representation with control flow analysis
 //! 3. **Compilation**: IR → bytecode instructions with register allocation
 //! 4. **Optimization**: Dead code elimination, constant folding, peephole optimization
 //! 5. **Linking**: Module resolution and import validation
@@ -19,9 +20,13 @@
 //! use coral_codegen::compile;
 //! use coral_parser::parse;
 //!
-//! let source = "let x = 42; print(x)";
-//! let parse_result = parse(source);
-//! let bytecode = compile(&parse_result.ast)?;
+//! let source = "x = 42; print(x)";
+//! match parse(source) {
+//!     Ok(parse_result) => {
+//!         let bytecode = compile(&parse_result)?;
+//!     }
+//!     Err(e) => eprintln!("Parse error: {}", e),
+//! }
 //! ```
 
 pub mod analysis;
@@ -39,13 +44,18 @@ pub use error::{CodegenError, CodegenResult};
 pub use linker::{ImportResolver, ModuleLoader};
 pub use stdlib::{IntrinsicRegistry, NativeModuleRegistry};
 
-/// Compile an AST module to bytecode
+/// Compile a Coral module to bytecode using the ParseResult with full semantic information
 ///
 /// # Arguments
-/// * `module` - The AST module from parser
+/// * `parse_result` - The complete parse result from parser containing AST, HIR, type context, and symbol table
 ///
 /// # Returns
 /// A BytecodeModule ready for execution
-pub fn compile(module: &coral_parser::ast::Module) -> CodegenResult<BytecodeModule> {
-    ModuleCompiler::compile(module)
+///
+/// # Errors
+/// Returns a CodegenError if bytecode generation fails
+pub fn compile(
+    parse_result: &coral_parser::ParseResultWithMetadata,
+) -> CodegenResult<BytecodeModule> {
+    ModuleCompiler::compile(parse_result)
 }

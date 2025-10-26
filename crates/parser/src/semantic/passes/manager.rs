@@ -682,6 +682,27 @@ impl PassManager {
         std::mem::take(&mut self.export_registry)
     }
 
+    /// Take ownership of the ownership recommendations
+    pub fn take_ownership_recommendations(
+        &mut self,
+    ) -> crate::semantic::passes::ownership_check::OwnershipRecommendations {
+        let recommendations = {
+            let guard = self
+                .analysis_context
+                .ownership_recommendations
+                .read()
+                .unwrap();
+            (*guard).clone()
+        };
+
+        *self
+            .analysis_context
+            .ownership_recommendations
+            .write()
+            .unwrap() = Default::default();
+        recommendations
+    }
+
     /// Get the current module name from the root directory path
     fn get_current_module_name(&self) -> String {
         self.root_dir

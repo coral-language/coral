@@ -77,6 +77,9 @@ pub use visitor::Visitor;
 
 pub use semantic::module::ModuleExportRegistry;
 pub use semantic::passes::manager::{PassManager, PassManagerConfig, PassPriority, PassStatistics};
+pub use semantic::passes::ownership_check::{
+    FunctionOwnershipAnalysis, MoveCandidate, MoveReason, OwnershipRecommendations,
+};
 pub use semantic::symbol::table::SymbolTable;
 pub use semantic::types::Type;
 
@@ -240,6 +243,9 @@ pub struct ParseResultWithMetadata<'a> {
 
     /// Symbol location index for IDE navigation (symbol_name -> definition_span)
     pub symbol_locations: std::collections::HashMap<String, text_size::TextRange>,
+
+    /// Ownership recommendations for the parsed module
+    pub ownership_recommendations: OwnershipRecommendations,
 }
 
 impl<'a> ParseResultWithMetadata<'a> {
@@ -369,6 +375,8 @@ fn parse_with_config(
         None
     };
 
+    let ownership_recommendations = manager.take_ownership_recommendations();
+
     let symbol_locations = symbol_table.build_location_index();
 
     Ok(ParseResultWithMetadata {
@@ -380,6 +388,7 @@ fn parse_with_config(
         recovery_actions,
         comment_map,
         symbol_locations,
+        ownership_recommendations,
     })
 }
 

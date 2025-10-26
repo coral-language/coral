@@ -1,6 +1,9 @@
 //! Compilation context holding state during bytecode generation
 
 use crate::bytecode::{ConstantPool, Instruction, RegisterAllocator};
+use coral_parser::OwnershipRecommendations;
+use coral_parser::semantic::symbol::table::SymbolTable as ParserSymbolTable;
+use coral_parser::semantic::types::Type as ParserType;
 use std::collections::HashMap;
 
 pub struct CompilationContext {
@@ -11,6 +14,9 @@ pub struct CompilationContext {
     pub instructions: Vec<Instruction>,
     pub scope_stack: Vec<ScopeFrame>,
     pub next_generator_id: u32,
+    // Semantic data from parser
+    pub parser_symbol_table: Option<ParserSymbolTable>,
+    pub ownership_recommendations: Option<OwnershipRecommendations>,
 }
 
 pub struct ScopeFrame {
@@ -21,6 +27,15 @@ pub struct ScopeFrame {
 
 impl CompilationContext {
     pub fn new(max_registers: u16) -> Self {
+        Self::with_parser_symbols(max_registers, None, None)
+    }
+
+    /// Create a CompilationContext with parsed semantic information
+    pub fn with_parser_symbols(
+        max_registers: u16,
+        parser_symbol_table: Option<ParserSymbolTable>,
+        ownership_recommendations: Option<OwnershipRecommendations>,
+    ) -> Self {
         Self {
             register_allocator: RegisterAllocator::new(max_registers),
             constant_pool: ConstantPool::new(),
@@ -33,7 +48,42 @@ impl CompilationContext {
                 parent_locals: 0,
             }],
             next_generator_id: 1,
+            parser_symbol_table,
+            ownership_recommendations,
         }
+    }
+
+    /// Look up a symbol using parser's symbol table if available
+    pub fn lookup_parser_symbol(
+        &self,
+        name: &str,
+    ) -> Option<(coral_parser::semantic::symbol::Symbol, usize)> {
+        self.parser_symbol_table
+            .as_ref()
+            .and_then(|st| st.lookup(name))
+    }
+
+    /// Get the type of a symbol from parser's symbol table
+    pub fn get_symbol_type(&self, name: &str) -> Option<ParserType> {
+        self.parser_symbol_table
+            .as_ref()
+            .and_then(|st| st.get_symbol_type(name))
+    }
+
+    /// Check if a variable is a move candidate (safe to move)
+    pub fn is_move_candidate(&self, var_name: &str) -> bool {
+        self.ownership_recommendations
+            .as_ref()
+            .map(|recs| recs.move_candidates.contains_key(var_name))
+            .unwrap_or(false)
+    }
+
+    /// Check if a variable is stack-safe (doesn't escape function)
+    pub fn is_stack_safe(&self, var_name: &str) -> bool {
+        self.ownership_recommendations
+            .as_ref()
+            .map(|recs| recs.stack_safe_vars.contains(var_name))
+            .unwrap_or(false)
     }
 
     pub fn allocate_register(&mut self, type_id: u32) -> Result<u16, String> {

@@ -8,6 +8,7 @@ use crate::compiler::stmt::StmtCompiler;
 use crate::error::{CodegenError, CodegenResult};
 use crate::{IntrinsicRegistry, NativeModuleRegistry};
 use coral_parser::ast::{Module, Stmt};
+use coral_parser::ParseResultWithMetadata;
 use std::collections::HashMap;
 
 pub struct ModuleCompiler {
@@ -29,11 +30,46 @@ impl ModuleCompiler {
         }
     }
 
-    pub fn compile(module: &Module) -> CodegenResult<BytecodeModule> {
+    /// Compile from a complete ParseResult with semantic analysis
+    pub fn compile(parse_result: &ParseResultWithMetadata) -> CodegenResult<BytecodeModule> {
         let mut compiler = Self::new("main".to_string());
-        compiler.compile_module(module)
+        compiler.compile_from_parse_result(parse_result)
     }
 
+    /// Compile from the ParseResult with semantic analysis
+    pub fn compile_from_parse_result(&mut self, parse_result: &ParseResultWithMetadata) -> CodegenResult<BytecodeModule> {
+        let mut bytecode_module = BytecodeModule::new(self.module_name.clone());
+        let mut ctx = CompilationContext::with_parser_symbols(
+            256,
+            Some(parse_result.symbol_table.clone()),
+            Some(parse_result.ownership_recommendations.clone()),
+        );
+
+        self.process_imports_and_exports(parse_result.module, &mut bytecode_module)?;
+
+        for stmt in parse_result.module.body {
+            StmtCompiler::compile(&mut ctx, stmt)?;
+        }
+
+        bytecode_module
+            .functions
+            .extend(ctx.symbol_table.keys().map(|name| {
+                let mut func = crate::bytecode::Function::new(
+                    name.clone(),
+                    ctx.register_allocator.count(),
+                    vec![],
+                    0,
+                );
+                func.instructions = ctx.instructions.clone();
+                func
+            }));
+
+        bytecode_module.constants = ctx.constant_pool;
+
+        Ok(bytecode_module)
+    }
+
+    /// Compile from raw AST (legacy, for backwards compatibility during refactoring)
     pub fn compile_module(&mut self, module: &Module) -> CodegenResult<BytecodeModule> {
         let mut bytecode_module = BytecodeModule::new(self.module_name.clone());
         let mut ctx = CompilationContext::new(256);
