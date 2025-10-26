@@ -180,10 +180,16 @@ impl LivenessAnalyzer {
                 defined.insert(*dst);
             }
             Instruction::Jump { .. } => {}
-            Instruction::JumpIfTrue { condition, .. } | Instruction::JumpIfFalse { condition, .. } => {
+            Instruction::JumpIfTrue { condition, .. }
+            | Instruction::JumpIfFalse { condition, .. } => {
                 used.insert(*condition);
             }
-            Instruction::Call { result, func_reg, arg_base, arg_count } => {
+            Instruction::Call {
+                result,
+                func_reg,
+                arg_base,
+                arg_count,
+            } => {
                 used.insert(*func_reg);
                 for i in 0..*arg_count {
                     used.insert(arg_base + i);
@@ -295,10 +301,8 @@ mod tests {
 
     #[test]
     fn test_get_registers() {
-        let (used, defined) = LivenessAnalyzer::get_registers_for_instruction(&Instruction::Move {
-            dst: 1,
-            src: 0,
-        });
+        let (used, defined) =
+            LivenessAnalyzer::get_registers_for_instruction(&Instruction::Move { dst: 1, src: 0 });
 
         assert!(used.contains(&0));
         assert!(defined.contains(&1));

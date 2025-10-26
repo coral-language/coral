@@ -15,7 +15,10 @@ pub struct SSAValue {
 
 impl SSAValue {
     pub fn new(base_register: u16, version: u32) -> Self {
-        Self { base_register, version }
+        Self {
+            base_register,
+            version,
+        }
     }
 
     pub fn original(register: u16) -> Self {
@@ -121,8 +124,13 @@ impl SSAConverter {
 
         for instr in instructions {
             match instr {
-                Instruction::Jump { .. } | Instruction::JumpIfTrue { .. } | Instruction::JumpIfFalse { .. } | Instruction::Return { .. } => {
-                    current_block.instructions.push(Self::translate_instruction(instr));
+                Instruction::Jump { .. }
+                | Instruction::JumpIfTrue { .. }
+                | Instruction::JumpIfFalse { .. }
+                | Instruction::Return { .. } => {
+                    current_block
+                        .instructions
+                        .push(Self::translate_instruction(instr));
                     blocks.push(current_block);
                     current_block = BasicBlock {
                         id: blocks.len() as u32,
@@ -149,21 +157,15 @@ impl SSAConverter {
 
     fn translate_instruction(instr: &Instruction) -> SSAInstruction {
         let (opcode, dst, operands) = match instr {
-            Instruction::Move { dst, src } => {
-                ("Move".to_string(), Some(*dst), vec![*src])
-            }
-            Instruction::LoadConst { dst, .. } => {
-                ("LoadConst".to_string(), Some(*dst), vec![])
-            }
+            Instruction::Move { dst, src } => ("Move".to_string(), Some(*dst), vec![*src]),
+            Instruction::LoadConst { dst, .. } => ("LoadConst".to_string(), Some(*dst), vec![]),
             Instruction::AddInt { dst, lhs, rhs } => {
                 ("AddInt".to_string(), Some(*dst), vec![*lhs, *rhs])
             }
             Instruction::SubInt { dst, lhs, rhs } => {
                 ("SubInt".to_string(), Some(*dst), vec![*lhs, *rhs])
             }
-            Instruction::Return { value } => {
-                ("Return".to_string(), None, vec![*value])
-            }
+            Instruction::Return { value } => ("Return".to_string(), None, vec![*value]),
             _ => ("Unknown".to_string(), None, vec![]),
         };
 
@@ -178,7 +180,10 @@ impl SSAConverter {
         blocks
             .iter()
             .filter(|block| {
-                block.instructions.iter().any(|instr| instr.opcode == "Return")
+                block
+                    .instructions
+                    .iter()
+                    .any(|instr| instr.opcode == "Return")
             })
             .map(|block| block.id)
             .collect()
@@ -211,8 +216,10 @@ impl SSAConverter {
 
                 let mut new_doms = vec![block.id];
                 if !block.predecessors.is_empty() {
-                    let mut common: Vec<u32> =
-                        dominators.get(&block.predecessors[0]).cloned().unwrap_or_default();
+                    let mut common: Vec<u32> = dominators
+                        .get(&block.predecessors[0])
+                        .cloned()
+                        .unwrap_or_default();
 
                     for &pred_id in &block.predecessors[1..] {
                         let pred_doms = dominators.get(&pred_id).cloned().unwrap_or_default();

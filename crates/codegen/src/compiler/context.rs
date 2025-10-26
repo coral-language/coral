@@ -17,6 +17,8 @@ pub struct CompilationContext {
     // Semantic data from parser
     pub parser_symbol_table: Option<ParserSymbolTable>,
     pub ownership_recommendations: Option<OwnershipRecommendations>,
+    /// Owned HIR module for direct code generation
+    pub owned_hir: Option<coral_parser::semantic::hir::OwnedTypedModule>,
 }
 
 pub struct ScopeFrame {
@@ -50,6 +52,32 @@ impl CompilationContext {
             next_generator_id: 1,
             parser_symbol_table,
             ownership_recommendations,
+            owned_hir: None,
+        }
+    }
+
+    /// Create a CompilationContext with HIR and semantic information
+    pub fn with_hir(
+        max_registers: u16,
+        owned_hir: Option<coral_parser::semantic::hir::OwnedTypedModule>,
+        parser_symbol_table: Option<ParserSymbolTable>,
+        ownership_recommendations: Option<OwnershipRecommendations>,
+    ) -> Self {
+        Self {
+            register_allocator: RegisterAllocator::new(max_registers),
+            constant_pool: ConstantPool::new(),
+            symbol_table: HashMap::new(),
+            current_scope_depth: 0,
+            instructions: Vec::new(),
+            scope_stack: vec![ScopeFrame {
+                depth: 0,
+                locals: HashMap::new(),
+                parent_locals: 0,
+            }],
+            next_generator_id: 1,
+            parser_symbol_table,
+            ownership_recommendations,
+            owned_hir,
         }
     }
 

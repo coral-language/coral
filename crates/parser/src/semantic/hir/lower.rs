@@ -127,6 +127,11 @@ impl<'a> HirLowerer<'a> {
         &self.class_analyzer
     }
 
+    /// Get a reference to the interner (for HIR conversion)
+    pub fn interner(&self) -> &Interner {
+        self.interner
+    }
+
     /// Lower a list of statements
     fn lower_statements(&mut self, statements: &[Stmt<'a>]) -> &'a [TypedStmt<'a>] {
         let mut typed_statements = Vec::new();

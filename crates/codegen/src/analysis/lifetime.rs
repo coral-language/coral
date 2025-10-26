@@ -132,9 +132,7 @@ impl LifetimeAnalyzer {
         analysis
     }
 
-    fn get_registers_for_instruction(
-        instr: &crate::bytecode::Instruction,
-    ) -> (Vec<u16>, Vec<u16>) {
+    fn get_registers_for_instruction(instr: &crate::bytecode::Instruction) -> (Vec<u16>, Vec<u16>) {
         use crate::bytecode::Instruction;
 
         let mut used = Vec::new();
@@ -175,7 +173,12 @@ impl LifetimeAnalyzer {
                 used.push(*rhs);
                 defined.push(*dst);
             }
-            Instruction::Call { func_reg, arg_base, arg_count, .. } => {
+            Instruction::Call {
+                func_reg,
+                arg_base,
+                arg_count,
+                ..
+            } => {
                 used.push(*func_reg);
                 for i in 0..*arg_count {
                     used.push(arg_base + i);

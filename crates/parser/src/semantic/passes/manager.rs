@@ -381,6 +381,8 @@ pub struct PassManager {
     export_registry: ModuleExportRegistry,
     /// Current file being analyzed (used for proper import resolution)
     current_file: Option<PathBuf>,
+    /// Owned HIR module for code generation (generated during HIR lowering pass)
+    owned_hir: Option<crate::semantic::hir::OwnedTypedModule>,
 }
 
 impl PassManager {
@@ -407,6 +409,7 @@ impl PassManager {
             analysis_context: AnalysisContext::new(),
             export_registry: ModuleExportRegistry::new(),
             current_file: None,
+            owned_hir: None,
         };
 
         manager.register_default_passes();
@@ -452,6 +455,7 @@ impl PassManager {
             analysis_context: AnalysisContext::new(),
             export_registry: ModuleExportRegistry::new(),
             current_file: None,
+            owned_hir: None,
         };
 
         manager.register_default_passes();
@@ -694,13 +698,20 @@ impl PassManager {
                 .unwrap();
             (*guard).clone()
         };
-
-        *self
-            .analysis_context
-            .ownership_recommendations
-            .write()
-            .unwrap() = Default::default();
+        {
+            let mut guard = self
+                .analysis_context
+                .ownership_recommendations
+                .write()
+                .unwrap();
+            *guard = Default::default();
+        }
         recommendations
+    }
+
+    /// Take ownership of the owned HIR module for code generation
+    pub fn take_owned_hir(&mut self) -> Option<crate::semantic::hir::OwnedTypedModule> {
+        self.owned_hir.take()
     }
 
     /// Get the current module name from the root directory path
@@ -1133,7 +1144,11 @@ impl PassManager {
         let mut lowerer = HirLowerer::new(&arena, &mut interner);
 
         match lowerer.lower_module(module) {
-            Ok(_hir_module) => {
+            Ok(hir_module) => {
+                let owned_hir =
+                    crate::semantic::hir::convert_to_owned(&hir_module, lowerer.interner());
+                self.owned_hir = Some(owned_hir);
+
                 let class_analyzer = lowerer.into_class_analyzer();
 
                 let class_metadata_map = class_analyzer.export_metadata();

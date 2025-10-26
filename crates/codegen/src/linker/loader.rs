@@ -17,11 +17,7 @@ impl ModuleLoader {
         }
     }
 
-    pub fn load_module(
-        &mut self,
-        name: String,
-        module: BytecodeModule,
-    ) -> CodegenResult<()> {
+    pub fn load_module(&mut self, name: String, module: BytecodeModule) -> CodegenResult<()> {
         if !self.cache.contains_key(&name) {
             self.load_order.push(name.clone());
         }

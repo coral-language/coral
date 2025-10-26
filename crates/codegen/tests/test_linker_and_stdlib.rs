@@ -35,10 +35,34 @@ fn test_intrinsic_registry_complete_set() {
     let registry = IntrinsicRegistry::new();
 
     let expected_builtins = vec![
-        "print", "len", "range", "isinstance", "abs", "min", "max", "sum", "reversed",
-        "enumerate", "zip", "filter", "map", "sorted", "str", "int", "float", "bool",
-        "list", "dict", "set", "tuple", "type", "callable", "hasattr", "getattr",
-        "setattr", "delattr",
+        "print",
+        "len",
+        "range",
+        "isinstance",
+        "abs",
+        "min",
+        "max",
+        "sum",
+        "reversed",
+        "enumerate",
+        "zip",
+        "filter",
+        "map",
+        "sorted",
+        "str",
+        "int",
+        "float",
+        "bool",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "type",
+        "callable",
+        "hasattr",
+        "getattr",
+        "setattr",
+        "delattr",
     ];
 
     for builtin in expected_builtins {
@@ -54,7 +78,11 @@ fn test_intrinsic_registry_complete_set() {
 fn test_intrinsic_registry_enumerate() {
     let registry = IntrinsicRegistry::new();
     let count = registry.all_intrinsics().count();
-    assert!(count >= 40, "Should have at least 40 intrinsics, found {}", count);
+    assert!(
+        count >= 40,
+        "Should have at least 40 intrinsics, found {}",
+        count
+    );
 }
 
 #[test]

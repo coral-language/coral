@@ -4,6 +4,7 @@
 pub mod class_analysis;
 pub mod context;
 pub mod lower;
+pub mod owned;
 pub mod typed_expr;
 pub mod typed_item;
 pub mod typed_pattern;
@@ -11,6 +12,7 @@ pub mod typed_stmt;
 pub mod validate;
 
 pub use lower::HirLowerer;
+pub use owned::{OwnedTypedExpr, OwnedTypedModule, OwnedTypedStmt, convert_to_owned};
 pub use typed_expr::TypedExpr;
 pub use typed_item::TypedItem;
 pub use typed_pattern::TypedPattern;

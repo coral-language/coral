@@ -75,6 +75,7 @@ pub use lexer::{Lexer, Token};
 pub use parser::{Mode, Parser};
 pub use visitor::Visitor;
 
+pub use semantic::hir::{OwnedTypedExpr, OwnedTypedModule, OwnedTypedStmt};
 pub use semantic::module::ModuleExportRegistry;
 pub use semantic::passes::manager::{PassManager, PassManagerConfig, PassPriority, PassStatistics};
 pub use semantic::passes::ownership_check::{
@@ -246,6 +247,9 @@ pub struct ParseResultWithMetadata<'a> {
 
     /// Ownership recommendations for the parsed module
     pub ownership_recommendations: OwnershipRecommendations,
+
+    /// Owned HIR module for code generation - fully owned, no lifetime dependencies
+    pub owned_hir: Option<semantic::hir::OwnedTypedModule>,
 }
 
 impl<'a> ParseResultWithMetadata<'a> {
@@ -376,6 +380,7 @@ fn parse_with_config(
     };
 
     let ownership_recommendations = manager.take_ownership_recommendations();
+    let owned_hir = manager.take_owned_hir();
 
     let symbol_locations = symbol_table.build_location_index();
 
@@ -389,6 +394,7 @@ fn parse_with_config(
         comment_map,
         symbol_locations,
         ownership_recommendations,
+        owned_hir,
     })
 }
 

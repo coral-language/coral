@@ -7,8 +7,8 @@ use crate::compiler::context::CompilationContext;
 use crate::compiler::stmt::StmtCompiler;
 use crate::error::{CodegenError, CodegenResult};
 use crate::{IntrinsicRegistry, NativeModuleRegistry};
-use coral_parser::ast::{Module, Stmt};
 use coral_parser::ParseResultWithMetadata;
+use coral_parser::ast::{Module, Stmt};
 use std::collections::HashMap;
 
 pub struct ModuleCompiler {
@@ -37,10 +37,14 @@ impl ModuleCompiler {
     }
 
     /// Compile from the ParseResult with semantic analysis
-    pub fn compile_from_parse_result(&mut self, parse_result: &ParseResultWithMetadata) -> CodegenResult<BytecodeModule> {
+    pub fn compile_from_parse_result(
+        &mut self,
+        parse_result: &ParseResultWithMetadata,
+    ) -> CodegenResult<BytecodeModule> {
         let mut bytecode_module = BytecodeModule::new(self.module_name.clone());
-        let mut ctx = CompilationContext::with_parser_symbols(
+        let mut ctx = CompilationContext::with_hir(
             256,
+            parse_result.owned_hir.clone(),
             Some(parse_result.symbol_table.clone()),
             Some(parse_result.ownership_recommendations.clone()),
         );
