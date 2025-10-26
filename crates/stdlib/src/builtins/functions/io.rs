@@ -1,8 +1,12 @@
-use crate::value::Value;
 use crate::utils::StdlibError;
+use crate::value::Value;
 use std::io::{self, Write};
 
-pub fn print(args: Vec<Value>, sep: Option<String>, end: Option<String>) -> Result<Value, StdlibError> {
+pub fn print(
+    args: Vec<Value>,
+    sep: Option<String>,
+    end: Option<String>,
+) -> Result<Value, StdlibError> {
     let separator = sep.unwrap_or_else(|| " ".to_string());
     let ending = end.unwrap_or_else(|| "\n".to_string());
 
@@ -54,7 +58,7 @@ pub fn open(
             return Err(StdlibError::TypeError {
                 expected: "str".to_string(),
                 got: file.type_name().to_string(),
-            })
+            });
         }
     };
 
@@ -65,7 +69,7 @@ pub fn open(
             return Err(StdlibError::TypeError {
                 expected: "str".to_string(),
                 got: "invalid mode type".to_string(),
-            })
+            });
         }
     };
 

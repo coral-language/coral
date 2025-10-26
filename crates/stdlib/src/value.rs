@@ -1,7 +1,7 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 pub type ValueMap = HashMap<String, Value>;
 pub type ValueList = Vec<Value>;
@@ -13,7 +13,10 @@ pub enum Value {
     Bool(bool),
     Int(i64),
     Float(f64),
-    Complex { real: f64, imag: f64 },
+    Complex {
+        real: f64,
+        imag: f64,
+    },
     Str(String),
     Bytes(Vec<u8>),
     List(Rc<RefCell<ValueList>>),
@@ -21,7 +24,11 @@ pub enum Value {
     Dict(Rc<RefCell<ValueMap>>),
     Set(Rc<RefCell<std::collections::HashSet<String>>>),
     FrozenSet(std::collections::HashSet<String>),
-    Range { start: i64, stop: i64, step: i64 },
+    Range {
+        start: i64,
+        stop: i64,
+        step: i64,
+    },
     Function {
         name: String,
         arity: usize,
@@ -103,15 +110,11 @@ impl fmt::Display for Value {
             Self::Bytes(b) => write!(f, "{:?}", String::from_utf8_lossy(b)),
             Self::List(list) => {
                 let items = list.borrow();
-                let formatted: Vec<String> = items.iter()
-                    .map(|v| format!("{}", v))
-                    .collect();
+                let formatted: Vec<String> = items.iter().map(|v| format!("{}", v)).collect();
                 write!(f, "[{}]", formatted.join(", "))
             }
             Self::Tuple(items) => {
-                let formatted: Vec<String> = items.iter()
-                    .map(|v| format!("{}", v))
-                    .collect();
+                let formatted: Vec<String> = items.iter().map(|v| format!("{}", v)).collect();
                 if items.len() == 1 {
                     write!(f, "({},)", formatted[0])
                 } else {
@@ -120,22 +123,17 @@ impl fmt::Display for Value {
             }
             Self::Dict(dict) => {
                 let d = dict.borrow();
-                let formatted: Vec<String> = d.iter()
-                    .map(|(k, v)| format!("'{}': {}", k, v))
-                    .collect();
+                let formatted: Vec<String> =
+                    d.iter().map(|(k, v)| format!("'{}': {}", k, v)).collect();
                 write!(f, "{{{}}}", formatted.join(", "))
             }
             Self::Set(set) => {
                 let s = set.borrow();
-                let formatted: Vec<String> = s.iter()
-                    .map(|v| format!("'{}'", v))
-                    .collect();
+                let formatted: Vec<String> = s.iter().map(|v| format!("'{}'", v)).collect();
                 write!(f, "{{{}}}", formatted.join(", "))
             }
             Self::FrozenSet(set) => {
-                let formatted: Vec<String> = set.iter()
-                    .map(|v| format!("'{}'", v))
-                    .collect();
+                let formatted: Vec<String> = set.iter().map(|v| format!("'{}'", v)).collect();
                 write!(f, "frozenset({{{}}})", formatted.join(", "))
             }
             Self::Range { start, stop, step } => {
@@ -171,8 +169,7 @@ impl PartialEq for Value {
             (Value::Dict(a), Value::Dict(b)) => {
                 let a_dict = a.borrow();
                 let b_dict = b.borrow();
-                a_dict.len() == b_dict.len()
-                    && a_dict.iter().all(|(k, v)| b_dict.get(k) == Some(v))
+                a_dict.len() == b_dict.len() && a_dict.iter().all(|(k, v)| b_dict.get(k) == Some(v))
             }
             _ => false,
         }

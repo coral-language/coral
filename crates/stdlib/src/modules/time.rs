@@ -1,8 +1,7 @@
 use crate::value::Value;
 
 pub fn time() -> Value {
-    match std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH) {
+    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
         Ok(d) => Value::Float(d.as_secs_f64()),
         Err(_) => Value::Float(0.0),
     }

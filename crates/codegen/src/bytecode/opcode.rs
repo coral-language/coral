@@ -86,6 +86,8 @@ pub enum Opcode {
     Await = 66,
     Resume = 67,
     Yield = 68,
+    YieldFrom = 69,
+    NewGenerator = 70,
 
     // Error Handling (71-75)
     PropagateError = 71,
@@ -167,6 +169,8 @@ impl Opcode {
             Opcode::Await => "Await",
             Opcode::Resume => "Resume",
             Opcode::Yield => "Yield",
+            Opcode::YieldFrom => "YieldFrom",
+            Opcode::NewGenerator => "NewGenerator",
             Opcode::PropagateError => "PropagateError",
             Opcode::Raise => "Raise",
             Opcode::BeginTry => "BeginTry",
@@ -240,6 +244,8 @@ impl Opcode {
             66 => Some(Opcode::Await),
             67 => Some(Opcode::Resume),
             68 => Some(Opcode::Yield),
+            69 => Some(Opcode::YieldFrom),
+            70 => Some(Opcode::NewGenerator),
             71 => Some(Opcode::PropagateError),
             72 => Some(Opcode::Raise),
             73 => Some(Opcode::BeginTry),

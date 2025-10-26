@@ -130,12 +130,7 @@ mod tests {
 
     #[test]
     fn test_push_instructions() {
-        let mut func = Function::new(
-            "test".to_string(),
-            5,
-            vec![],
-            0,
-        );
+        let mut func = Function::new("test".to_string(), 5, vec![], 0);
 
         func.push_instruction(Instruction::Nop);
         func.push_instruction(Instruction::Nop);

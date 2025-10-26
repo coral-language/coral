@@ -1,5 +1,5 @@
-use crate::value::Value;
 use crate::utils::StdlibError;
+use crate::value::Value;
 
 pub fn dumps(obj: &Value) -> Result<Value, StdlibError> {
     let json_str = match obj {
@@ -9,7 +9,9 @@ pub fn dumps(obj: &Value) -> Result<Value, StdlibError> {
         Value::Float(f) => f.to_string(),
         Value::Str(s) => format!("\"{}\"", s.replace("\"", "\\\"")),
         Value::List(l) => {
-            let items: Vec<String> = l.borrow().iter()
+            let items: Vec<String> = l
+                .borrow()
+                .iter()
                 .map(|v| match dumps(v) {
                     Ok(Value::Str(s)) => s,
                     _ => "null".to_string(),
@@ -18,7 +20,9 @@ pub fn dumps(obj: &Value) -> Result<Value, StdlibError> {
             format!("[{}]", items.join(","))
         }
         Value::Dict(d) => {
-            let items: Vec<String> = d.borrow().iter()
+            let items: Vec<String> = d
+                .borrow()
+                .iter()
                 .map(|(k, v)| {
                     let v_str = match dumps(v) {
                         Ok(Value::Str(s)) => s,
@@ -35,5 +39,7 @@ pub fn dumps(obj: &Value) -> Result<Value, StdlibError> {
 }
 
 pub fn loads(_json_str: &str) -> Result<Value, StdlibError> {
-    Err(StdlibError::NotImplementedError("JSON parsing not yet implemented".to_string()))
+    Err(StdlibError::NotImplementedError(
+        "JSON parsing not yet implemented".to_string(),
+    ))
 }

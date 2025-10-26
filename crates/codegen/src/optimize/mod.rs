@@ -1,6 +1,11 @@
 //! Optimization passes for bytecode
+//!
+//! This module provides bytecode optimization passes including:
+//! - Constant folding
+//! - Dead code elimination
+//! - Peephole optimization
+//! - Inline optimizations
 
-pub mod peephole;
-pub mod const_fold;
-pub mod dead_code;
-pub mod inline;
+pub mod passes;
+
+pub use passes::OptimizationPass;

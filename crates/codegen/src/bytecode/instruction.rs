@@ -281,6 +281,13 @@ pub enum Instruction {
     Yield {
         value: u16,
     },
+    YieldFrom {
+        value: u16,
+    },
+    NewGenerator {
+        dst: u16,
+        function_id: u32,
+    },
 
     // Error Handling
     PropagateError {
@@ -393,6 +400,8 @@ impl Instruction {
             Instruction::Await { .. } => Opcode::Await,
             Instruction::Resume { .. } => Opcode::Resume,
             Instruction::Yield { .. } => Opcode::Yield,
+            Instruction::YieldFrom { .. } => Opcode::YieldFrom,
+            Instruction::NewGenerator { .. } => Opcode::NewGenerator,
             Instruction::PropagateError { .. } => Opcode::PropagateError,
             Instruction::Raise { .. } => Opcode::Raise,
             Instruction::BeginTry { .. } => Opcode::BeginTry,

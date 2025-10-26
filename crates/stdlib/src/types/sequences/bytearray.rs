@@ -1,5 +1,5 @@
-use crate::value::Value;
 use crate::utils::StdlibError;
+use crate::value::Value;
 
 pub fn append(ba: &mut Vec<u8>, item: u8) -> Result<Value, StdlibError> {
     ba.push(item);

@@ -35,4 +35,10 @@ pub enum CodegenError {
     IoError(#[from] std::io::Error),
 }
 
+impl From<String> for CodegenError {
+    fn from(err: String) -> Self {
+        CodegenError::CompilationError(err)
+    }
+}
+
 pub type CodegenResult<T> = Result<T, CodegenError>;

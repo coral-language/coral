@@ -36,6 +36,7 @@ pub mod stdlib;
 pub use bytecode::{BytecodeModule, Function, Instruction, Opcode};
 pub use compiler::module::ModuleCompiler;
 pub use error::{CodegenError, CodegenResult};
+pub use linker::{ImportResolver, ModuleLoader};
 pub use stdlib::{IntrinsicRegistry, NativeModuleRegistry};
 
 /// Compile an AST module to bytecode

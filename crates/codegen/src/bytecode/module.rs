@@ -6,9 +6,9 @@
 //! - Global variables and constants
 //! - Module metadata
 
-use super::{Function, ConstantPool};
-use serde::{Deserialize, Serialize};
+use super::{ConstantPool, Function};
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BytecodeModule {
@@ -86,7 +86,11 @@ impl BytecodeModule {
     pub fn add_export(&mut self, name: String, type_id: u32, kind: ExportKind) {
         self.exports.entries.insert(
             name.clone(),
-            ExportEntry { name, type_id, kind },
+            ExportEntry {
+                name,
+                type_id,
+                kind,
+            },
         );
     }
 

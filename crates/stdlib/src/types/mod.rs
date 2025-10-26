@@ -1,9 +1,9 @@
 pub mod core;
-pub mod sequences;
 pub mod mappings;
+pub mod sequences;
 pub mod sets;
 
 pub use core::*;
-pub use sequences::*;
 pub use mappings::*;
+pub use sequences::*;
 pub use sets::*;

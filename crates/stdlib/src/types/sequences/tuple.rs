@@ -1,5 +1,5 @@
-use crate::value::Value;
 use crate::utils::StdlibError;
+use crate::value::Value;
 
 pub fn count(tuple: &[Value], item: &Value) -> Result<Value, StdlibError> {
     let count = tuple.iter().filter(|v| *v == item).count();
