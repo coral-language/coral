@@ -75,7 +75,6 @@ pub use lexer::{Lexer, Token};
 pub use parser::{Mode, Parser};
 pub use visitor::Visitor;
 
-pub use semantic::hir::{OwnedTypedExpr, OwnedTypedModule, OwnedTypedStmt};
 pub use semantic::module::ModuleExportRegistry;
 pub use semantic::passes::manager::{PassManager, PassManagerConfig, PassPriority, PassStatistics};
 pub use semantic::passes::ownership_check::{
@@ -83,6 +82,17 @@ pub use semantic::passes::ownership_check::{
 };
 pub use semantic::symbol::table::SymbolTable;
 pub use semantic::types::Type;
+pub use semantic::hir::{
+    OwnedTypedExpr, OwnedTypedModule, OwnedTypedStmt, OwnedAssignStmt, OwnedAnnAssignStmt,
+    OwnedAugAssignStmt, OwnedReturnStmt, OwnedIfStmt, OwnedWhileStmt, OwnedForStmt,
+    OwnedFuncDefStmt, OwnedClassDefStmt, OwnedTryStmt, OwnedExceptHandler, OwnedMatchStmt,
+    OwnedMatchCase, OwnedRaiseStmt, OwnedArg, OwnedBinOpExpr, OwnedUnaryOpExpr,
+    OwnedCompareExpr, OwnedCallExpr, OwnedAttributeExpr, OwnedSubscriptExpr, OwnedListExpr,
+    OwnedTupleExpr, OwnedDictExpr, OwnedSetExpr, OwnedLambdaExpr, OwnedIfExpExpr,
+    OwnedBoolOpExpr, OwnedAwaitExpr, OwnedNameExpr, OwnedConstantExpr, OwnedYieldExpr,
+    OwnedYieldFromExpr, OwnedJoinedStrExpr, OwnedFormattedValueExpr, OwnedTStringExpr,
+    OwnedStarredExpr, OwnedNamedExpr, OwnedSliceExpr,
+};
 
 /// Result type for Coral operations that includes semantic analysis
 pub type CoralResult<T> = Result<T, CoralError>;

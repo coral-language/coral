@@ -1,7 +1,3 @@
-//! Compiler orchestration
-//!
-//! Main compilation pass that transforms AST into bytecode.
-
 pub mod async_lowering;
 pub mod class;
 pub mod context;

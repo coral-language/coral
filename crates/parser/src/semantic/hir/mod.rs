@@ -12,7 +12,17 @@ pub mod typed_stmt;
 pub mod validate;
 
 pub use lower::HirLowerer;
-pub use owned::{OwnedTypedExpr, OwnedTypedModule, OwnedTypedStmt, convert_to_owned};
+pub use owned::{
+    OwnedAnnAssignStmt, OwnedArg, OwnedAssignStmt, OwnedAttributeExpr, OwnedAugAssignStmt,
+    OwnedAwaitExpr, OwnedBinOpExpr, OwnedBoolOpExpr, OwnedCallExpr, OwnedClassDefStmt,
+    OwnedCompareExpr, OwnedConstantExpr, OwnedDictExpr, OwnedExceptHandler, OwnedExprStmt,
+    OwnedForStmt, OwnedFormattedValueExpr, OwnedFuncDefStmt, OwnedIfExpExpr, OwnedIfStmt,
+    OwnedJoinedStrExpr, OwnedLambdaExpr, OwnedListExpr, OwnedMatchCase, OwnedMatchStmt,
+    OwnedNameExpr, OwnedNamedExpr, OwnedRaiseStmt, OwnedReturnStmt, OwnedSetExpr, OwnedSliceExpr,
+    OwnedStarredExpr, OwnedSubscriptExpr, OwnedTStringExpr, OwnedTryStmt, OwnedTupleExpr,
+    OwnedTypedExpr, OwnedTypedModule, OwnedTypedStmt, OwnedUnaryOpExpr, OwnedWhileStmt,
+    OwnedYieldExpr, OwnedYieldFromExpr, convert_to_owned,
+};
 pub use typed_expr::TypedExpr;
 pub use typed_item::TypedItem;
 pub use typed_pattern::TypedPattern;

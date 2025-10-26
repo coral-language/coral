@@ -39,7 +39,7 @@ pub mod optimize;
 pub mod stdlib;
 
 pub use bytecode::{BytecodeModule, Function, Instruction, Opcode};
-pub use compiler::module::ModuleCompiler;
+// pub use compiler::module::ModuleCompiler;
 pub use error::{CodegenError, CodegenResult};
 pub use linker::{ImportResolver, ModuleLoader};
 pub use stdlib::{IntrinsicRegistry, NativeModuleRegistry};
@@ -55,7 +55,10 @@ pub use stdlib::{IntrinsicRegistry, NativeModuleRegistry};
 /// # Errors
 /// Returns a CodegenError if bytecode generation fails
 pub fn compile(
-    parse_result: &coral_parser::ParseResultWithMetadata,
+    _parse_result: &coral_parser::ParseResultWithMetadata,
 ) -> CodegenResult<BytecodeModule> {
-    ModuleCompiler::compile(parse_result)
+    // ModuleCompiler::compile(parse_result)
+    Err(CodegenError::CompilationError(
+        "ModuleCompiler not yet implemented".to_string(),
+    ))
 }

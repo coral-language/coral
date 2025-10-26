@@ -1,5 +1,3 @@
-//! Compilation context holding state during bytecode generation
-
 use crate::bytecode::{ConstantPool, Instruction, RegisterAllocator};
 use coral_parser::OwnershipRecommendations;
 use coral_parser::semantic::symbol::table::SymbolTable as ParserSymbolTable;
